@@ -2281,6 +2281,35 @@
                                 </div>
                             </div>
 
+                            <!-- DYNAMIC EXAM TAG GROUPING PANEL: Active ONLY if >= 2 different exam names in session -->
+                            <div id="main-exam-grouping-container" class="mb-4 bg-teal-50 border border-teal-200 rounded-lg p-3 hidden">
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <p class="text-xs font-bold text-teal-900 uppercase flex items-center gap-1.5">
+                                        <span>🏷️</span> Exam Tag Grouping:
+                                    </p>
+                                    <span class="text-[10px] font-extrabold bg-teal-200 text-teal-800 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                        Multi-Exam Session
+                                    </span>
+                                </div>
+                                <div id="main-detected-exams-list" class="text-xs text-teal-800 bg-white/70 rounded p-2 mb-2 border border-teal-200 font-mono text-[11px] leading-tight"></div>
+                                <div class="flex flex-col gap-2 text-sm text-gray-700">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="main-exam-grouping" id="main-exam-mix" value="mix" checked class="accent-teal-600">
+                                        <span><strong>Mix Exams Together</strong> — Distribute papers across all exam tags together</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="main-exam-grouping" id="main-exam-separate" value="separate" class="accent-teal-600">
+                                        <span><strong>Keep Exams Separate</strong> — Allot one Exam after another (Internal paper mixing within each Exam)</span>
+                                    </label>
+                                </div>
+                                <div id="main-exam-boundary-wrapper" class="mt-2 pl-6 pt-2 border-t border-teal-200/50 hidden">
+                                    <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-700">
+                                        <input type="checkbox" id="main-exam-fresh-room-cb" checked class="accent-teal-600 h-3.5 w-3.5 rounded">
+                                        <span>Start each Exam in a <strong>Fresh Room</strong></span>
+                                    </label>
+                                </div>
+                            </div>
+
                             <div id="allotment-student-count-section" class="mb-6 hidden">
                                 <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
                                     <div class="flex justify-between items-center">
@@ -2551,6 +2580,35 @@
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="radio" name="modal-mixing-strategy" value="ratio_2_1" class="accent-indigo-600 h-4 w-4">
                     <span class="text-xs text-gray-700"><strong>2:1 Mix</strong> — Two-thirds Paper A, one-third Paper B</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- DYNAMIC EXAM TAG GROUPING PANEL: Active ONLY if >= 2 different exam names in session -->
+        <div class="px-4 py-3 bg-teal-50 border-b border-teal-100 hidden" id="modal-exam-grouping-container">
+            <div class="flex items-center justify-between mb-1.5">
+                <p class="text-[10px] font-black text-teal-900 uppercase tracking-widest flex items-center gap-1.5">
+                    <span>🏷️</span> Exam Tag Grouping
+                </p>
+                <span class="text-[9px] font-extrabold bg-teal-200 text-teal-800 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    Multi-Exam Session
+                </span>
+            </div>
+            <div id="modal-detected-exams-list" class="text-xs text-teal-800 bg-white/70 rounded p-2 mb-2 border border-teal-200 font-mono text-[11px] leading-tight"></div>
+            <div class="flex flex-col gap-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="modal-exam-grouping" value="mix" checked class="accent-teal-600 h-4 w-4">
+                    <span class="text-xs text-gray-700"><strong>Mix Exams Together</strong> — Distribute papers across all exam tags together in rooms (Default)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="modal-exam-grouping" value="separate" class="accent-teal-600 h-4 w-4">
+                    <span class="text-xs text-gray-700"><strong>Keep Exams Separate</strong> — Allot one Exam after another (Internal paper mixing applies within each Exam)</span>
+                </label>
+            </div>
+            <div id="modal-exam-boundary-wrapper" class="mt-2 pl-6 pt-2 border-t border-teal-200/50 hidden">
+                <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-700">
+                    <input type="checkbox" id="modal-exam-fresh-room-cb" checked class="accent-teal-600 h-3.5 w-3.5 rounded">
+                    <span>Start each Exam in a <strong>Fresh Room</strong> (prevents different exam booklets in the same room)</span>
                 </label>
             </div>
         </div>
@@ -5105,7 +5163,7 @@
 </div>
 
 <script src="session_export.js"></script>
-<script src="app.js?v=12.8.19"></script>
+<script src="app.js?v=12.8.20"></script>
 <script src="excel_extraction.js"></script>    
 <!-- Global Datalist for Searchable Parent Rooms -->
 <datalist id="parent-rooms-list"></datalist>

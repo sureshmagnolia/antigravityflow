@@ -12426,9 +12426,83 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
     }
    
+    // --- NEW: Dynamic Exam Tag Grouping Helpers ---
+    function getSessionExamTags(sessionKey) {
+        if (!sessionKey || typeof allStudentData === 'undefined' || !allStudentData) return [];
+        const [date, time] = sessionKey.split(' | ');
+        const sessStudents = (typeof window.getStudentsForSession === 'function')
+            ? window.getStudentsForSession(allStudentData, date, time)
+            : allStudentData.filter(s => s.Date === date && s.Time === time);
+        
+        const examMap = new Map();
+        sessStudents.forEach(s => {
+            const rawName = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim();
+            const examName = rawName || 'Default Exam';
+            if (!examMap.has(examName)) {
+                examMap.set(examName, { count: 0, courses: new Set(), streams: new Set() });
+            }
+            const entry = examMap.get(examName);
+            entry.count++;
+            const c = (s.Course || s.course || s['Course Name'] || 'Unknown').toString().trim();
+            if (c) entry.courses.add(c);
+            const st = (s.Stream || s.stream || 'Regular').toString().trim();
+            if (st) entry.streams.add(st);
+        });
+
+        return Array.from(examMap.entries()).map(([name, data]) => ({
+            name,
+            count: data.count,
+            courseCount: data.courses.size,
+            courses: Array.from(data.courses),
+            streams: Array.from(data.streams)
+        })).sort((a, b) => b.count - a.count);
+    }
+    window.getSessionExamTags = getSessionExamTags;
+
+    function updateExamGroupingUI(sessionKey) {
+        const key = sessionKey || (document.getElementById('allotment-session-select')?.value) || currentSessionKey;
+        const exams = key ? getSessionExamTags(key) : [];
+        const hasMultiple = exams.length >= 2;
+
+        const modalContainer = document.getElementById('modal-exam-grouping-container');
+        const mainContainer = document.getElementById('main-exam-grouping-container');
+
+        if (!hasMultiple) {
+            if (modalContainer) modalContainer.classList.add('hidden');
+            if (mainContainer) mainContainer.classList.add('hidden');
+            const modalMix = document.querySelector('input[name="modal-exam-grouping"][value="mix"]');
+            if (modalMix) modalMix.checked = true;
+            const mainMix = document.querySelector('input[name="main-exam-grouping"][value="mix"]');
+            if (mainMix) mainMix.checked = true;
+            const modalBoundary = document.getElementById('modal-exam-boundary-wrapper');
+            const mainBoundary = document.getElementById('main-exam-boundary-wrapper');
+            if (modalBoundary) modalBoundary.classList.add('hidden');
+            if (mainBoundary) mainBoundary.classList.add('hidden');
+            return;
+        }
+
+        const escapeStr = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const examSummaryHtml = exams.map(e => 
+            `<div class="flex items-center justify-between py-0.5"><span class="font-semibold truncate max-w-[280px]" title="${escapeStr(e.name)}">• ${escapeStr(e.name)}</span><span class="text-teal-700 font-bold ml-2 shrink-0">${e.count} students (${e.courseCount} ${e.courseCount === 1 ? 'course' : 'courses'})</span></div>`
+        ).join('');
+
+        if (modalContainer) {
+            modalContainer.classList.remove('hidden');
+            const listDiv = document.getElementById('modal-detected-exams-list');
+            if (listDiv) listDiv.innerHTML = examSummaryHtml;
+        }
+
+        if (mainContainer) {
+            mainContainer.classList.remove('hidden');
+            const mainListDiv = document.getElementById('main-detected-exams-list');
+            if (mainListDiv) mainListDiv.innerHTML = examSummaryHtml;
+        }
+    }
+    window.updateExamGroupingUI = updateExamGroupingUI;
+
     // --- NEW: Pre-splits the session student list into Part A and Part B (Course-Level Zero-Collision) ---
-    // Call this whenever a new session is loaded OR strategy radio changes.
-    function precomputeSessionParts(sessionKey, strategy) {
+    // Call this whenever a new session is loaded OR strategy radio changes (supports targetExamName for isolated mixing).
+    function precomputeSessionParts(sessionKey, strategy, targetExamName = null) {
         mixingActiveStrategy = strategy || 'none';
         mixingParts = {};  // Reset all per-stream data
 
@@ -12437,11 +12511,20 @@ window.real_populate_qp_code_session_dropdown = function () {
         const [date, time] = sessionKey.split(' | ');
 
         // Get all students for this session
-        const sessionStudents = (typeof window.getStudentsForSession === 'function')
+        let sessionStudents = (typeof window.getStudentsForSession === 'function')
             ? window.getStudentsForSession(allStudentData, date, time)
             : [];
 
         if (!sessionStudents || sessionStudents.length === 0) return;
+
+        if (targetExamName) {
+            const normTarget = targetExamName.trim().toLowerCase();
+            sessionStudents = sessionStudents.filter(s => {
+                const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
+                return sExam === normTarget;
+            });
+            if (sessionStudents.length === 0) return;
+        }
 
         // Get every distinct stream present in this session
         const streams = [...new Set(sessionStudents.map(s => (s.Stream || s.stream || 'Regular').toString().trim()))];
@@ -12545,6 +12628,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     // Load Room Allotment for a session (with Vault Fallback)
     function loadRoomAllotment(sessionKey) {
         currentSessionKey = sessionKey;
+        if (typeof updateExamGroupingUI === 'function') updateExamGroupingUI(sessionKey);
         let allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
         if ((!allAllotments[sessionKey] || allAllotments[sessionKey].length === 0) && typeof window.getRoomAllotmentIDB === 'function') {
             window.getRoomAllotmentIDB(sessionKey).then(vaulted => {
@@ -13252,6 +13336,17 @@ window.real_populate_qp_code_session_dropdown = function () {
             const modalRadio = document.querySelector(`input[name="modal-mixing-strategy"][value="${currentMainVal}"]`);
             if (modalRadio) modalRadio.checked = true;
 
+            // SYNC: Read current Main Tab exam grouping and pre-select in modal
+            const currentMainExamGrouping = document.querySelector('input[name="main-exam-grouping"]:checked')?.value || 'mix';
+            const modalExamRadio = document.querySelector(`input[name="modal-exam-grouping"][value="${currentMainExamGrouping}"]`);
+            if (modalExamRadio) modalExamRadio.checked = true;
+            const modalExamBoundary = document.getElementById('modal-exam-boundary-wrapper');
+            if (modalExamBoundary) {
+                if (currentMainExamGrouping === 'separate') modalExamBoundary.classList.remove('hidden');
+                else modalExamBoundary.classList.add('hidden');
+            }
+            if (typeof updateExamGroupingUI === 'function') updateExamGroupingUI(currentSessionKey);
+
             document.getElementById('auto-allot-modal').classList.remove('hidden');
         });
     }
@@ -13307,45 +13402,131 @@ window.real_populate_qp_code_session_dropdown = function () {
         const mainRadio = document.querySelector(`input[name="mixing-strategy"][value="${activeStrategy}"]`);
         if (mainRadio) mainRadio.checked = true;
 
-        // CRITICAL: Re-compute mixing parts with the NEW strategy BEFORE the allotment loop
-        // Without this, mixingParts is stale and mixing never activates correctly
-        if (typeof precomputeSessionParts === 'function') {
-            precomputeSessionParts(currentSessionKey, activeStrategy);
-        }
+        // READ Exam Grouping Mode and SYNC back to Main Tab
+        const examGroupingMode = document.querySelector('input[name="modal-exam-grouping"]:checked')?.value || 'mix';
+        const mainExamRadio = document.querySelector(`input[name="main-exam-grouping"][value="${examGroupingMode}"]`);
+        if (mainExamRadio) mainExamRadio.checked = true;
+        const freshRoomPerExam = document.getElementById('modal-exam-fresh-room-cb') ? document.getElementById('modal-exam-fresh-room-cb').checked : true;
+        const mainFreshCb = document.getElementById('main-exam-fresh-room-cb');
+        if (mainFreshCb) mainFreshCb.checked = freshRoomPerExam;
 
-        let roomIndex = 0;
-        // Process sequentially to respect Paper Mixing Engine internally
-        for (const stream of currentStreamConfig) {
-            let remainingForStream = true;
-            const targetStreamLower = (stream || "Regular").toString().trim().toLowerCase();
+        const detectedExams = (typeof getSessionExamTags === 'function') ? getSessionExamTags(currentSessionKey) : [];
+        const hasMultipleExams = detectedExams.length >= 2;
 
-            while (remainingForStream && roomIndex < selectedRooms.length) {
-                const r = selectedRooms[roomIndex];
-                
-                const [date, time] = currentSessionKey.split(' | ');
-                const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
-                
-                if (sessionStudentRecords.length === 0) {
-                    await UiModal.alert("No students found for this session in the master database.");
-                    return;
+        if (hasMultipleExams && examGroupingMode === 'separate') {
+            // 🏷️ SEPARATE EXAMS ALLOTMENT: Allot one Exam after another
+            let roomIndex = 0;
+            for (const examInfo of detectedExams) {
+                const targetExam = examInfo.name;
+
+                // Precompute mixing pools strictly for THIS exam's courses
+                if (typeof precomputeSessionParts === 'function') {
+                    precomputeSessionParts(currentSessionKey, activeStrategy, targetExam);
                 }
 
-                const allottedRegNos = new Set();
-                currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.add(getRegNo(s))));
-                
-                const candidates = sessionStudentRecords.filter(s => {
-                    const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
-                    return !allottedRegNos.has(getRegNo(s)) && sStream === targetStreamLower;
-                });
-                
-                if (candidates.length === 0) {
-                    remainingForStream = false;
+                // If fresh room is disabled and previous room has capacity, top it up
+                if (!freshRoomPerExam && currentSessionAllotment.length > 0) {
+                    const lastRoom = currentSessionAllotment[currentSessionAllotment.length - 1];
+                    const freeSeats = (parseInt(lastRoom.capacity) || 30) - lastRoom.students.length;
+                    if (freeSeats > 0) {
+                        const [date, time] = currentSessionKey.split(' | ');
+                        const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
+                        const allottedRegNos = new Set();
+                        currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.add(getRegNo(s))));
+                        const topUpCandidates = sessionStudentRecords.filter(s => {
+                            const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
+                            return !allottedRegNos.has(getRegNo(s)) && sExam === targetExam.toLowerCase();
+                        });
+                        if (topUpCandidates.length > 0) {
+                            const topUpSlice = topUpCandidates.slice(0, freeSeats);
+                            const startSeat = lastRoom.students.length;
+                            topUpSlice.forEach((s, idx) => {
+                                const reg = getRegNo(s);
+                                lastRoom.students.push({
+                                    'Register Number': reg,
+                                    RegisterNo: reg,
+                                    Name: s.Name || s.name || '',
+                                    Course: s.Course || s.course || '',
+                                    Stream: s.Stream || s.stream || lastRoom.stream || 'Regular',
+                                    seat: startSeat + idx + 1
+                                });
+                            });
+                        }
+                    }
+                }
+
+                for (const stream of currentStreamConfig) {
+                    let remainingForStream = true;
+                    const targetStreamLower = (stream || "Regular").toString().trim().toLowerCase();
+
+                    while (remainingForStream && roomIndex < selectedRooms.length) {
+                        const r = selectedRooms[roomIndex];
+                        const [date, time] = currentSessionKey.split(' | ');
+                        const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
+
+                        const allottedRegNos = new Set();
+                        currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.add(getRegNo(s))));
+
+                        const candidates = sessionStudentRecords.filter(s => {
+                            const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
+                            const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
+                            return !allottedRegNos.has(getRegNo(s)) && sStream === targetStreamLower && sExam === targetExam.toLowerCase();
+                        });
+
+                        if (candidates.length === 0) {
+                            remainingForStream = false;
+                            break;
+                        }
+
+                        await selectRoomForAllotmentSilent(r.name, r.capacity, stream, activeStrategy, targetExam);
+                        roomIndex++;
+                    }
+                }
+
+                if (roomIndex >= selectedRooms.length) {
                     break;
                 }
-                
-                // Programmatically invoke the internal filling engine (silent UI sync variant)
-                await selectRoomForAllotmentSilent(r.name, r.capacity, stream, activeStrategy);
-                roomIndex++;
+            }
+        } else {
+            // 🌐 MIX EXAMS TOGETHER (Standard Flow)
+            if (typeof precomputeSessionParts === 'function') {
+                precomputeSessionParts(currentSessionKey, activeStrategy);
+            }
+
+            let roomIndex = 0;
+            // Process sequentially to respect Paper Mixing Engine internally
+            for (const stream of currentStreamConfig) {
+                let remainingForStream = true;
+                const targetStreamLower = (stream || "Regular").toString().trim().toLowerCase();
+
+                while (remainingForStream && roomIndex < selectedRooms.length) {
+                    const r = selectedRooms[roomIndex];
+                    
+                    const [date, time] = currentSessionKey.split(' | ');
+                    const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
+                    
+                    if (sessionStudentRecords.length === 0) {
+                        await UiModal.alert("No students found for this session in the master database.");
+                        return;
+                    }
+
+                    const allottedRegNos = new Set();
+                    currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.add(getRegNo(s))));
+                    
+                    const candidates = sessionStudentRecords.filter(s => {
+                        const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
+                        return !allottedRegNos.has(getRegNo(s)) && sStream === targetStreamLower;
+                    });
+                    
+                    if (candidates.length === 0) {
+                        remainingForStream = false;
+                        break;
+                    }
+                    
+                    // Programmatically invoke the internal filling engine (silent UI sync variant)
+                    await selectRoomForAllotmentSilent(r.name, r.capacity, stream, activeStrategy);
+                    roomIndex++;
+                }
             }
         }
         
@@ -13361,7 +13542,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
     // Invisible equivalent to your existing selectRoomForAllotment that respects Mixing Engine fully
-    async function selectRoomForAllotmentSilent(roomName, capacity, targetStream, strategy = 'none') {
+    async function selectRoomForAllotmentSilent(roomName, capacity, targetStream, strategy = 'none', targetExamName = null) {
         const [date, time] = currentSessionKey.split(' | ');
         const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
         const allottedRegNos = new Set();
@@ -13389,6 +13570,10 @@ window.real_populate_qp_code_session_dropdown = function () {
         for (const student of sessionStudentRecords) {
             const sStream = (student.Stream || "Regular").toString().trim().toLowerCase();
             if (!allottedRegNos.has(getRegNo(student)) && sStream === targetStreamNormalized) {
+                if (targetExamName) {
+                    const sExam = (student['Exam Name'] || student.examName || student.ExamName || '').toString().trim().toLowerCase();
+                    if (sExam !== targetExamName.trim().toLowerCase()) continue;
+                }
                 candidates.push(student);
             }
         }
@@ -13408,8 +13593,22 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
         }
 
-        const unallottedPoolA = (streamPart && streamPart.poolA) ? streamPart.poolA.filter(s => !allottedRegNos.has(getRegNo(s))) : [];
-        const unallottedPoolB = (streamPart && streamPart.poolB) ? streamPart.poolB.filter(s => !allottedRegNos.has(getRegNo(s))) : [];
+        const unallottedPoolA = (streamPart && streamPart.poolA) ? streamPart.poolA.filter(s => {
+            if (allottedRegNos.has(getRegNo(s))) return false;
+            if (targetExamName) {
+                const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
+                return sExam === targetExamName.trim().toLowerCase();
+            }
+            return true;
+        }) : [];
+        const unallottedPoolB = (streamPart && streamPart.poolB) ? streamPart.poolB.filter(s => {
+            if (allottedRegNos.has(getRegNo(s))) return false;
+            if (targetExamName) {
+                const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
+                return sExam === targetExamName.trim().toLowerCase();
+            }
+            return true;
+        }) : [];
 
         if (candidates.length <= leftoverThreshold) {
             // Guard: Remaining students fit within room capacity + 3 grace
@@ -13761,7 +13960,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     }
 
     // Select a room and allot students (Auto-Save & Sync enabled)
-       async function selectRoomForAllotment(roomName, capacity, targetStream, strategy = 'none') {
+       async function selectRoomForAllotment(roomName, capacity, targetStream, strategy = 'none', targetExamName = null) {
         const [rawDate, rawTime] = (currentSessionKey || '').split(' | ');
         const date = (rawDate || '').trim();
         const time = (rawTime || '').trim();
@@ -13806,11 +14005,34 @@ window.real_populate_qp_code_session_dropdown = function () {
             return regA.localeCompare(regB);
         });
 
+        // Auto-detect target exam if in separate mode and not explicitly passed
+        const mainGrouping = document.querySelector('input[name="main-exam-grouping"]:checked')?.value || 'mix';
+        if (!targetExamName && mainGrouping === 'separate') {
+            const detected = (typeof getSessionExamTags === 'function') ? getSessionExamTags(currentSessionKey) : [];
+            if (detected.length >= 2) {
+                for (const ex of detected) {
+                    const hasUnallotted = sessionStudentRecords.some(s => {
+                        const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
+                        const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
+                        return sStream === (targetStream || "Regular").toString().trim().toLowerCase() && sExam === ex.name.toLowerCase() && !allottedRegNos.has(getRegNo(s));
+                    });
+                    if (hasUnallotted) {
+                        targetExamName = ex.name;
+                        break;
+                    }
+                }
+            }
+        }
+
         const targetStreamNormalized = (targetStream || "Regular").toString().trim().toLowerCase();
         for (const student of sessionStudentRecords) {
             const regNo = getRegNo(student);
             const studentStream = (student.Stream || "Regular").toString().trim().toLowerCase();
             if (!allottedRegNos.has(regNo) && studentStream === targetStreamNormalized) {
+                if (targetExamName) {
+                    const sExam = (student['Exam Name'] || student.examName || student.ExamName || '').toString().trim().toLowerCase();
+                    if (sExam !== targetExamName.trim().toLowerCase()) continue;
+                }
                 candidates.push(student);
             }
         }
@@ -13835,8 +14057,22 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
         }
 
-        const unallottedPoolA = (streamPart && streamPart.poolA) ? streamPart.poolA.filter(s => !allottedRegNos.has(getRegNo(s))) : [];
-        const unallottedPoolB = (streamPart && streamPart.poolB) ? streamPart.poolB.filter(s => !allottedRegNos.has(getRegNo(s))) : [];
+        const unallottedPoolA = (streamPart && streamPart.poolA) ? streamPart.poolA.filter(s => {
+            if (allottedRegNos.has(getRegNo(s))) return false;
+            if (targetExamName) {
+                const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
+                return sExam === targetExamName.trim().toLowerCase();
+            }
+            return true;
+        }) : [];
+        const unallottedPoolB = (streamPart && streamPart.poolB) ? streamPart.poolB.filter(s => {
+            if (allottedRegNos.has(getRegNo(s))) return false;
+            if (targetExamName) {
+                const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
+                return sExam === targetExamName.trim().toLowerCase();
+            }
+            return true;
+        }) : [];
 
         if (candidates.length <= leftoverThreshold) {
             // Guard: Remaining students fit within room capacity + 3 grace
@@ -13957,7 +14193,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             // 2. Pre-compute mixing parts for the new session
             const activeStrategy = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
             precomputeSessionParts(sessionKey, activeStrategy);
-
+            if (typeof updateExamGroupingUI === 'function') updateExamGroupingUI(sessionKey);
 
             populateAbsenteeQpFilter(sessionKey);
 
@@ -13981,6 +14217,50 @@ window.real_populate_qp_code_session_dropdown = function () {
     addRoomAllotmentButton.addEventListener('click', () => {
         showRoomSelectionModal();
     });
+    // --- Dynamic Exam Grouping Sync & Listeners ---
+    document.querySelectorAll('input[name="modal-exam-grouping"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            const val = radio.value;
+            const mainRadio = document.querySelector(`input[name="main-exam-grouping"][value="${val}"]`);
+            if (mainRadio) mainRadio.checked = true;
+            const modalBoundary = document.getElementById('modal-exam-boundary-wrapper');
+            const mainBoundary = document.getElementById('main-exam-boundary-wrapper');
+            if (val === 'separate') {
+                if (modalBoundary) modalBoundary.classList.remove('hidden');
+                if (mainBoundary) mainBoundary.classList.remove('hidden');
+            } else {
+                if (modalBoundary) modalBoundary.classList.add('hidden');
+                if (mainBoundary) mainBoundary.classList.add('hidden');
+            }
+        });
+    });
+
+    document.querySelectorAll('input[name="main-exam-grouping"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            const val = radio.value;
+            const modalRadio = document.querySelector(`input[name="modal-exam-grouping"][value="${val}"]`);
+            if (modalRadio) modalRadio.checked = true;
+            const modalBoundary = document.getElementById('modal-exam-boundary-wrapper');
+            const mainBoundary = document.getElementById('main-exam-boundary-wrapper');
+            if (val === 'separate') {
+                if (modalBoundary) modalBoundary.classList.remove('hidden');
+                if (mainBoundary) mainBoundary.classList.remove('hidden');
+            } else {
+                if (modalBoundary) modalBoundary.classList.add('hidden');
+                if (mainBoundary) mainBoundary.classList.add('hidden');
+            }
+        });
+    });
+
+    document.getElementById('modal-exam-fresh-room-cb')?.addEventListener('change', (e) => {
+        const mainCb = document.getElementById('main-exam-fresh-room-cb');
+        if (mainCb) mainCb.checked = e.target.checked;
+    });
+    document.getElementById('main-exam-fresh-room-cb')?.addEventListener('change', (e) => {
+        const modalCb = document.getElementById('modal-exam-fresh-room-cb');
+        if (modalCb) modalCb.checked = e.target.checked;
+    });
+
     // Re-compute session parts whenever the mixing strategy changes
     document.querySelectorAll('input[name="mixing-strategy"], input[name="modal-mixing-strategy"]').forEach(radio => {
         radio.addEventListener('change', () => {
