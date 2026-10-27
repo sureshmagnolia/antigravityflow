@@ -12427,35 +12427,116 @@ window.real_populate_qp_code_session_dropdown = function () {
     }
    
     // --- NEW: Dynamic Exam Tag Grouping Helpers ---
+    function studentMatchesExamGroup(student, group) {
+        if (!student || !group) return true;
+        if (typeof group === 'string') {
+            const gNorm = group.trim().toLowerCase();
+            const sExam = (student['Exam Name'] || student.examName || student.ExamName || '').toString().trim().toLowerCase();
+            const sStream = (student.Stream || student.stream || 'Regular').toString().trim().toLowerCase();
+            return sExam === gNorm || sStream === gNorm;
+        }
+        if (group.type === 'stream') {
+            const sStream = (student.Stream || student.stream || 'Regular').toString().trim().toLowerCase();
+            const targetStream = (group.stream || group.displayName || group.name || '').toString().trim().toLowerCase();
+            return sStream === targetStream;
+        }
+        const sExam = (student['Exam Name'] || student.examName || student.ExamName || '').toString().trim().toLowerCase();
+        const targetExam = (group.examName || group.name || '').toString().trim().toLowerCase();
+        return sExam === targetExam;
+    }
+    window.studentMatchesExamGroup = studentMatchesExamGroup;
+
     function getSessionExamTags(sessionKey) {
-        if (!sessionKey || typeof allStudentData === 'undefined' || !allStudentData) return [];
+        if (!sessionKey || typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) return [];
         const [date, time] = sessionKey.split(' | ');
         const sessStudents = (typeof window.getStudentsForSession === 'function')
             ? window.getStudentsForSession(allStudentData, date, time)
             : allStudentData.filter(s => s.Date === date && s.Time === time);
+        if (!sessStudents || sessStudents.length === 0) return [];
         
+        // 1. Gather distinct Exam Names
         const examMap = new Map();
+        // 2. Gather distinct Streams
+        const streamMap = new Map();
+
         sessStudents.forEach(s => {
             const rawName = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim();
-            const examName = rawName || 'Default Exam';
-            if (!examMap.has(examName)) {
-                examMap.set(examName, { count: 0, courses: new Set(), streams: new Set() });
+            if (rawName) {
+                if (!examMap.has(rawName)) {
+                    examMap.set(rawName, { count: 0, courses: new Set(), streams: new Set() });
+                }
+                const eEntry = examMap.get(rawName);
+                eEntry.count++;
+                const c = (s.Course || s.course || s['Course Name'] || 'Unknown').toString().trim();
+                if (c) eEntry.courses.add(c);
+                const st = (s.Stream || s.stream || 'Regular').toString().trim();
+                if (st) eEntry.streams.add(st);
             }
-            const entry = examMap.get(examName);
-            entry.count++;
-            const c = (s.Course || s.course || s['Course Name'] || 'Unknown').toString().trim();
-            if (c) entry.courses.add(c);
-            const st = (s.Stream || s.stream || 'Regular').toString().trim();
-            if (st) entry.streams.add(st);
+
+            const streamName = (s.Stream || s.stream || 'Regular').toString().trim();
+            if (streamName) {
+                if (!streamMap.has(streamName)) {
+                    streamMap.set(streamName, { count: 0, courses: new Set(), exams: new Set() });
+                }
+                const sEntry = streamMap.get(streamName);
+                sEntry.count++;
+                const c = (s.Course || s.course || s['Course Name'] || 'Unknown').toString().trim();
+                if (c) sEntry.courses.add(c);
+                if (rawName) sEntry.exams.add(rawName);
+            }
         });
 
-        return Array.from(examMap.entries()).map(([name, data]) => ({
-            name,
-            count: data.count,
-            courseCount: data.courses.size,
-            courses: Array.from(data.courses),
-            streams: Array.from(data.streams)
-        })).sort((a, b) => b.count - a.count);
+        // Scenario A: Multiple distinct Exam Names exist (e.g. "5 th sem FYUGP" and "5th Sem CBCSS")
+        if (examMap.size >= 2) {
+            return Array.from(examMap.entries()).map(([name, data]) => ({
+                name,
+                displayName: name,
+                type: 'exam',
+                examName: name,
+                count: data.count,
+                courseCount: data.courses.size,
+                courses: Array.from(data.courses),
+                streams: Array.from(data.streams)
+            })).sort((a, b) => b.count - a.count);
+        }
+
+        // Scenario B: Only 1 (or 0) Exam Name, but Multiple distinct Streams exist (e.g. "Regular" and "EDE")
+        if (streamMap.size >= 2) {
+            const singleExamName = examMap.size === 1 ? Array.from(examMap.keys())[0] : '';
+            return Array.from(streamMap.entries()).map(([stream, data]) => {
+                const label = singleExamName ? `${singleExamName} (${stream})` : `${stream} Stream`;
+                return {
+                    name: label,
+                    displayName: stream,
+                    type: 'stream',
+                    stream: stream,
+                    examName: singleExamName,
+                    count: data.count,
+                    courseCount: data.courses.size,
+                    courses: Array.from(data.courses),
+                    streams: [stream]
+                };
+            }).sort((a, b) => b.count - a.count);
+        }
+
+        // Single Exam and Single Stream
+        const defaultName = examMap.size === 1 ? Array.from(examMap.keys())[0] : 'Default Exam';
+        const allCourses = new Set();
+        sessStudents.forEach(s => {
+            const c = (s.Course || s.course || s['Course Name'] || 'Unknown').toString().trim();
+            if (c) allCourses.add(c);
+        });
+
+        return [{
+            name: defaultName,
+            displayName: defaultName,
+            type: 'exam',
+            examName: defaultName,
+            count: sessStudents.length,
+            courseCount: allCourses.size,
+            courses: Array.from(allCourses),
+            streams: Array.from(streamMap.keys())
+        }];
     }
     window.getSessionExamTags = getSessionExamTags;
 
@@ -12482,19 +12563,19 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
 
         const escapeStr = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        
-        // Compact badges for modal header row
-        const modalSummaryHtml = exams.map(e => 
-            `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-100 text-teal-900 border border-teal-200 text-[10px] font-bold" title="${escapeStr(e.name)}: ${e.count} students (${e.courseCount} ${e.courseCount === 1 ? 'course' : 'courses'})">` +
-            `<span class="truncate max-w-[130px] font-semibold">${escapeStr(e.name)}</span>` +
-            `<span class="bg-teal-200/90 text-teal-800 px-1 rounded text-[9px] font-black">${e.count}</span>` +
-            `</span>`
+        const examSummaryHtml = exams.map(e => 
+            `<div class="flex items-center justify-between py-0.5"><span class="font-semibold truncate max-w-[280px]" title="${escapeStr(e.name)}">• ${escapeStr(e.name)}</span><span class="text-teal-700 font-bold ml-2 shrink-0">${e.count} students (${e.courseCount} ${e.courseCount === 1 ? 'course' : 'courses'})</span></div>`
         ).join('');
+
+        const isStreamGrouping = exams.some(e => e.type === 'stream');
+        const badgeText = isStreamGrouping ? 'Multi-Stream Session' : 'Multi-Exam Session';
+        const modalBadge = document.getElementById('modal-exam-grouping-badge');
+        if (modalBadge) modalBadge.textContent = badgeText;
 
         if (modalContainer) {
             modalContainer.classList.remove('hidden');
             const listDiv = document.getElementById('modal-detected-exams-list');
-            if (listDiv) listDiv.innerHTML = modalSummaryHtml;
+            if (listDiv) listDiv.innerHTML = examSummaryHtml;
         }
 
         if (mainContainer) {
@@ -12523,11 +12604,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         if (!sessionStudents || sessionStudents.length === 0) return;
 
         if (targetExamName) {
-            const normTarget = targetExamName.trim().toLowerCase();
-            sessionStudents = sessionStudents.filter(s => {
-                const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
-                return sExam === normTarget;
-            });
+            sessionStudents = sessionStudents.filter(s => studentMatchesExamGroup(s, targetExamName));
             if (sessionStudents.length === 0) return;
         }
 
@@ -13421,14 +13498,12 @@ window.real_populate_qp_code_session_dropdown = function () {
         const hasMultipleExams = detectedExams.length >= 2;
 
         if (hasMultipleExams && examGroupingMode === 'separate') {
-            // 🏷️ SEPARATE EXAMS ALLOTMENT: Allot one Exam after another
+            // 🏷️ SEPARATE EXAMS ALLOTMENT: Allot one Exam/Stream group after another
             let roomIndex = 0;
-            for (const examInfo of detectedExams) {
-                const targetExam = examInfo.name;
-
-                // Precompute mixing pools strictly for THIS exam's courses
+            for (const group of detectedExams) {
+                // Precompute mixing pools strictly for THIS group's courses
                 if (typeof precomputeSessionParts === 'function') {
-                    precomputeSessionParts(currentSessionKey, activeStrategy, targetExam);
+                    precomputeSessionParts(currentSessionKey, activeStrategy, group);
                 }
 
                 // If fresh room is disabled and previous room has capacity, top it up
@@ -13441,8 +13516,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                         const allottedRegNos = new Set();
                         currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.add(getRegNo(s))));
                         const topUpCandidates = sessionStudentRecords.filter(s => {
-                            const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
-                            return !allottedRegNos.has(getRegNo(s)) && sExam === targetExam.toLowerCase();
+                            return !allottedRegNos.has(getRegNo(s)) && studentMatchesExamGroup(s, group);
                         });
                         if (topUpCandidates.length > 0) {
                             const topUpSlice = topUpCandidates.slice(0, freeSeats);
@@ -13462,7 +13536,11 @@ window.real_populate_qp_code_session_dropdown = function () {
                     }
                 }
 
-                for (const stream of currentStreamConfig) {
+                const streamsForGroup = (group.type === 'stream') 
+                    ? [group.stream]
+                    : (group.streams && group.streams.length > 0 ? group.streams : currentStreamConfig);
+
+                for (const stream of streamsForGroup) {
                     let remainingForStream = true;
                     const targetStreamLower = (stream || "Regular").toString().trim().toLowerCase();
 
@@ -13476,8 +13554,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
                         const candidates = sessionStudentRecords.filter(s => {
                             const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
-                            const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
-                            return !allottedRegNos.has(getRegNo(s)) && sStream === targetStreamLower && sExam === targetExam.toLowerCase();
+                            return !allottedRegNos.has(getRegNo(s)) && sStream === targetStreamLower && studentMatchesExamGroup(s, group);
                         });
 
                         if (candidates.length === 0) {
@@ -13485,7 +13562,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                             break;
                         }
 
-                        await selectRoomForAllotmentSilent(r.name, r.capacity, stream, activeStrategy, targetExam);
+                        await selectRoomForAllotmentSilent(r.name, r.capacity, stream, activeStrategy, group);
                         roomIndex++;
                     }
                 }
@@ -13577,10 +13654,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         for (const student of sessionStudentRecords) {
             const sStream = (student.Stream || "Regular").toString().trim().toLowerCase();
             if (!allottedRegNos.has(getRegNo(student)) && sStream === targetStreamNormalized) {
-                if (targetExamName) {
-                    const sExam = (student['Exam Name'] || student.examName || student.ExamName || '').toString().trim().toLowerCase();
-                    if (sExam !== targetExamName.trim().toLowerCase()) continue;
-                }
+                if (targetExamName && !studentMatchesExamGroup(student, targetExamName)) continue;
                 candidates.push(student);
             }
         }
@@ -13602,18 +13676,12 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         const unallottedPoolA = (streamPart && streamPart.poolA) ? streamPart.poolA.filter(s => {
             if (allottedRegNos.has(getRegNo(s))) return false;
-            if (targetExamName) {
-                const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
-                return sExam === targetExamName.trim().toLowerCase();
-            }
+            if (targetExamName && !studentMatchesExamGroup(s, targetExamName)) return false;
             return true;
         }) : [];
         const unallottedPoolB = (streamPart && streamPart.poolB) ? streamPart.poolB.filter(s => {
             if (allottedRegNos.has(getRegNo(s))) return false;
-            if (targetExamName) {
-                const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
-                return sExam === targetExamName.trim().toLowerCase();
-            }
+            if (targetExamName && !studentMatchesExamGroup(s, targetExamName)) return false;
             return true;
         }) : [];
 
@@ -14020,11 +14088,12 @@ window.real_populate_qp_code_session_dropdown = function () {
                 for (const ex of detected) {
                     const hasUnallotted = sessionStudentRecords.some(s => {
                         const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
-                        const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
-                        return sStream === (targetStream || "Regular").toString().trim().toLowerCase() && sExam === ex.name.toLowerCase() && !allottedRegNos.has(getRegNo(s));
+                        return sStream === (targetStream || "Regular").toString().trim().toLowerCase() && 
+                               studentMatchesExamGroup(s, ex) && 
+                               !allottedRegNos.has(getRegNo(s));
                     });
                     if (hasUnallotted) {
-                        targetExamName = ex.name;
+                        targetExamName = ex;
                         break;
                     }
                 }
@@ -14036,10 +14105,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             const regNo = getRegNo(student);
             const studentStream = (student.Stream || "Regular").toString().trim().toLowerCase();
             if (!allottedRegNos.has(regNo) && studentStream === targetStreamNormalized) {
-                if (targetExamName) {
-                    const sExam = (student['Exam Name'] || student.examName || student.ExamName || '').toString().trim().toLowerCase();
-                    if (sExam !== targetExamName.trim().toLowerCase()) continue;
-                }
+                if (targetExamName && !studentMatchesExamGroup(student, targetExamName)) continue;
                 candidates.push(student);
             }
         }
@@ -14066,18 +14132,12 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         const unallottedPoolA = (streamPart && streamPart.poolA) ? streamPart.poolA.filter(s => {
             if (allottedRegNos.has(getRegNo(s))) return false;
-            if (targetExamName) {
-                const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
-                return sExam === targetExamName.trim().toLowerCase();
-            }
+            if (targetExamName && !studentMatchesExamGroup(s, targetExamName)) return false;
             return true;
         }) : [];
         const unallottedPoolB = (streamPart && streamPart.poolB) ? streamPart.poolB.filter(s => {
             if (allottedRegNos.has(getRegNo(s))) return false;
-            if (targetExamName) {
-                const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim().toLowerCase();
-                return sExam === targetExamName.trim().toLowerCase();
-            }
+            if (targetExamName && !studentMatchesExamGroup(s, targetExamName)) return false;
             return true;
         }) : [];
 
