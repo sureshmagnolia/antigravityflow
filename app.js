@@ -5592,7 +5592,13 @@ if (toggleButton && sidebar) {
     // This is kept for backward compatibility to prevent crashes.
  /** ✅ FIXED: Corrected variable name to allStudentData **/
   function getExamName(date, time, stream) {
-      if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) return "";
+      if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
+          const raw = localStorage.getItem('examBaseData');
+          if (raw) {
+              try { allStudentData = JSON.parse(raw); } catch (e) {}
+          }
+      }
+      if (!allStudentData || allStudentData.length === 0) return "";
       
       // Normalize inputs
       const dSafe = (date || "").trim();
@@ -5611,12 +5617,12 @@ if (toggleButton && sidebar) {
 
     // 2. Extract the Exam Name tagged during upload
     // ✅ FIXED: Look for both "Exam Name" (CSV/PDF) and "examName" (Internal)
-    const names = sessionStudents.map(s => s.examName || s['Exam Name']).filter(Boolean);
+    const names = [...new Set(sessionStudents.map(s => s.examName || s['Exam Name']).filter(Boolean))];
 
     if (names.length === 0) return "";
     
-    // Return the first valid one found for the session
-    return names[0];
+    // Return all distinct exam names for the session/stream joined with ' & ', or the single name
+    return names.join(' & ');
 }
 
     
@@ -7205,8 +7211,26 @@ if (toggleButton && sidebar) {
             const scribeListRaw = JSON.parse(localStorage.getItem(typeof SCRIBE_LIST_KEY !== 'undefined' ? SCRIBE_LIST_KEY : 'examScribeList') || '[]');
             const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
             
-            const final_student_list_for_report = [];
+            // 🛡️ Fast lookup map for student Exam Name (hydrates historical or quota-trimmed allotments)
+            const studentExamLookupMap = new Map();
+            const sourceBaseStudents = (typeof allStudentData !== 'undefined' && Array.isArray(allStudentData) && allStudentData.length > 0)
+                ? allStudentData
+                : JSON.parse(localStorage.getItem('examBaseData') || '[]');
 
+            sourceBaseStudents.forEach(b => {
+                const reg = (getRegNo(b) || '').toString().trim().toUpperCase();
+                const d = (b.Date || '').toString().trim();
+                const t = (b.Time || '').toString().trim();
+                const c = (b.Course || '').toString().trim().toUpperCase();
+                const exam = (b['Exam Name'] || b.examName || b.ExamName || '').toString().trim();
+                if (reg && exam) {
+                    if (d && t && c) studentExamLookupMap.set(`${reg}|${d}|${t}|${c}`, exam);
+                    if (d && t) studentExamLookupMap.set(`${reg}|${d}|${t}`, exam);
+                    if (!studentExamLookupMap.has(reg)) studentExamLookupMap.set(reg, exam);
+                }
+            });
+
+            const final_student_list_for_report = [];
 
             // Flatten saved allotment into student rows
             sessionsToProcess.forEach(sk => {
@@ -7216,15 +7240,25 @@ if (toggleButton && sidebar) {
                 sessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
                         const isOfficialScribe = scribeRegNos.has(getRegNo(s));
+                        const reg = (getRegNo(s) || '').toString().trim().toUpperCase();
+                        const sCourse = (s.Course || '').toString().trim().toUpperCase();
+                        const dNorm = (s.Date || skDate || '').toString().trim();
+                        const tNorm = (s.Time || skTime || '').toString().trim();
+                        const resolvedExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim() ||
+                                             studentExamLookupMap.get(`${reg}|${dNorm}|${tNorm}|${sCourse}`) ||
+                                             studentExamLookupMap.get(`${reg}|${dNorm}|${tNorm}`) ||
+                                             studentExamLookupMap.get(reg) || '';
                         final_student_list_for_report.push({
                             ...s,                      // Original Student Keys
-                            Date: s.Date || skDate,
-                            Time: s.Time || skTime,
+                            Date: dNorm,
+                            Time: tNorm,
                             'Room No': room.roomName, // Physical Room
                             seatNumber: s.seat || '?', // The STICKY SEAT
                             isScribeChecked: isOfficialScribe, // FLAG FOR HIGHLIGHTING
                             isPlaceholder: isOfficialScribe,  // FIX: needed by courseCounts scribe exclusion
-                            Stream: room.stream || 'Regular'
+                            Stream: room.stream || 'Regular',
+                            'Exam Name': resolvedExam,
+                            examName: resolvedExam
                         });
                     });
                 });
@@ -7335,7 +7369,19 @@ if (toggleButton && sidebar) {
                 const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
                 const pageStream = session.students.length > 0 ? (session.students[0].Stream || "Regular") : "Regular";
 
-                const examName = getExamName(session.Date, session.Time, pageStream);
+                // 🏷️ Room-specific Exam Name: Collect unique exam tags among students in THIS room
+                const roomExamTags = new Set();
+                (session.students || []).forEach(s => {
+                    const tag = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim();
+                    if (tag) roomExamTags.add(tag);
+                });
+
+                let examName = '';
+                if (roomExamTags.size > 0) {
+                    examName = Array.from(roomExamTags).join(' / ');
+                } else {
+                    examName = (typeof getExamName === 'function') ? getExamName(session.Date, session.Time, pageStream) : '';
+                }
                 const examNameHtml = examName ? `<h2 class="print-exam-name" style="font-size:14pt; font-weight:bold; margin:2px 0; text-align:center;">${examName}</h2>` : "";
 
 
@@ -13485,6 +13531,8 @@ window.real_populate_qp_code_session_dropdown = function () {
                                     Name: s.Name || s.name || '',
                                     Course: s.Course || s.course || '',
                                     Stream: s.Stream || s.stream || lastRoom.stream || 'Regular',
+                                    'Exam Name': s['Exam Name'] || s.examName || s.ExamName || '',
+                                    examName: s['Exam Name'] || s.examName || s.ExamName || '',
                                     seat: startSeat + idx + 1
                                 });
                             });
@@ -13685,6 +13733,8 @@ window.real_populate_qp_code_session_dropdown = function () {
                     Name: s.Name || s.name || '',
                     Course: s.Course || s.course || '',
                     Stream: s.Stream || s.stream || targetStream || 'Regular',
+                    'Exam Name': s['Exam Name'] || s.examName || s.ExamName || '',
+                    examName: s['Exam Name'] || s.examName || s.ExamName || '',
                     seat: idx + 1
                 };
             }
@@ -14150,6 +14200,8 @@ window.real_populate_qp_code_session_dropdown = function () {
                     Name: s.Name || s.name || '',
                     Course: s.Course || s.course || '',
                     Stream: s.Stream || s.stream || targetStream || 'Regular',
+                    'Exam Name': s['Exam Name'] || s.examName || s.ExamName || '',
+                    examName: s['Exam Name'] || s.examName || s.ExamName || '',
                     seat: idx + 1
                 };
             }
