@@ -621,10 +621,10 @@ window.UiModal = UiModal;
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            await UiModal.alert("✅ Updated HTML file has been downloaded.\n\nYou can now send this new file to other computers; the QP codes are permanently saved inside it!");
+            await UiModal.alert("✅ Updated HTML file has been downloaded.\\\\n\\\\nYou can now send this new file to other computers; the QP codes are permanently saved inside it!");
         }
 
-    function render(type) {
+    async function render(type) {
     // 🛡️ QP KEY UNIFIER: Handles both Raw and Base64 Encoded keys
     const getActualQPValue = (course, stream) => {
         const rawKey = course + '|' + (stream || 'Regular');

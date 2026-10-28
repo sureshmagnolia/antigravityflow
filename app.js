@@ -7267,7 +7267,7 @@ if (toggleButton && sidebar) {
             if (final_student_list_for_report.length === 0) { 
                 await UiModal.alert("Please allot rooms before generating the Room-wise report."); 
                 generateReportButton.disabled = false;
-                generateReportButton.textContent = "Generate Room-wise Seating Report";
+                generateReportButton.textContent = "3-Generate Room-wise Seating Report";
                 return; 
             }
 
@@ -7668,7 +7668,7 @@ if (toggleButton && sidebar) {
             await UiModal.alert("Error: " + e.message);
         } finally {
             generateReportButton.disabled = false;
-            generateReportButton.textContent = "Generate Room-wise Seating Report";
+            generateReportButton.textContent = "3-Generate Room-wise Seating Report";
         }
     });
     // --- (V30 Optimized) Event listener for the "Day-wise Student List" (Compact Report) ---
@@ -7739,7 +7739,7 @@ if (toggleButton && sidebar) {
             if (baseData.length === 0) { 
                 await UiModal.alert("Please allot rooms before generating this report."); 
                 generateDaywiseReportButton.disabled = false;
-                generateDaywiseReportButton.textContent = "Generate Day-wise Student List";
+                generateDaywiseReportButton.textContent = "4-Generate Seating Details";
                 return; 
             }
 
@@ -8026,7 +8026,7 @@ if (toggleButton && sidebar) {
             await UiModal.alert("Error generating report: " + e.message);
         } finally {
             generateDaywiseReportButton.disabled = false;
-            generateDaywiseReportButton.textContent = "Generate Seating Details for Candidates (Compact)";
+            generateDaywiseReportButton.textContent = "4-Generate Seating Details";
         }
     });
 
@@ -9035,7 +9035,7 @@ if (toggleButton && sidebar) {
             await UiModal.alert("Error: " + e.message);
         } finally {
             generateQPaperReportButton.disabled = false;
-            generateQPaperReportButton.textContent = "Generate Question Paper Report";
+            generateQPaperReportButton.textContent = "1-Generate Question Paper Report";
         }
     });
 
@@ -9103,7 +9103,7 @@ if (toggleButton && sidebar) {
             if (processed_rows_with_rooms.length === 0) { 
                 await UiModal.alert("Please allot rooms before generating the report."); 
                 generateQpDistributionReportButton.disabled = false;
-                generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
+                generateQpDistributionReportButton.textContent = "2-Generate QP Distribution by QP-Code Report";
                 return; 
             }
 
@@ -9293,7 +9293,7 @@ if (toggleButton && sidebar) {
                 await UiModal.alert("Error: " + e.message);
             } finally {
                 generateQpDistributionReportButton.disabled = false;
-                generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
+                generateQpDistributionReportButton.textContent = "2-Generate QP Distribution by QP-Code Report";
             }
         });
     }
@@ -9688,7 +9688,7 @@ if (toggleButton && sidebar) {
             if (allScribeStudents.length === 0) { 
                 await UiModal.alert("No scribe students found in the selected sessions."); 
                 generateScribeReportButton.disabled = false;
-                generateScribeReportButton.textContent = "Generate Scribe Assistance Report";
+                generateScribeReportButton.textContent = "7-Generate Scribe Assistance Report";
                 return; 
             }
 
@@ -9802,7 +9802,7 @@ if (toggleButton && sidebar) {
             reportControls.classList.remove('hidden');
         } finally {
             generateScribeReportButton.disabled = false;
-            generateScribeReportButton.textContent = "Generate Scribe Assistance Report";
+            generateScribeReportButton.textContent = "7-Generate Scribe Assistance Report";
         }
     });
 
@@ -10043,7 +10043,7 @@ if (toggleButton && sidebar) {
             reportStatus.textContent = "Generation failed.";
         } finally {
             generateScribeProformaButton.disabled = false;
-            generateScribeProformaButton.textContent = "Generate Scribe Proforma (One Page Per Scribe)";
+            generateScribeProformaButton.textContent = "6-Generate Scribe Proforma (One Page Per Scribe)";
         }
     });
 
@@ -16461,7 +16461,7 @@ Are you sure you want to update these records?
             await UiModal.alert("Error: " + e.message);
         } finally {
             generateInvigilatorReportButton.disabled = false;
-            generateInvigilatorReportButton.textContent = "Generate Invigilator Requirement Summary";
+            generateInvigilatorReportButton.textContent = "8-Generate Invigilator Requirement Summary";
         }
     });
 
@@ -16543,7 +16543,7 @@ Are you sure you want to update these records?
                 if (final_student_list_for_stickers.length === 0) { 
                     await UiModal.alert("Please allot rooms before generating stickers."); 
                     generateStickerButton.disabled = false;
-                    generateStickerButton.textContent = "Generate Stickers";
+                    generateStickerButton.textContent = "5-Generate Room Stickers (2/Page)";
                     return; 
                 }
 
@@ -16766,7 +16766,7 @@ Are you sure you want to update these records?
                 await UiModal.alert("Error: " + e.message);
             } finally {
                 generateStickerButton.disabled = false;
-                generateStickerButton.textContent = "Generate Room Stickers (2 per Page)";
+                generateStickerButton.textContent = "5-Generate Room Stickers (2/Page)";
             }
         });
     }
@@ -18381,7 +18381,7 @@ window.handlePythonExtraction = async function (jsonString) {
                 await UiModal.alert("Error: " + e.message);
             } finally {
                 generateRoomSummaryButton.disabled = false;
-                generateRoomSummaryButton.textContent = "Generate Room Allotment Summary";
+                generateRoomSummaryButton.textContent = "9-Generate Room Summary";
             }
         });
     }
