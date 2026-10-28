@@ -10086,7 +10086,7 @@ if (toggleButton && sidebar) {
         
         // Clear active buttons
         document.querySelectorAll('.report-action-btn').forEach(btn => {
-            btn.classList.remove('ring-2', 'ring-offset-2', 'ring-indigo-600', 'bg-indigo-700');
+            btn.classList.remove('ring-2', 'ring-offset-2', 'ring-gray-900', 'brightness-110');
         });
         // Clear active tab indicator dots
         ['qp', 'seating', 'scribe', 'duty'].forEach(t => {
@@ -10097,9 +10097,9 @@ if (toggleButton && sidebar) {
     function setActiveReportButton(activeButtonId) {
         document.querySelectorAll('.report-action-btn').forEach(btn => {
             if (btn.id === activeButtonId) {
-                btn.classList.add('ring-2', 'ring-offset-2', 'ring-indigo-600', 'bg-indigo-700');
+                btn.classList.add('ring-2', 'ring-offset-2', 'ring-gray-900', 'brightness-110');
             } else {
-                btn.classList.remove('ring-2', 'ring-offset-2', 'ring-indigo-600', 'bg-indigo-700');
+                btn.classList.remove('ring-2', 'ring-offset-2', 'ring-gray-900', 'brightness-110');
             }
         });
 
