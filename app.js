@@ -10065,7 +10065,30 @@ if (toggleButton && sidebar) {
         lastGeneratedRoomData = []; // Clear data
         lastGeneratedRoomWiseSummary = []; // Clear JSON summary
         lastGeneratedReportType = ""; // V91: Clear report type
+        document.querySelectorAll('.report-card').forEach(card => {
+            card.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/50', 'border-indigo-400');
+            card.querySelector('.report-active-badge')?.classList.add('hidden');
+        });
     }
+
+    function setActiveReportCard(activeButtonId) {
+        document.querySelectorAll('.report-card').forEach(card => {
+            const isMatch = card.getAttribute('data-report-id') === activeButtonId;
+            if (isMatch) {
+                card.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50/50', 'border-indigo-400');
+                card.querySelector('.report-active-badge')?.classList.remove('hidden');
+            } else {
+                card.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/50', 'border-indigo-400');
+                card.querySelector('.report-active-badge')?.classList.add('hidden');
+            }
+        });
+    }
+
+    document.querySelectorAll('.report-action-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            setActiveReportCard(btn.id);
+        });
+    });
 
     // --- Function to download the room-allocated CSV ---
     function downloadRoomCsv() {
