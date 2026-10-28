@@ -10056,6 +10056,24 @@ if (toggleButton && sidebar) {
        // --- Event listener for the "Clear" button ---
     clearReportButton.addEventListener('click', clearReport);
 
+    // --- Segmented Category Ribbon Controller (Option C) ---
+    window.switchReportsTab = function (tabKey) {
+        const tabs = ['qp', 'seating', 'scribe', 'duty'];
+        tabs.forEach(t => {
+            const btn = document.getElementById(`tab-btn-${t}`);
+            const panel = document.getElementById(`tab-panel-${t}`);
+            if (t === tabKey) {
+                btn?.classList.add('bg-indigo-600', 'text-white', 'shadow-xs');
+                btn?.classList.remove('bg-white', 'text-gray-700', 'hover:bg-gray-50');
+                panel?.classList.remove('hidden');
+            } else {
+                btn?.classList.remove('bg-indigo-600', 'text-white', 'shadow-xs');
+                btn?.classList.add('bg-white', 'text-gray-700', 'hover:bg-gray-50');
+                panel?.classList.add('hidden');
+            }
+        });
+    };
+
     // --- Centralized logic for clearing reports ---
     function clearReport() {
         reportOutputArea.innerHTML = "";
@@ -10065,28 +10083,51 @@ if (toggleButton && sidebar) {
         lastGeneratedRoomData = []; // Clear data
         lastGeneratedRoomWiseSummary = []; // Clear JSON summary
         lastGeneratedReportType = ""; // V91: Clear report type
-        document.querySelectorAll('.report-card').forEach(card => {
-            card.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/50', 'border-indigo-400');
-            card.querySelector('.report-active-badge')?.classList.add('hidden');
+        
+        // Clear active buttons
+        document.querySelectorAll('.report-action-btn').forEach(btn => {
+            btn.classList.remove('ring-2', 'ring-offset-2', 'ring-indigo-600', 'bg-indigo-700');
+        });
+        // Clear active tab indicator dots
+        ['qp', 'seating', 'scribe', 'duty'].forEach(t => {
+            document.getElementById(`tab-badge-${t}`)?.classList.add('hidden');
         });
     }
 
-    function setActiveReportCard(activeButtonId) {
-        document.querySelectorAll('.report-card').forEach(card => {
-            const isMatch = card.getAttribute('data-report-id') === activeButtonId;
-            if (isMatch) {
-                card.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50/50', 'border-indigo-400');
-                card.querySelector('.report-active-badge')?.classList.remove('hidden');
+    function setActiveReportButton(activeButtonId) {
+        document.querySelectorAll('.report-action-btn').forEach(btn => {
+            if (btn.id === activeButtonId) {
+                btn.classList.add('ring-2', 'ring-offset-2', 'ring-indigo-600', 'bg-indigo-700');
             } else {
-                card.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/50', 'border-indigo-400');
-                card.querySelector('.report-active-badge')?.classList.add('hidden');
+                btn.classList.remove('ring-2', 'ring-offset-2', 'ring-indigo-600', 'bg-indigo-700');
+            }
+        });
+
+        const tabMap = {
+            'generate-qpaper-report-button': 'qp',
+            'generate-qp-distribution-report-button': 'qp',
+            'generate-report-button': 'seating',
+            'generate-daywise-report-button': 'seating',
+            'generate-sticker-button': 'seating',
+            'generate-room-summary-button': 'seating',
+            'generate-scribe-proforma-button': 'scribe',
+            'generate-scribe-report-button': 'scribe',
+            'generate-scribe-master-report-button': 'scribe',
+            'generate-invigilator-report-button': 'duty'
+        };
+        const activeTab = tabMap[activeButtonId];
+        ['qp', 'seating', 'scribe', 'duty'].forEach(t => {
+            const dot = document.getElementById(`tab-badge-${t}`);
+            if (dot) {
+                if (t === activeTab) dot.classList.remove('hidden');
+                else dot.classList.add('hidden');
             }
         });
     }
 
     document.querySelectorAll('.report-action-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            setActiveReportCard(btn.id);
+            setActiveReportButton(btn.id);
         });
     });
 

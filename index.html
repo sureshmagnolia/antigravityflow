@@ -1743,166 +1743,138 @@
             </div>
 
 
-            <div id="view-reports" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
-                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
-                    <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                        <h1 class="text-3xl font-bold text-gray-800">Reports</h1>
+            <div id="view-reports" class="w-full max-w-[1650px] mx-auto p-3 sm:p-5 min-h-screen hidden">
+                <div class="bg-white p-4 sm:p-6 rounded-xl shadow-md w-full border border-gray-200">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-3 mb-3 border-b border-gray-200 gap-3">
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                <span>📊</span> Reports Center
+                            </h1>
+                            <p class="text-xs text-gray-500 mt-0.5">
+                                Generate official statements, seating charts, and candidate allocations based on loaded data.
+                            </p>
+                        </div>
                         <button onclick="triggerSessionExport()" 
-                                class="bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-700 hover:to-blue-700 px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all hover:scale-105 active:scale-95 flex items-center gap-2">
+                                class="shrink-0 bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-700 hover:to-blue-700 px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2">
                             <span>📦 Export Portable Session (.html)</span>
                         </button>
                     </div>
 
-
-                    <p class="text-gray-600 mb-4">
-                        Generate reports based on the last loaded data. (Buttons are enabled after extraction or CSV
-                        load.)
-                    </p>
-
-                    <div id="report-filter-section" class="bg-gray-100 p-4 rounded-lg mb-6 hidden">
-                        <h4 class="font-semibold text-gray-700 mb-2">Filter Reports By:</h4>
-
-                        <div class="flex flex-col sm:flex-row gap-4 mb-4 items-start">
-                            <div class="flex flex-col">
-                                <div class="flex items-center">
+                    <div id="report-filter-section" class="bg-slate-50 border border-slate-200 p-3 rounded-lg mb-3 hidden">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex items-center gap-4">
+                                <span class="text-xs font-bold text-gray-600 uppercase tracking-wider">Filter:</span>
+                                <label class="inline-flex items-center cursor-pointer text-xs font-medium text-gray-700">
+                                    <input type="radio" id="filter-session" name="report-filter" value="session" checked
+                                        class="h-3.5 w-3.5 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                                    <span class="ml-1.5">Specific Session</span>
+                                </label>
+                                <label class="inline-flex items-center cursor-pointer text-xs font-medium text-gray-700">
                                     <input type="radio" id="filter-all" name="report-filter" value="all"
-                                        class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
-                                    <label for="filter-all" class="ml-2 text-sm text-gray-700 font-medium">All Sessions (Bulk)</label>
-                                </div>
-                                <div id="bulk-future-filter-wrapper" class="hidden ml-6 mt-1">
-                                    <label class="flex items-center space-x-2 cursor-pointer select-none">
-                                        <input type="checkbox" id="filter-future-only" class="h-4 w-4 text-teal-600 rounded border-gray-300 focus:ring-teal-500">
-                                        <span class="text-xs text-teal-700 font-bold">Upcoming Exams only (Incl. Today)</span>
+                                        class="h-3.5 w-3.5 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                                    <span class="ml-1.5">All Sessions (Bulk)</span>
+                                </label>
+                                <div id="bulk-future-filter-wrapper" class="hidden">
+                                    <label class="flex items-center space-x-1.5 cursor-pointer select-none">
+                                        <input type="checkbox" id="filter-future-only" class="h-3.5 w-3.5 text-teal-600 rounded border-gray-300 focus:ring-teal-500">
+                                        <span class="text-xs text-teal-700 font-bold">Upcoming only (Incl. Today)</span>
                                     </label>
                                 </div>
                             </div>
 
-                            <div class="flex items-center h-5"> <input type="radio" id="filter-session" name="report-filter" value="session" checked
-                                    class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
-                                <label for="filter-session" class="ml-2 text-sm text-gray-700 font-medium">Specific Session</label>
-                            </div>
-                        </div>
+                            <div class="flex flex-wrap items-center gap-2 flex-1 sm:justify-end">
+                                <div id="reports-session-dropdown-container" class="min-w-[200px] flex-1 sm:flex-initial">
+                                    <select id="reports-session-select"
+                                        class="block w-full py-1.5 px-2.5 border border-gray-300 rounded-md shadow-xs text-xs font-medium bg-white">
+                                        <option value="">-- Select a Session --</option>
+                                    </select>
+                                </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div id="reports-session-dropdown-container">
-                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Session</label>
-                                <select id="reports-session-select"
-                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                                    <option value="">-- Select a Session --</option>
-                                </select>
-                            </div>
-
-                            <div id="reports-stream-dropdown-container">
-                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Stream</label>
-                                <select id="reports-stream-select"
-                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white">
-                                    <option value="all">All Streams (Combined)</option>
-                                </select>
+                                <div id="reports-stream-dropdown-container" class="min-w-[160px] flex-1 sm:flex-initial">
+                                    <select id="reports-stream-select"
+                                        class="block w-full py-1.5 px-2.5 border border-gray-300 rounded-md shadow-xs text-xs font-medium bg-white">
+                                        <option value="all">All Streams (Combined)</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                     </div>
 
+                    <!-- Category Ribbon Navigation (Option C) -->
+                    <div class="mb-3">
+                        <div class="flex flex-wrap items-center gap-1.5 p-1 bg-gray-100 rounded-lg border border-gray-200">
+                            <button type="button" id="tab-btn-qp" onclick="switchReportsTab('qp')"
+                                class="report-category-tab flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-bold transition bg-indigo-600 text-white shadow-xs">
+                                <span>📦</span> QP Reports <span class="text-[10px] opacity-80 font-normal">(1-2)</span>
+                                <span id="tab-badge-qp" class="hidden h-2 w-2 rounded-full bg-emerald-400"></span>
+                            </button>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5" id="reports-grid-container">
+                            <button type="button" id="tab-btn-seating" onclick="switchReportsTab('seating')"
+                                class="report-category-tab flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-bold transition bg-white text-gray-700 hover:bg-gray-50 border border-gray-200">
+                                <span>🏛️</span> Seating & Halls <span class="text-[10px] opacity-80 font-normal">(3, 4, 5, 9)</span>
+                                <span id="tab-badge-seating" class="hidden h-2 w-2 rounded-full bg-emerald-400"></span>
+                            </button>
 
-                        <!-- 01: Question Paper Statement -->
-                        <div class="report-card group bg-white border border-gray-200 hover:border-indigo-300 hover:shadow-md rounded-xl p-4 transition-all duration-200 flex flex-col justify-between" data-report-id="generate-qpaper-report-button">
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                        <span>📄</span> Report 01
-                                    </span>
-                                    <span class="report-active-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> Loaded
-                                    </span>
-                                </div>
-                                <h5 class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors mb-1">Question Paper Statement</h5>
-                                <p class="text-xs text-gray-500 mb-3">Room-by-room Question Paper requirement and packet packaging counts.</p>
-                            </div>
-                            <div>
-                                <div class="bg-amber-50 border-l-4 border-amber-500 p-2 mb-3 rounded-r-md">
-                                    <div class="flex items-center gap-1.5">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                        </svg>
-                                        <p class="text-[11px] font-bold text-amber-900 leading-tight">
-                                            Go to <span class="uppercase">QP Codes</span> tab, unlock, enter QP codes and save before printing.
-                                        </p>
-                                    </div>
-                                </div>
+                            <button type="button" id="tab-btn-scribe" onclick="switchReportsTab('scribe')"
+                                class="report-category-tab flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-bold transition bg-white text-gray-700 hover:bg-gray-50 border border-gray-200">
+                                <span>✍️</span> Scribes <span class="text-[10px] opacity-80 font-normal">(6, 7, 10)</span>
+                                <span id="tab-badge-scribe" class="hidden h-2 w-2 rounded-full bg-emerald-400"></span>
+                            </button>
+
+                            <button type="button" id="tab-btn-duty" onclick="switchReportsTab('duty')"
+                                class="report-category-tab flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-bold transition bg-white text-gray-700 hover:bg-gray-50 border border-gray-200">
+                                <span>👥</span> Invigilation <span class="text-[10px] opacity-80 font-normal">(8)</span>
+                                <span id="tab-badge-duty" class="hidden h-2 w-2 rounded-full bg-emerald-400"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Category Tab Panels -->
+                    <div id="reports-panels-wrapper">
+                        <!-- TAB 1: QP REPORTS (01 - 02) -->
+                        <div id="tab-panel-qp" class="report-tab-panel">
+                            <div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 bg-slate-50 border border-slate-200 p-3 rounded-lg">
                                 <button id="generate-qpaper-report-button"
-                                    class="report-action-btn w-full inline-flex justify-center items-center rounded-lg bg-indigo-600 py-2.5 px-3 text-xs md:text-sm font-semibold text-white shadow-xs hover:bg-indigo-700 active:scale-[0.99] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                    class="report-action-btn flex-1 inline-flex justify-center items-center py-2.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs md:text-sm font-semibold shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed"
                                     disabled>
                                     1-Generate Question Paper Report
                                 </button>
-                            </div>
-                        </div>
 
-                        <!-- 02: QP Distribution by QP-Code -->
-                        <div class="report-card group bg-white border border-gray-200 hover:border-indigo-300 hover:shadow-md rounded-xl p-4 transition-all duration-200 flex flex-col justify-between" data-report-id="generate-qp-distribution-report-button">
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                        <span>📄</span> Report 02
-                                    </span>
-                                    <span class="report-active-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> Loaded
-                                    </span>
+                                <!-- INSTRUCTION: QP CODE WARNING BEFORE REPORT 2 -->
+                                <div class="flex-1 bg-amber-50 border-l-4 border-amber-500 py-2 px-3 rounded-r-md flex items-center gap-2 shadow-xs">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                    <p class="text-xs font-bold text-amber-900 leading-tight">
+                                        Go to <span class="uppercase font-extrabold text-amber-950">QP Codes</span> tab, unlock, enter QP codes and save before printing.
+                                    </p>
                                 </div>
-                                <h5 class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors mb-1">QP Distribution by QP-Code</h5>
-                                <p class="text-xs text-gray-500 mb-3">Master question paper distribution statement grouped strictly by official QP codes.</p>
-                            </div>
-                            <div class="mt-auto">
+
                                 <button id="generate-qp-distribution-report-button"
-                                    class="report-action-btn w-full inline-flex justify-center items-center rounded-lg bg-indigo-600 py-2.5 px-3 text-xs md:text-sm font-semibold text-white shadow-xs hover:bg-indigo-700 active:scale-[0.99] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                    class="report-action-btn flex-1 inline-flex justify-center items-center py-2.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs md:text-sm font-semibold shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed"
                                     disabled>
                                     2-Generate QP Distribution by QP-Code Report
                                 </button>
                             </div>
                         </div>
 
-                        <!-- 03: Room-wise Seating Arrangement -->
-                        <div class="report-card group bg-white border border-gray-200 hover:border-indigo-300 hover:shadow-md rounded-xl p-4 transition-all duration-200 flex flex-col justify-between" data-report-id="generate-report-button">
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
-                                        <span>🏛️</span> Report 03
-                                    </span>
-                                    <span class="report-active-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> Loaded
-                                    </span>
-                                </div>
-                                <h5 class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors mb-1">Room-wise Seating Report</h5>
-                                <p class="text-xs text-gray-500 mb-3">Comprehensive hall seating arrangements with student registers, room tags, and signatures.</p>
-                            </div>
-                            <div class="mt-auto">
+                        <!-- TAB 2: SEATING & HALLS (03, 04, 05, 09) -->
+                        <div id="tab-panel-seating" class="report-tab-panel hidden">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 bg-slate-50 border border-slate-200 p-3 rounded-lg">
                                 <button id="generate-report-button"
-                                    class="report-action-btn w-full inline-flex justify-center items-center rounded-lg bg-indigo-600 py-2.5 px-3 text-xs md:text-sm font-semibold text-white shadow-xs hover:bg-indigo-700 active:scale-[0.99] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                    class="report-action-btn w-full inline-flex justify-center items-center py-2.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs md:text-sm font-semibold shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed"
                                     disabled>
                                     3-Generate Room-wise Seating Report
                                 </button>
-                            </div>
-                        </div>
 
-                        <!-- 04: Seating Details for Candidates -->
-                        <div class="report-card group bg-white border border-gray-200 hover:border-indigo-300 hover:shadow-md rounded-xl p-4 transition-all duration-200 flex flex-col justify-between" data-report-id="generate-daywise-report-button">
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
-                                        <span>🏛️</span> Report 04
-                                    </span>
-                                    <span class="report-active-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> Loaded
-                                    </span>
-                                </div>
-                                <h5 class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors mb-1">Seating Details for Candidates</h5>
-                                <p class="text-xs text-gray-500 mb-2">Notice board copy showing candidate seat locations, halls, and courses.</p>
-                            </div>
-                            <div class="mt-auto">
-                                <div class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg p-2 mb-2.5">
-                                    <div class="flex-1">
-                                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Rows / Page</label>
-                                        <select id="daywise-rows" class="block w-full p-1.5 bg-white border border-gray-300 rounded text-xs font-medium">
+                                <div class="flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg p-1 shadow-xs">
+                                    <button id="generate-daywise-report-button"
+                                        class="report-action-btn flex-1 inline-flex justify-center items-center py-2 px-2 rounded-md bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs font-semibold shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                        disabled>
+                                        4-Generate Seating Details
+                                    </button>
+                                    <div class="flex items-center gap-1 shrink-0">
+                                        <select id="daywise-rows" class="p-1 bg-gray-50 border border-gray-300 rounded text-xs font-medium" title="Rows per page">
                                             <option value="30">30</option>
                                             <option value="31">31</option>
                                             <option value="32">32</option>
@@ -1925,176 +1897,81 @@
                                             <option value="49">49</option>
                                             <option value="50">50</option>
                                         </select>
-                                    </div>
-                                    <div class="w-24">
-                                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Columns</label>
-                                        <select id="daywise-cols" class="block w-full p-1.5 bg-white border border-gray-300 rounded text-xs font-medium">
+                                        <select id="daywise-cols" class="p-1 bg-gray-50 border border-gray-300 rounded text-xs font-medium" title="Columns">
                                             <option value="1">1 Col</option>
                                             <option value="2" selected>2 Cols</option>
                                         </select>
                                     </div>
                                 </div>
-                                <button id="generate-daywise-report-button"
-                                    class="report-action-btn w-full inline-flex justify-center items-center rounded-lg bg-indigo-600 py-2.5 px-3 text-xs md:text-sm font-semibold text-white shadow-xs hover:bg-indigo-700 active:scale-[0.99] transition disabled:opacity-40 disabled:cursor-not-allowed"
-                                    disabled>
-                                    4-Generate Seating Details for Candidates
-                                </button>
-                            </div>
-                        </div>
 
-                        <!-- 05: Room Stickers -->
-                        <div class="report-card group bg-white border border-gray-200 hover:border-indigo-300 hover:shadow-md rounded-xl p-4 transition-all duration-200 flex flex-col justify-between" data-report-id="generate-sticker-button">
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                                        <span>🏷️</span> Report 05
-                                    </span>
-                                    <span class="report-active-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> Loaded
-                                    </span>
-                                </div>
-                                <h5 class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors mb-1">Room Stickers (2 per Page)</h5>
-                                <p class="text-xs text-gray-500 mb-3">Door-mount slips formatted with room name, dates, sessions, and register number ranges.</p>
-                            </div>
-                            <div class="mt-auto">
                                 <button id="generate-sticker-button"
-                                    class="report-action-btn w-full inline-flex justify-center items-center rounded-lg bg-indigo-600 py-2.5 px-3 text-xs md:text-sm font-semibold text-white shadow-xs hover:bg-indigo-700 active:scale-[0.99] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                    class="report-action-btn w-full inline-flex justify-center items-center py-2.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs md:text-sm font-semibold shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed"
                                     disabled>
-                                    5-Generate Room Stickers (2 per Page)
+                                    5-Generate Room Stickers (2/Page)
+                                </button>
+
+                                <button id="generate-room-summary-button"
+                                    class="report-action-btn w-full inline-flex justify-center items-center py-2.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs md:text-sm font-semibold shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                    disabled>
+                                    9-Generate Room Summary
                                 </button>
                             </div>
                         </div>
 
-                        <!-- 06: Scribe Proforma -->
-                        <div class="report-card group bg-white border border-gray-200 hover:border-indigo-300 hover:shadow-md rounded-xl p-4 transition-all duration-200 flex flex-col justify-between" data-report-id="generate-scribe-proforma-button">
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-800 border border-orange-200">
-                                        <span>✍️</span> Report 06
-                                    </span>
-                                    <span class="report-active-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> Loaded
-                                    </span>
-                                </div>
-                                <h5 class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors mb-1">Scribe Proforma (One Page Per Scribe)</h5>
-                                <p class="text-xs text-gray-500 mb-3">Individual appointment and declaration forms per candidate for official university records.</p>
-                            </div>
-                            <div class="mt-auto">
+                        <!-- TAB 3: SCRIBES (06, 07, 10) -->
+                        <div id="tab-panel-scribe" class="report-tab-panel hidden">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50 border border-slate-200 p-3 rounded-lg">
                                 <button id="generate-scribe-proforma-button"
-                                    class="report-action-btn w-full inline-flex justify-center items-center rounded-lg bg-indigo-600 py-2.5 px-3 text-xs md:text-sm font-semibold text-white shadow-xs hover:bg-indigo-700 active:scale-[0.99] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                    class="report-action-btn w-full inline-flex justify-center items-center py-2.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs md:text-sm font-semibold shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed"
                                     disabled>
                                     6-Generate Scribe Proforma (One Page Per Scribe)
                                 </button>
-                            </div>
-                        </div>
 
-                        <!-- 07: Scribe Assistance Report -->
-                        <div class="report-card group bg-white border border-gray-200 hover:border-indigo-300 hover:shadow-md rounded-xl p-4 transition-all duration-200 flex flex-col justify-between" data-report-id="generate-scribe-report-button">
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-800 border border-orange-200">
-                                        <span>✍️</span> Report 07
-                                    </span>
-                                    <span class="report-active-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> Loaded
-                                    </span>
-                                </div>
-                                <h5 class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors mb-1">Scribe Assistance Report</h5>
-                                <p class="text-xs text-gray-500 mb-3">Session summary list of all scribe-assisted candidates, hall numbers, and allotted scribes.</p>
-                            </div>
-                            <div class="mt-auto">
                                 <button id="generate-scribe-report-button"
-                                    class="report-action-btn w-full inline-flex justify-center items-center rounded-lg bg-indigo-600 py-2.5 px-3 text-xs md:text-sm font-semibold text-white shadow-xs hover:bg-indigo-700 active:scale-[0.99] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                    class="report-action-btn w-full inline-flex justify-center items-center py-2.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs md:text-sm font-semibold shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed"
                                     disabled>
                                     7-Generate Scribe Assistance Report
                                 </button>
-                            </div>
-                        </div>
 
-                        <!-- 08: Invigilator Requirement Summary -->
-                        <div class="report-card group bg-white border border-gray-200 hover:border-indigo-300 hover:shadow-md rounded-xl p-4 transition-all duration-200 flex flex-col justify-between" data-report-id="generate-invigilator-report-button">
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-100 text-teal-800 border border-teal-200">
-                                        <span>👥</span> Report 08
-                                    </span>
-                                    <span class="report-active-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> Loaded
-                                    </span>
-                                </div>
-                                <h5 class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors mb-1">Invigilator Requirement Summary</h5>
-                                <p class="text-xs text-gray-500 mb-3">Calculates total invigilation duty requirements across active halls for this session.</p>
-                            </div>
-                            <div class="mt-auto">
-                                <button id="generate-invigilator-report-button"
-                                    class="report-action-btn w-full inline-flex justify-center items-center rounded-lg bg-indigo-600 py-2.5 px-3 text-xs md:text-sm font-semibold text-white shadow-xs hover:bg-indigo-700 active:scale-[0.99] transition disabled:opacity-40 disabled:cursor-not-allowed"
-                                    disabled>
-                                    8-Generate Invigilator Requirement Summary
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- 09: Room Allotment Summary -->
-                        <div class="report-card group bg-white border border-gray-200 hover:border-indigo-300 hover:shadow-md rounded-xl p-4 transition-all duration-200 flex flex-col justify-between" data-report-id="generate-room-summary-button">
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
-                                        <span>🏛️</span> Report 09
-                                    </span>
-                                    <span class="report-active-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> Loaded
-                                    </span>
-                                </div>
-                                <h5 class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors mb-1">Room Allotment Summary</h5>
-                                <p class="text-xs text-gray-500 mb-3">High-level macro table of all utilized rooms, capacities, student headcounts, and courses.</p>
-                            </div>
-                            <div class="mt-auto">
-                                <button id="generate-room-summary-button"
-                                    class="report-action-btn w-full inline-flex justify-center items-center rounded-lg bg-indigo-600 py-2.5 px-3 text-xs md:text-sm font-semibold text-white shadow-xs hover:bg-indigo-700 active:scale-[0.99] transition disabled:opacity-40 disabled:cursor-not-allowed"
-                                    disabled>
-                                    9-Generate Room Allotment Summary
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- 10: Scribe Master Report -->
-                        <div class="report-card group bg-white border border-gray-200 hover:border-indigo-300 hover:shadow-md rounded-xl p-4 transition-all duration-200 flex flex-col justify-between" data-report-id="generate-scribe-master-report-button">
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
-                                        <span>✍️</span> Report 10
-                                    </span>
-                                    <span class="report-active-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> Loaded
-                                    </span>
-                                </div>
-                                <h5 class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors mb-1">Scribe Assistance Master Report</h5>
-                                <p class="text-xs text-gray-500 mb-3">Cross-session master roster covering all examination dates and cumulative scribe logs.</p>
-                            </div>
-                            <div class="mt-auto">
                                 <button id="generate-scribe-master-report-button"
-                                    class="report-action-btn w-full inline-flex justify-center items-center rounded-lg bg-indigo-600 py-2.5 px-3 text-xs md:text-sm font-semibold text-white shadow-xs hover:bg-indigo-700 active:scale-[0.99] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                    class="report-action-btn w-full inline-flex justify-center items-center py-2.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs md:text-sm font-semibold shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed"
                                     disabled>
                                     10-Generate Scribe Assistance Master Report
                                 </button>
                             </div>
                         </div>
 
-                    </div>  <div id="report-controls" class="mt-6 bg-gray-50 border border-gray-200 p-4 rounded-lg hidden">
-    <div class="flex flex-wrap justify-between items-center mb-4 gap-3">
-        <span id="report-status" class="text-sm font-bold text-gray-700"></span>
-        <button id="clear-report-button" class="bg-white text-red-600 border border-red-200 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-50 shadow-sm transition">
-            Clear Report
-        </button>
-    </div>
-    
-    <div id="room-csv-download-container" class="w-full mb-4"></div>
-    
-    <div id="report-output-area" class="w-full bg-white shadow-sm border border-gray-200 min-h-[100px] p-4 rounded-lg text-sm overflow-auto">
-    </div>
-</div>
+                        <!-- TAB 4: INVIGILATION / DUTY (08) -->
+                        <div id="tab-panel-duty" class="report-tab-panel hidden">
+                            <div class="bg-slate-50 border border-slate-200 p-3 rounded-lg flex items-center justify-start">
+                                <button id="generate-invigilator-report-button"
+                                    class="report-action-btn inline-flex justify-center items-center py-2.5 px-6 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs md:text-sm font-semibold shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                    disabled>
+                                    8-Generate Invigilator Requirement Summary
+                                </button>
+                            </div>
+                        </div>
+                    </div>
 
-<div id="json-data-store" class="hidden"></div>
+                    <!-- REPORT CONTROLS & FULL-CANVAS PREVIEW AREA -->
+                    <div id="report-controls" class="mt-4 bg-gray-50 border border-gray-200 p-4 rounded-xl shadow-xs hidden">
+                        <div class="flex flex-wrap justify-between items-center mb-3 pb-3 border-b border-gray-200 gap-3">
+                            <div class="flex items-center gap-2">
+                                <span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span id="report-status" class="text-sm font-bold text-gray-800"></span>
+                            </div>
+                            <button id="clear-report-button" class="bg-white text-red-600 border border-red-300 hover:bg-red-50 px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-xs transition">
+                                Clear Report
+                            </button>
+                        </div>
+                        
+                        <div id="room-csv-download-container" class="w-full mb-3"></div>
+                        
+                        <div id="report-output-area" class="w-full bg-white shadow-inner border border-gray-200 min-h-[300px] p-4 sm:p-6 rounded-lg text-sm overflow-x-auto">
+                        </div>
+                    </div>
+
+                    <div id="json-data-store" class="hidden"></div>
 <div id="q-paper-data-store" class="hidden"></div>
 
 <!-- Scroll to Top Button (Reports Only) -->
@@ -5364,7 +5241,7 @@
 </div>
 
 <script src="session_export.js"></script>
-<script src="app.js?v=12.8.30"></script>
+<script src="app.js?v=12.8.31"></script>
 <script src="excel_extraction.js"></script>    
 <!-- Global Datalist for Searchable Parent Rooms -->
 <datalist id="parent-rooms-list"></datalist>
