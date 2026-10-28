@@ -14190,12 +14190,14 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         if (!freshRoomPerExam && mainGrouping === 'separate' && targetExamName && newStudents.length < limit) {
             const detectedExams = (typeof getSessionExamTags === 'function') ? getSessionExamTags(currentSessionKey) : [];
-            const currentExamIdx = detectedExams.indexOf(targetExamName);
+            const targetExamStr = (typeof targetExamName === 'string' ? targetExamName : (targetExamName?.examName || targetExamName?.name || '')).trim().toLowerCase();
+            const currentExamIdx = detectedExams.findIndex(g => (g.name || g.examName || '').trim().toLowerCase() === targetExamStr);
             if (currentExamIdx !== -1) {
                 const roomRegNos = new Set(allottedRegNos);
                 newStudents.forEach(s => roomRegNos.add(getRegNo(s)));
 
-                for (let i = currentExamIdx + 1; i < detectedExams.length; i++) {
+                for (let i = 0; i < detectedExams.length; i++) {
+                    if (i === currentExamIdx) continue;
                     const nextGroup = detectedExams[i];
                     const remainingCapacity = limit - newStudents.length;
                     if (remainingCapacity <= 0) break;
