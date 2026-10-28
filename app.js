@@ -14183,7 +14183,41 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
         // -----------------------------------------------
 
+        // 🏷️ TOP-UP ACROSS EXAMS: If "Start each Exam in a Fresh Room" is unchecked,
+        // and room has spare capacity (newStudents.length < limit), top up with subsequent exam groups in this session
+        const freshRoomCb = document.getElementById('main-exam-fresh-room-cb') || document.getElementById('modal-exam-fresh-room-cb');
+        const freshRoomPerExam = freshRoomCb ? freshRoomCb.checked : false;
 
+        if (!freshRoomPerExam && mainGrouping === 'separate' && targetExamName && newStudents.length < limit) {
+            const detectedExams = (typeof getSessionExamTags === 'function') ? getSessionExamTags(currentSessionKey) : [];
+            const currentExamIdx = detectedExams.indexOf(targetExamName);
+            if (currentExamIdx !== -1) {
+                const roomRegNos = new Set(allottedRegNos);
+                newStudents.forEach(s => roomRegNos.add(getRegNo(s)));
+
+                for (let i = currentExamIdx + 1; i < detectedExams.length; i++) {
+                    const nextGroup = detectedExams[i];
+                    const remainingCapacity = limit - newStudents.length;
+                    if (remainingCapacity <= 0) break;
+
+                    const nextGroupCandidates = sessionStudentRecords.filter(s => {
+                        const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
+                        return !roomRegNos.has(getRegNo(s)) && 
+                               sStream === targetStreamNormalized && 
+                               studentMatchesExamGroup(s, nextGroup);
+                    });
+
+                    if (nextGroupCandidates.length > 0) {
+                        const takeCount = (nextGroupCandidates.length <= (remainingCapacity + 3))
+                            ? Math.min(nextGroupCandidates.length, remainingCapacity + 3)
+                            : remainingCapacity;
+                        const topUpSlice = nextGroupCandidates.slice(0, takeCount);
+                        topUpSlice.forEach(s => roomRegNos.add(getRegNo(s)));
+                        newStudents = newStudents.concat(topUpSlice);
+                    }
+                }
+            }
+        }
 
         if (newStudents.length === 0) {
             await UiModal.alert(`No unallotted students found for stream: ${targetStream}`);
