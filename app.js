@@ -26019,7 +26019,7 @@ window.downloadInvigilationListPDF = async function () {
                     clean = clean.replace(new RegExp(`\\(?\\b${esc}\\b\\)?`, 'gi'), ' ');
                 }
                 clean = clean.replace(/\((Core|VAC|SEC|Minor|AEC|MDC)\s*[^)]*\)/gi, ' ');
-                clean = clean.replace(/^[A-Za-z0-9\-_/]+\s*-\s*/, ' ');
+                clean = clean.replace(/^[A-Za-z0-9_]*\d[A-Za-z0-9_]*\s*-\s*/, ' ');
                 clean = clean.replace(/--+/g, ' ');
                 clean = clean.replace(/^[\s\-_:,]+|[\s\-_:,]+$/g, '').replace(/\s+/g, ' ').toUpperCase();
 
@@ -26168,19 +26168,131 @@ window.downloadInvigilationListPDF = async function () {
                 return validPairs;
             }
 
-            // PASS 1: Course Code Exact Match (Highest Confidence: e.g. BOT5CJ302, MTS5B06, BCM5B08, BBA5B08)
+            function normalizeTitleForComparison(str) {
+                if (!str) return '';
+                return str.toUpperCase()
+                    .replace(/\[.*?\]/g, ' ')
+                    .replace(/\(.*?\)/g, ' ')
+                    .replace(/^[A-Za-z0-9_]*\d[A-Za-z0-9_]*\s*-\s*/, ' ')
+                    .replace(/--+/g, ' ')
+                    .replace(/[^A-Z0-9\s]/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            }
+
+            function getTitleTokens(str) {
+                const STOPWORDS = new Set(['AND', 'THE', 'OF', 'IN', 'FOR', 'TO', 'ON', 'WITH', 'BY', 'AN', 'A', 'SYLLABUS', 'COURSE', 'PAPER', 'PART', 'CORE', 'ELECTIVE', 'COMPLEMENTARY', 'OPEN', 'GENERAL', 'STREAM', 'REGULAR', 'EDE']);
+                const norm = normalizeTitleForComparison(str);
+                return norm.split(/\s+/).filter(w => w.length > 1 && !STOPWORDS.has(w));
+            }
+
+            function computeTitleSimilarity(str1, str2) {
+                if (!str1 || !str2) return 0;
+                const s1 = normalizeTitleForComparison(str1);
+                const s2 = normalizeTitleForComparison(str2);
+                if (!s1 || !s2) return 0;
+                if (s1 === s2) return 1.0;
+
+                const c1 = s1.replace(/\s+/g, '');
+                const c2 = s2.replace(/\s+/g, '');
+                if (c1 === c2) return 0.99;
+                if (c1.includes(c2) || c2.includes(c1)) {
+                    const minL = Math.min(c1.length, c2.length);
+                    const maxL = Math.max(c1.length, c2.length);
+                    if (minL >= 6 && minL / maxL > 0.7) return 0.85 * (minL / maxL);
+                }
+
+                const tokens1 = getTitleTokens(str1);
+                const tokens2 = getTitleTokens(str2);
+
+                if (tokens1.length === 0 || tokens2.length === 0) return 0;
+
+                const set1 = new Set(tokens1);
+                const set2 = new Set(tokens2);
+                let commonWords = 0;
+                for (const w of set1) {
+                    if (set2.has(w)) {
+                        commonWords++;
+                    } else {
+                        for (const w2 of set2) {
+                            if ((w.length >= 4 && w2.startsWith(w)) || (w2.length >= 4 && w.startsWith(w2))) {
+                                commonWords += 0.8;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (commonWords === 0) return 0;
+
+                const tokenScore = (2 * commonWords) / (tokens1.length + tokens2.length);
+
+                function getBigrams(s) {
+                    const bg = new Set();
+                    for (let i = 0; i < s.length - 1; i++) {
+                        bg.add(s.substr(i, 2));
+                    }
+                    return bg;
+                }
+                const bg1 = getBigrams(c1);
+                const bg2 = getBigrams(c2);
+                let commonBg = 0;
+                for (const b of bg1) {
+                    if (bg2.has(b)) commonBg++;
+                }
+                const dice = (2 * commonBg) / (bg1.size + bg2.size || 1);
+
+                return Math.max(tokenScore, dice);
+            }
+
+            // PASS 1A: Course Code Match with Strict Title Disambiguation
+            // When candidates share identical course codes (e.g. BCM5B10 electives), rank by title similarity
+            const codeCandidatePairs = [];
             inputs.forEach(input => {
                 if (matchedInputs.has(input)) return;
                 const uiMeta = extractCourseMeta(input.dataset.course);
                 if (!uiMeta.code) return;
 
                 const candidates = getCandidatePairs(input);
-                const match = candidates.find(p => !usedPairs.has(p) && p.meta.code && p.meta.code === uiMeta.code);
-                if (match) {
-                    input.value = match.code;
-                    usedPairs.add(match);
-                    matchedInputs.add(input);
+                candidates.forEach(p => {
+                    if (p.meta.code && p.meta.code === uiMeta.code) {
+                        const sim = computeTitleSimilarity(uiMeta.title, p.meta.title || p.searchText);
+                        if (uiMeta.year && p.meta.year && uiMeta.year !== p.meta.year) return;
+                        codeCandidatePairs.push({ input, candidate: p, sim, code: uiMeta.code });
+                    }
+                });
+            });
+
+            // Sort all code-matched candidate pairs by title similarity descending
+            codeCandidatePairs.sort((a, b) => b.sim - a.sim);
+
+            codeCandidatePairs.forEach(m => {
+                if (matchedInputs.has(m.input) || usedPairs.has(m.candidate)) return;
+                // Require reasonable title similarity (>= 0.35) so conflicting electives are never cross-assigned
+                if (m.sim >= 0.35) {
+                    m.input.value = m.candidate.code;
+                    matchedInputs.add(m.input);
+                    usedPairs.add(m.candidate);
                     matched++;
+                }
+            });
+
+            // PASS 1B: Unique Course Code Match (Fallback when a course code is completely unique in the session)
+            inputs.forEach(input => {
+                if (matchedInputs.has(input)) return;
+                const uiMeta = extractCourseMeta(input.dataset.course);
+                if (!uiMeta.code) return;
+
+                const remainingInputsWithCode = inputs.filter(inp => !matchedInputs.has(inp) && extractCourseMeta(inp.dataset.course).code === uiMeta.code);
+                if (remainingInputsWithCode.length === 1) {
+                    const candidates = getCandidatePairs(input);
+                    const remainingCandidatesWithCode = candidates.filter(p => !usedPairs.has(p) && p.meta.code === uiMeta.code);
+                    if (remainingCandidatesWithCode.length === 1) {
+                        input.value = remainingCandidatesWithCode[0].code;
+                        matchedInputs.add(input);
+                        usedPairs.add(remainingCandidatesWithCode[0]);
+                        matched++;
+                    }
                 }
             });
 
@@ -26252,13 +26364,35 @@ window.downloadInvigilationListPDF = async function () {
                 }
             });
 
-            // PASS 5: Deep Word-Tokenizing Sequence-Aware Match (Fuzzy Fallback)
+            // PASS 5: Strict Fuzzy Title Similarity Match (sim >= 0.40) & Sequence-Aware Word Fallback
             inputs.forEach(input => {
                 if (matchedInputs.has(input)) return;
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
                 const uiMeta = extractCourseMeta(input.dataset.course);
                 const candidates = getCandidatePairs(input);
 
+                // 1. Strict Fuzzy Title Similarity check
+                let bestSimMatch = null;
+                let bestSim = 0;
+                candidates.forEach(p => {
+                    if (usedPairs.has(p)) return;
+                    if (uiMeta.year && p.meta.year && uiMeta.year !== p.meta.year) return;
+                    const sim = computeTitleSimilarity(uiMeta.title || uiCourseName, p.meta.title || p.searchText);
+                    if (sim > bestSim && sim >= 0.40) {
+                        bestSim = sim;
+                        bestSimMatch = p;
+                    }
+                });
+
+                if (bestSimMatch) {
+                    input.value = bestSimMatch.code;
+                    usedPairs.add(bestSimMatch);
+                    matchedInputs.add(input);
+                    matched++;
+                    return;
+                }
+
+                // 2. Sequence-Aware Word Token Fallback
                 const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2 && !w.match(/^20\d{2}$/));
                 const ignoreWords = ['SYLLABUS', 'PART', 'PAPER', 'BASIC', 'COMMON', 'COURSE', 'PROGRAMME', 'EXAMINATION', 'CORE', 'COMPLEMENTARY', 'OPEN', 'ELECTIVE'];
                 const coreWords = words.filter(w => !ignoreWords.includes(w) && isNaN(w));

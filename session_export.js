@@ -542,46 +542,279 @@ window.UiModal = UiModal;
                         parsedPairs.push({
                             searchText: searchString, 
                             code: finalQpCode,
-                            isEde: finalQpCode.endsWith('A')
+                            isEde: finalQpCode.endsWith('A'),
+                            meta: extractCourseMeta(searchString)
                         });
                     }
                 });
 
-                let matched = 0;
-                document.querySelectorAll('#qt input').forEach(input => {
-                    const keyParts = input.dataset.key.split('|');
-                    const uiCourseName = keyParts[0].trim().toUpperCase();
-                    const streamName = (keyParts[1] || "").toUpperCase();
-                    const isEdeStream = streamName.includes("EDE");
-                    
-                    let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
-                    if (validPairs.length === 0) validPairs = parsedPairs;
+                function extractCourseMeta(courseStr) {
+                    if (!courseStr) return { code: null, year: null, title: '', raw: '' };
+                    const text = courseStr.trim();
+                    const ym = text.match(/\\b(20\\d{2})\\b/);
+                    const year = ym ? ym[1] : null;
 
-                    let bestMatch = validPairs.find(p => p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText));
+                    const codeMatches = text.match(/\\b([A-Za-z]{2,5}\\d[A-Za-z0-9]{2,7}(?:\\([0-9A-Za-z]+\\))?)\\b/g);
+                    let code = null;
+                    if (codeMatches) {
+                        const filtered = codeMatches.filter(c => !/^20\\d{2}$/.test(c));
+                        if (filtered.length > 0) code = filtered[0].toUpperCase();
+                    }
 
-                    if (!bestMatch) {
-                        const words = uiCourseName.split(/[\\s,.-]+/).filter(w => w.length > 2);
-                        if (words.length > 0) {
-                            let bestScore = 0;
-                            validPairs.forEach(p => {
-                                let score = 0;
-                                words.forEach(w => { if (p.searchText.includes(w)) score++; });
-                                if (score > bestScore) {
-                                    bestScore = score;
-                                    bestMatch = p;
+                    let clean = text;
+                    clean = clean.replace(/\\[.*?\\]/g, ' ');
+                    if (code) {
+                        const esc = code.replace(/[-/\\\\^$*+?.()|[\\]{}]/g, '\\\\$&');
+                        clean = clean.replace(new RegExp('\\\\(?\\\\b' + esc + '\\\\b\\\\)?', 'gi'), ' ');
+                    }
+                    clean = clean.replace(/\\((Core|VAC|SEC|Minor|AEC|MDC)\\s*[^)]*\\)/gi, ' ');
+                    clean = clean.replace(/^[A-Za-z0-9_]*\\d[A-Za-z0-9_]*\\s*-\\s*/, ' ');
+                    clean = clean.replace(/--+/g, ' ');
+                    clean = clean.replace(/^[\\s\\-_:,]+|[\\s\\-_:,]+$/g, '').replace(/\\s+/g, ' ').toUpperCase();
+
+                    return { code, year, title: clean, raw: text.toUpperCase() };
+                }
+
+                function normalizeTitleForComparison(str) {
+                    if (!str) return '';
+                    return str.toUpperCase()
+                        .replace(/\\[.*?\\]/g, ' ')
+                        .replace(/\\(.*?\\)/g, ' ')
+                        .replace(/^[A-Za-z0-9_]*\\d[A-Za-z0-9_]*\\s*-\\s*/, ' ')
+                        .replace(/--+/g, ' ')
+                        .replace(/[^A-Z0-9\\s]/g, ' ')
+                        .replace(/\\s+/g, ' ')
+                        .trim();
+                }
+
+                function getTitleTokens(str) {
+                    const STOPWORDS = new Set(['AND', 'THE', 'OF', 'IN', 'FOR', 'TO', 'ON', 'WITH', 'BY', 'AN', 'A', 'SYLLABUS', 'COURSE', 'PAPER', 'PART', 'CORE', 'ELECTIVE', 'COMPLEMENTARY', 'OPEN', 'GENERAL', 'STREAM', 'REGULAR', 'EDE']);
+                    const norm = normalizeTitleForComparison(str);
+                    return norm.split(/\\s+/).filter(w => w.length > 1 && !STOPWORDS.has(w));
+                }
+
+                function computeTitleSimilarity(str1, str2) {
+                    if (!str1 || !str2) return 0;
+                    const s1 = normalizeTitleForComparison(str1);
+                    const s2 = normalizeTitleForComparison(str2);
+                    if (!s1 || !s2) return 0;
+                    if (s1 === s2) return 1.0;
+
+                    const c1 = s1.replace(/\\s+/g, '');
+                    const c2 = s2.replace(/\\s+/g, '');
+                    if (c1 === c2) return 0.99;
+                    if (c1.includes(c2) || c2.includes(c1)) {
+                        const minL = Math.min(c1.length, c2.length);
+                        const maxL = Math.max(c1.length, c2.length);
+                        if (minL >= 6 && minL / maxL > 0.7) return 0.85 * (minL / maxL);
+                    }
+
+                    const tokens1 = getTitleTokens(str1);
+                    const tokens2 = getTitleTokens(str2);
+
+                    if (tokens1.length === 0 || tokens2.length === 0) return 0;
+
+                    const set1 = new Set(tokens1);
+                    const set2 = new Set(tokens2);
+                    let commonWords = 0;
+                    for (const w of set1) {
+                        if (set2.has(w)) {
+                            commonWords++;
+                        } else {
+                            for (const w2 of set2) {
+                                if ((w.length >= 4 && w2.startsWith(w)) || (w2.length >= 4 && w.startsWith(w2))) {
+                                    commonWords += 0.8;
+                                    break;
                                 }
-                            });
-                            if (bestScore < 1) bestMatch = null; 
+                            }
                         }
                     }
 
-                    if (bestMatch) {
-                        input.value = bestMatch.code;
-                        D.qpCodes[input.dataset.key] = bestMatch.code;
+                    if (commonWords === 0) return 0;
+
+                    const tokenScore = (2 * commonWords) / (tokens1.length + tokens2.length);
+
+                    function getBigrams(s) {
+                        const bg = new Set();
+                        for (let i = 0; i < s.length - 1; i++) {
+                            bg.add(s.substr(i, 2));
+                        }
+                        return bg;
+                    }
+                    const bg1 = getBigrams(c1);
+                    const bg2 = getBigrams(c2);
+                    let commonBg = 0;
+                    for (const b of bg1) {
+                        if (bg2.has(b)) commonBg++;
+                    }
+                    const dice = (2 * commonBg) / (bg1.size + bg2.size || 1);
+
+                    return Math.max(tokenScore, dice);
+                }
+
+                let matched = 0;
+                const inputs = Array.from(document.querySelectorAll('#qt input'));
+                const usedPairs = new Set();
+                const matchedInputs = new Set();
+
+                function getCandidatePairs(input) {
+                    const keyParts = input.dataset.key.split('|');
+                    const streamName = (keyParts[1] || "").toUpperCase();
+                    const isEdeStream = streamName.includes("EDE");
+                    let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
+                    if (validPairs.length === 0) validPairs = parsedPairs;
+                    return validPairs;
+                }
+
+                // PASS 1A: Course Code Match with Strict Title Disambiguation
+                const codeCandidatePairs = [];
+                inputs.forEach(input => {
+                    if (matchedInputs.has(input)) return;
+                    const keyParts = input.dataset.key.split('|');
+                    const uiMeta = extractCourseMeta(keyParts[0]);
+                    if (!uiMeta.code) return;
+
+                    const candidates = getCandidatePairs(input);
+                    candidates.forEach(p => {
+                        if (p.meta && p.meta.code && p.meta.code === uiMeta.code) {
+                            const sim = computeTitleSimilarity(uiMeta.title, p.meta.title || p.searchText);
+                            if (uiMeta.year && p.meta.year && uiMeta.year !== p.meta.year) return;
+                            codeCandidatePairs.push({ input, candidate: p, sim, code: uiMeta.code });
+                        }
+                    });
+                });
+
+                codeCandidatePairs.sort((a, b) => b.sim - a.sim);
+
+                codeCandidatePairs.forEach(m => {
+                    if (matchedInputs.has(m.input) || usedPairs.has(m.candidate)) return;
+                    if (m.sim >= 0.35) {
+                        m.input.value = m.candidate.code;
+                        D.qpCodes[m.input.dataset.key] = m.candidate.code;
+                        matchedInputs.add(m.input);
+                        usedPairs.add(m.candidate);
                         matched++;
                     }
                 });
 
+                // PASS 1B: Unique Course Code Match
+                inputs.forEach(input => {
+                    if (matchedInputs.has(input)) return;
+                    const keyParts = input.dataset.key.split('|');
+                    const uiMeta = extractCourseMeta(keyParts[0]);
+                    if (!uiMeta.code) return;
+
+                    const remainingInputsWithCode = inputs.filter(inp => !matchedInputs.has(inp) && extractCourseMeta(inp.dataset.key.split('|')[0]).code === uiMeta.code);
+                    if (remainingInputsWithCode.length === 1) {
+                        const candidates = getCandidatePairs(input);
+                        const remainingCandidatesWithCode = candidates.filter(p => !usedPairs.has(p) && p.meta && p.meta.code === uiMeta.code);
+                        if (remainingCandidatesWithCode.length === 1) {
+                            input.value = remainingCandidatesWithCode[0].code;
+                            D.qpCodes[input.dataset.key] = remainingCandidatesWithCode[0].code;
+                            matchedInputs.add(input);
+                            usedPairs.add(remainingCandidatesWithCode[0]);
+                            matched++;
+                        }
+                    }
+                });
+
+                // PASS 2: Truly Exact Raw/Sanitized Match
+                inputs.forEach(input => {
+                    if (matchedInputs.has(input)) return;
+                    const keyParts = input.dataset.key.split('|');
+                    const uiCourseName = keyParts[0].trim().toUpperCase();
+                    const candidates = getCandidatePairs(input);
+
+                    const match = candidates.find(p => !usedPairs.has(p) && p.searchText.toUpperCase() === uiCourseName);
+                    if (match) {
+                        input.value = match.code;
+                        D.qpCodes[input.dataset.key] = match.code;
+                        matchedInputs.add(input);
+                        usedPairs.add(match);
+                        matched++;
+                    }
+                });
+
+                // PASS 3: Exact Normalized Title Match
+                inputs.forEach(input => {
+                    if (matchedInputs.has(input)) return;
+                    const keyParts = input.dataset.key.split('|');
+                    const uiMeta = extractCourseMeta(keyParts[0]);
+                    if (!uiMeta.title) return;
+
+                    const candidates = getCandidatePairs(input);
+                    const match = candidates.find(p => {
+                        if (usedPairs.has(p) || !p.meta || !p.meta.title) return false;
+                        if (p.meta.title !== uiMeta.title) return false;
+                        if (uiMeta.year && p.meta.year && uiMeta.year !== p.meta.year) return false;
+                        return true;
+                    });
+                    if (match) {
+                        input.value = match.code;
+                        D.qpCodes[input.dataset.key] = match.code;
+                        matchedInputs.add(input);
+                        usedPairs.add(match);
+                        matched++;
+                    }
+                });
+
+                // PASS 4: Substring Title Match
+                inputs.forEach(input => {
+                    if (matchedInputs.has(input)) return;
+                    const keyParts = input.dataset.key.split('|');
+                    const uiMeta = extractCourseMeta(keyParts[0]);
+                    const candidates = getCandidatePairs(input);
+
+                    let bestMatch = null;
+                    let maxLength = 0;
+                    candidates.forEach(p => {
+                        if (usedPairs.has(p)) return;
+                        const pTitle = (p.meta && p.meta.title) || p.searchText.toUpperCase();
+                        const uTitle = uiMeta.title;
+                        if (pTitle && uTitle && (pTitle.includes(uTitle) || uTitle.includes(pTitle))) {
+                            if (uiMeta.year && p.meta && p.meta.year && uiMeta.year !== p.meta.year) return;
+                            if (pTitle.length > maxLength) {
+                                maxLength = pTitle.length;
+                                bestMatch = p;
+                            }
+                        }
+                    });
+                    if (bestMatch) {
+                        input.value = bestMatch.code;
+                        D.qpCodes[input.dataset.key] = bestMatch.code;
+                        matchedInputs.add(input);
+                        usedPairs.add(bestMatch);
+                        matched++;
+                    }
+                });
+
+                // PASS 5: Strict Fuzzy Title Similarity Match (sim >= 0.40)
+                inputs.forEach(input => {
+                    if (matchedInputs.has(input)) return;
+                    const keyParts = input.dataset.key.split('|');
+                    const uiMeta = extractCourseMeta(keyParts[0]);
+                    const candidates = getCandidatePairs(input);
+
+                    let bestMatch = null;
+                    let bestSim = 0;
+                    candidates.forEach(p => {
+                        if (usedPairs.has(p)) return;
+                        if (uiMeta.year && p.meta && p.meta.year && uiMeta.year !== p.meta.year) return;
+                        const sim = computeTitleSimilarity(uiMeta.title, (p.meta && p.meta.title) || p.searchText);
+                        if (sim > bestSim && sim >= 0.40) {
+                            bestSim = sim;
+                            bestMatch = p;
+                        }
+                    });
+                    if (bestMatch) {
+                        input.value = bestMatch.code;
+                        D.qpCodes[input.dataset.key] = bestMatch.code;
+                        matchedInputs.add(input);
+                        usedPairs.add(bestMatch);
+                        matched++;
+                    }
+                });
+
                 if (matched > 0) await UiModal.alert("✨ Successfully matched and updated " + matched + " QP codes using Fuzzy Logic!");
                 else await UiModal.alert("Could not find any matches for the courses in this session.");
                 
