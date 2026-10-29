@@ -7267,7 +7267,7 @@ if (toggleButton && sidebar) {
             if (final_student_list_for_report.length === 0) { 
                 await UiModal.alert("Please allot rooms before generating the Room-wise report."); 
                 generateReportButton.disabled = false;
-                generateReportButton.textContent = "Generate Room-wise Seating Report";
+                generateReportButton.textContent = "3-Room-wise Seating Report";
                 return; 
             }
 
@@ -7668,7 +7668,7 @@ if (toggleButton && sidebar) {
             await UiModal.alert("Error: " + e.message);
         } finally {
             generateReportButton.disabled = false;
-            generateReportButton.textContent = "Generate Room-wise Seating Report";
+            generateReportButton.textContent = "3-Room-wise Seating Report";
         }
     });
     // --- (V30 Optimized) Event listener for the "Day-wise Student List" (Compact Report) ---
@@ -7739,7 +7739,7 @@ if (toggleButton && sidebar) {
             if (baseData.length === 0) { 
                 await UiModal.alert("Please allot rooms before generating this report."); 
                 generateDaywiseReportButton.disabled = false;
-                generateDaywiseReportButton.textContent = "Generate Day-wise Student List";
+                generateDaywiseReportButton.textContent = "4-Seating Details";
                 return; 
             }
 
@@ -8026,7 +8026,7 @@ if (toggleButton && sidebar) {
             await UiModal.alert("Error generating report: " + e.message);
         } finally {
             generateDaywiseReportButton.disabled = false;
-            generateDaywiseReportButton.textContent = "Generate Seating Details for Candidates (Compact)";
+            generateDaywiseReportButton.textContent = "4-Seating Details";
         }
     });
 
@@ -9035,7 +9035,7 @@ if (toggleButton && sidebar) {
             await UiModal.alert("Error: " + e.message);
         } finally {
             generateQPaperReportButton.disabled = false;
-            generateQPaperReportButton.textContent = "Generate Question Paper Report";
+            generateQPaperReportButton.textContent = "1-Question Paper Report";
         }
     });
 
@@ -9103,7 +9103,7 @@ if (toggleButton && sidebar) {
             if (processed_rows_with_rooms.length === 0) { 
                 await UiModal.alert("Please allot rooms before generating the report."); 
                 generateQpDistributionReportButton.disabled = false;
-                generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
+                generateQpDistributionReportButton.textContent = "2-QP Distribution by QP-Code Report";
                 return; 
             }
 
@@ -9293,7 +9293,7 @@ if (toggleButton && sidebar) {
                 await UiModal.alert("Error: " + e.message);
             } finally {
                 generateQpDistributionReportButton.disabled = false;
-                generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
+                generateQpDistributionReportButton.textContent = "2-QP Distribution by QP-Code Report";
             }
         });
     }
@@ -9688,7 +9688,7 @@ if (toggleButton && sidebar) {
             if (allScribeStudents.length === 0) { 
                 await UiModal.alert("No scribe students found in the selected sessions."); 
                 generateScribeReportButton.disabled = false;
-                generateScribeReportButton.textContent = "Generate Scribe Assistance Report";
+                generateScribeReportButton.textContent = "7-Scribe Assistance Report";
                 return; 
             }
 
@@ -9802,7 +9802,7 @@ if (toggleButton && sidebar) {
             reportControls.classList.remove('hidden');
         } finally {
             generateScribeReportButton.disabled = false;
-            generateScribeReportButton.textContent = "Generate Scribe Assistance Report";
+            generateScribeReportButton.textContent = "7-Scribe Assistance Report";
         }
     });
 
@@ -10043,7 +10043,7 @@ if (toggleButton && sidebar) {
             reportStatus.textContent = "Generation failed.";
         } finally {
             generateScribeProformaButton.disabled = false;
-            generateScribeProformaButton.textContent = "Generate Scribe Proforma (One Page Per Scribe)";
+            generateScribeProformaButton.textContent = "6-Scribe Proforma (One Page Per Scribe)";
         }
     });
 
@@ -10056,6 +10056,24 @@ if (toggleButton && sidebar) {
        // --- Event listener for the "Clear" button ---
     clearReportButton.addEventListener('click', clearReport);
 
+    // --- Segmented Category Ribbon Controller (Option C) ---
+    window.switchReportsTab = function (tabKey) {
+        const tabs = ['qp', 'seating', 'scribe', 'duty'];
+        tabs.forEach(t => {
+            const btn = document.getElementById(`tab-btn-${t}`);
+            const panel = document.getElementById(`tab-panel-${t}`);
+            if (t === tabKey) {
+                btn?.classList.add('bg-purple-600', 'text-white', 'border-purple-600', 'shadow-xs');
+                btn?.classList.remove('bg-white', 'text-purple-700', 'hover:bg-purple-50', 'border-purple-500', 'text-gray-700', 'hover:bg-gray-50', 'border-gray-200', 'bg-indigo-600');
+                panel?.classList.remove('hidden');
+            } else {
+                btn?.classList.remove('bg-purple-600', 'text-white', 'border-purple-600', 'shadow-xs', 'bg-indigo-600');
+                btn?.classList.add('bg-white', 'text-purple-700', 'hover:bg-purple-50', 'border', 'border-purple-500');
+                panel?.classList.add('hidden');
+            }
+        });
+    };
+
     // --- Centralized logic for clearing reports ---
     function clearReport() {
         reportOutputArea.innerHTML = "";
@@ -10065,7 +10083,53 @@ if (toggleButton && sidebar) {
         lastGeneratedRoomData = []; // Clear data
         lastGeneratedRoomWiseSummary = []; // Clear JSON summary
         lastGeneratedReportType = ""; // V91: Clear report type
+        
+        // Clear active buttons
+        document.querySelectorAll('.report-action-btn').forEach(btn => {
+            btn.classList.remove('ring-2', 'ring-offset-2', 'ring-gray-900', 'brightness-110');
+        });
+        // Clear active tab indicator dots
+        ['qp', 'seating', 'scribe', 'duty'].forEach(t => {
+            document.getElementById(`tab-badge-${t}`)?.classList.add('hidden');
+        });
     }
+
+    function setActiveReportButton(activeButtonId) {
+        document.querySelectorAll('.report-action-btn').forEach(btn => {
+            if (btn.id === activeButtonId) {
+                btn.classList.add('ring-2', 'ring-offset-2', 'ring-gray-900', 'brightness-110');
+            } else {
+                btn.classList.remove('ring-2', 'ring-offset-2', 'ring-gray-900', 'brightness-110');
+            }
+        });
+
+        const tabMap = {
+            'generate-qpaper-report-button': 'qp',
+            'generate-qp-distribution-report-button': 'qp',
+            'generate-report-button': 'seating',
+            'generate-daywise-report-button': 'seating',
+            'generate-sticker-button': 'seating',
+            'generate-room-summary-button': 'seating',
+            'generate-scribe-proforma-button': 'scribe',
+            'generate-scribe-report-button': 'scribe',
+            'generate-scribe-master-report-button': 'scribe',
+            'generate-invigilator-report-button': 'duty'
+        };
+        const activeTab = tabMap[activeButtonId];
+        ['qp', 'seating', 'scribe', 'duty'].forEach(t => {
+            const dot = document.getElementById(`tab-badge-${t}`);
+            if (dot) {
+                if (t === activeTab) dot.classList.remove('hidden');
+                else dot.classList.add('hidden');
+            }
+        });
+    }
+
+    document.querySelectorAll('.report-action-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            setActiveReportButton(btn.id);
+        });
+    });
 
     // --- Function to download the room-allocated CSV ---
     function downloadRoomCsv() {
@@ -16397,7 +16461,7 @@ Are you sure you want to update these records?
             await UiModal.alert("Error: " + e.message);
         } finally {
             generateInvigilatorReportButton.disabled = false;
-            generateInvigilatorReportButton.textContent = "Generate Invigilator Requirement Summary";
+            generateInvigilatorReportButton.textContent = "8-Invigilator Requirement Summary";
         }
     });
 
@@ -16479,7 +16543,7 @@ Are you sure you want to update these records?
                 if (final_student_list_for_stickers.length === 0) { 
                     await UiModal.alert("Please allot rooms before generating stickers."); 
                     generateStickerButton.disabled = false;
-                    generateStickerButton.textContent = "Generate Stickers";
+                    generateStickerButton.textContent = "5-Room Stickers (2/Page)";
                     return; 
                 }
 
@@ -16702,7 +16766,7 @@ Are you sure you want to update these records?
                 await UiModal.alert("Error: " + e.message);
             } finally {
                 generateStickerButton.disabled = false;
-                generateStickerButton.textContent = "Generate Room Stickers (2 per Page)";
+                generateStickerButton.textContent = "5-Room Stickers (2/Page)";
             }
         });
     }
@@ -18225,16 +18289,19 @@ window.handlePythonExtraction = async function (jsonString) {
                     // 6. Generate Session Table Content
                     let tableContent = '';
                     let sessionTotalStudents = 0;
-                    let sessionTotalRooms = 0;
+                    let sessionRegularRooms = 0;
+                    let sessionScribeRooms = 0;
+                    let sessionScribeStudents = 0;
 
                     sortedStreams.forEach(stream => {
                         const rooms = roomGroups[stream];
                         rooms.sort((a, b) => a.serial - b.serial);
+                        const isScribeStream = (stream === "Scribe");
 
                         tableContent += `
                             <tr class="bg-gray-100 print:bg-gray-100">
                                 <td colspan="3" style="padding: 8px; font-weight: bold; border: 1px solid #000; text-transform: uppercase; font-size: 0.9em;">
-                                    ${stream} Stream
+                                    ${stream} Stream ${isScribeStream ? '<span style="font-size: 0.8em; font-weight: normal; text-transform: none; color: #555;">(Already calculated in original rooms - excluded from total)</span>' : ''}
                                 </td>
                             </tr>
                         `;
@@ -18242,6 +18309,7 @@ window.handlePythonExtraction = async function (jsonString) {
                         rooms.forEach(room => {
                             const roomInfo = currentRoomConfig[room.name] || {};
                             const location = roomInfo.location ? roomInfo.location : `Hall #${room.serial}`;
+                            const isScribeRoom = isScribeStream || room.type === 'scribe';
 
                             tableContent += `
                                 <tr>
@@ -18249,18 +18317,24 @@ window.handlePythonExtraction = async function (jsonString) {
                                         ${room.serial}
                                     </td>
                                     <td style="padding: 6px; border: 1px solid #000; width: 65%;">
-                                        ${location}
+                                        ${location} ${isScribeRoom ? '<span style="font-size: 8pt; color: #555; font-weight: normal;">(Scribe Assistance)</span>' : ''}
                                     </td>
                                     <td style="padding: 6px; border: 1px solid #000; text-align: center; width: 20%; font-weight: bold;">
-                                        ${room.count}
+                                        ${room.count}${isScribeRoom ? '*' : ''}
                                     </td>
                                 </tr>
                             `;
-                            sessionTotalStudents += room.count;
-                            sessionTotalRooms++;
+                            if (isScribeRoom) {
+                                sessionScribeStudents += room.count;
+                                sessionScribeRooms++;
+                            } else {
+                                sessionTotalStudents += room.count;
+                                sessionRegularRooms++;
+                            }
                         });
                     });
 
+                    const sessionTotalRooms = sessionRegularRooms + sessionScribeRooms;
                     totalRoomsCount += sessionTotalRooms;
 
                     allPagesHtml += `
@@ -18285,12 +18359,19 @@ window.handlePythonExtraction = async function (jsonString) {
                                 <tfoot>
                                     <tr class="bg-gray-100 print:bg-gray-100">
                                         <td colspan="2" style="padding: 8px; border: 1px solid #000; text-align: right; font-weight: bold;">
-                                            SESSION TOTAL (${sessionTotalRooms} Rooms):
+                                            SESSION TOTAL (${sessionRegularRooms} Rooms${sessionScribeRooms > 0 ? ' - Excl. Scribes' : ''}):
                                         </td>
                                         <td style="padding: 8px; border: 1px solid #000; text-align: center; font-weight: bold; font-size: 1.1em;">
                                             ${sessionTotalStudents}
                                         </td>
                                     </tr>
+                                    ${sessionScribeRooms > 0 ? `
+                                    <tr>
+                                        <td colspan="3" style="padding: 4px 8px; border: 1px solid #000; font-size: 8pt; color: #555; background: #fafafa;">
+                                            * Scribe students (${sessionScribeStudents}) are already calculated in their original rooms and excluded from this session total to prevent double-counting.
+                                        </td>
+                                    </tr>
+                                    ` : ''}
                                 </tfoot>
                             </table>
                             
@@ -18317,7 +18398,7 @@ window.handlePythonExtraction = async function (jsonString) {
                 await UiModal.alert("Error: " + e.message);
             } finally {
                 generateRoomSummaryButton.disabled = false;
-                generateRoomSummaryButton.textContent = "Generate Room Allotment Summary";
+                generateRoomSummaryButton.textContent = "9-Room Summary";
             }
         });
     }
@@ -18487,7 +18568,7 @@ window.handlePythonExtraction = async function (jsonString) {
                 await UiModal.alert("Error: " + err.message);
             } finally {
                 generateScribeMasterBtn.disabled = false;
-                generateScribeMasterBtn.textContent = "10-Generate Scribe Assistance Master Report";
+                generateScribeMasterBtn.textContent = "10-Scribe Assistance Master Report";
             }
         });
     }
@@ -25955,7 +26036,7 @@ window.downloadInvigilationListPDF = async function () {
                     clean = clean.replace(new RegExp(`\\(?\\b${esc}\\b\\)?`, 'gi'), ' ');
                 }
                 clean = clean.replace(/\((Core|VAC|SEC|Minor|AEC|MDC)\s*[^)]*\)/gi, ' ');
-                clean = clean.replace(/^[A-Za-z0-9\-_/]+\s*-\s*/, ' ');
+                clean = clean.replace(/^[A-Za-z0-9_]*\d[A-Za-z0-9_]*\s*-\s*/, ' ');
                 clean = clean.replace(/--+/g, ' ');
                 clean = clean.replace(/^[\s\-_:,]+|[\s\-_:,]+$/g, '').replace(/\s+/g, ' ').toUpperCase();
 
@@ -26104,19 +26185,131 @@ window.downloadInvigilationListPDF = async function () {
                 return validPairs;
             }
 
-            // PASS 1: Course Code Exact Match (Highest Confidence: e.g. BOT5CJ302, MTS5B06, BCM5B08, BBA5B08)
+            function normalizeTitleForComparison(str) {
+                if (!str) return '';
+                return str.toUpperCase()
+                    .replace(/\[.*?\]/g, ' ')
+                    .replace(/\(.*?\)/g, ' ')
+                    .replace(/^[A-Za-z0-9_]*\d[A-Za-z0-9_]*\s*-\s*/, ' ')
+                    .replace(/--+/g, ' ')
+                    .replace(/[^A-Z0-9\s]/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            }
+
+            function getTitleTokens(str) {
+                const STOPWORDS = new Set(['AND', 'THE', 'OF', 'IN', 'FOR', 'TO', 'ON', 'WITH', 'BY', 'AN', 'A', 'SYLLABUS', 'COURSE', 'PAPER', 'PART', 'CORE', 'ELECTIVE', 'COMPLEMENTARY', 'OPEN', 'GENERAL', 'STREAM', 'REGULAR', 'EDE']);
+                const norm = normalizeTitleForComparison(str);
+                return norm.split(/\s+/).filter(w => w.length > 1 && !STOPWORDS.has(w));
+            }
+
+            function computeTitleSimilarity(str1, str2) {
+                if (!str1 || !str2) return 0;
+                const s1 = normalizeTitleForComparison(str1);
+                const s2 = normalizeTitleForComparison(str2);
+                if (!s1 || !s2) return 0;
+                if (s1 === s2) return 1.0;
+
+                const c1 = s1.replace(/\s+/g, '');
+                const c2 = s2.replace(/\s+/g, '');
+                if (c1 === c2) return 0.99;
+                if (c1.includes(c2) || c2.includes(c1)) {
+                    const minL = Math.min(c1.length, c2.length);
+                    const maxL = Math.max(c1.length, c2.length);
+                    if (minL >= 6 && minL / maxL > 0.7) return 0.85 * (minL / maxL);
+                }
+
+                const tokens1 = getTitleTokens(str1);
+                const tokens2 = getTitleTokens(str2);
+
+                if (tokens1.length === 0 || tokens2.length === 0) return 0;
+
+                const set1 = new Set(tokens1);
+                const set2 = new Set(tokens2);
+                let commonWords = 0;
+                for (const w of set1) {
+                    if (set2.has(w)) {
+                        commonWords++;
+                    } else {
+                        for (const w2 of set2) {
+                            if ((w.length >= 4 && w2.startsWith(w)) || (w2.length >= 4 && w.startsWith(w2))) {
+                                commonWords += 0.8;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (commonWords === 0) return 0;
+
+                const tokenScore = (2 * commonWords) / (tokens1.length + tokens2.length);
+
+                function getBigrams(s) {
+                    const bg = new Set();
+                    for (let i = 0; i < s.length - 1; i++) {
+                        bg.add(s.substr(i, 2));
+                    }
+                    return bg;
+                }
+                const bg1 = getBigrams(c1);
+                const bg2 = getBigrams(c2);
+                let commonBg = 0;
+                for (const b of bg1) {
+                    if (bg2.has(b)) commonBg++;
+                }
+                const dice = (2 * commonBg) / (bg1.size + bg2.size || 1);
+
+                return Math.max(tokenScore, dice);
+            }
+
+            // PASS 1A: Course Code Match with Strict Title Disambiguation
+            // When candidates share identical course codes (e.g. BCM5B10 electives), rank by title similarity
+            const codeCandidatePairs = [];
             inputs.forEach(input => {
                 if (matchedInputs.has(input)) return;
                 const uiMeta = extractCourseMeta(input.dataset.course);
                 if (!uiMeta.code) return;
 
                 const candidates = getCandidatePairs(input);
-                const match = candidates.find(p => !usedPairs.has(p) && p.meta.code && p.meta.code === uiMeta.code);
-                if (match) {
-                    input.value = match.code;
-                    usedPairs.add(match);
-                    matchedInputs.add(input);
+                candidates.forEach(p => {
+                    if (p.meta.code && p.meta.code === uiMeta.code) {
+                        const sim = computeTitleSimilarity(uiMeta.title, p.meta.title || p.searchText);
+                        if (uiMeta.year && p.meta.year && uiMeta.year !== p.meta.year) return;
+                        codeCandidatePairs.push({ input, candidate: p, sim, code: uiMeta.code });
+                    }
+                });
+            });
+
+            // Sort all code-matched candidate pairs by title similarity descending
+            codeCandidatePairs.sort((a, b) => b.sim - a.sim);
+
+            codeCandidatePairs.forEach(m => {
+                if (matchedInputs.has(m.input) || usedPairs.has(m.candidate)) return;
+                // Require reasonable title similarity (>= 0.35) so conflicting electives are never cross-assigned
+                if (m.sim >= 0.35) {
+                    m.input.value = m.candidate.code;
+                    matchedInputs.add(m.input);
+                    usedPairs.add(m.candidate);
                     matched++;
+                }
+            });
+
+            // PASS 1B: Unique Course Code Match (Fallback when a course code is completely unique in the session)
+            inputs.forEach(input => {
+                if (matchedInputs.has(input)) return;
+                const uiMeta = extractCourseMeta(input.dataset.course);
+                if (!uiMeta.code) return;
+
+                const remainingInputsWithCode = inputs.filter(inp => !matchedInputs.has(inp) && extractCourseMeta(inp.dataset.course).code === uiMeta.code);
+                if (remainingInputsWithCode.length === 1) {
+                    const candidates = getCandidatePairs(input);
+                    const remainingCandidatesWithCode = candidates.filter(p => !usedPairs.has(p) && p.meta.code === uiMeta.code);
+                    if (remainingCandidatesWithCode.length === 1) {
+                        input.value = remainingCandidatesWithCode[0].code;
+                        matchedInputs.add(input);
+                        usedPairs.add(remainingCandidatesWithCode[0]);
+                        matched++;
+                    }
                 }
             });
 
@@ -26188,13 +26381,35 @@ window.downloadInvigilationListPDF = async function () {
                 }
             });
 
-            // PASS 5: Deep Word-Tokenizing Sequence-Aware Match (Fuzzy Fallback)
+            // PASS 5: Strict Fuzzy Title Similarity Match (sim >= 0.40) & Sequence-Aware Word Fallback
             inputs.forEach(input => {
                 if (matchedInputs.has(input)) return;
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
                 const uiMeta = extractCourseMeta(input.dataset.course);
                 const candidates = getCandidatePairs(input);
 
+                // 1. Strict Fuzzy Title Similarity check
+                let bestSimMatch = null;
+                let bestSim = 0;
+                candidates.forEach(p => {
+                    if (usedPairs.has(p)) return;
+                    if (uiMeta.year && p.meta.year && uiMeta.year !== p.meta.year) return;
+                    const sim = computeTitleSimilarity(uiMeta.title || uiCourseName, p.meta.title || p.searchText);
+                    if (sim > bestSim && sim >= 0.40) {
+                        bestSim = sim;
+                        bestSimMatch = p;
+                    }
+                });
+
+                if (bestSimMatch) {
+                    input.value = bestSimMatch.code;
+                    usedPairs.add(bestSimMatch);
+                    matchedInputs.add(input);
+                    matched++;
+                    return;
+                }
+
+                // 2. Sequence-Aware Word Token Fallback
                 const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2 && !w.match(/^20\d{2}$/));
                 const ignoreWords = ['SYLLABUS', 'PART', 'PAPER', 'BASIC', 'COMMON', 'COURSE', 'PROGRAMME', 'EXAMINATION', 'CORE', 'COMPLEMENTARY', 'OPEN', 'ELECTIVE'];
                 const coreWords = words.filter(w => !ignoreWords.includes(w) && isNaN(w));
