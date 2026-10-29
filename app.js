@@ -10063,12 +10063,12 @@ if (toggleButton && sidebar) {
             const btn = document.getElementById(`tab-btn-${t}`);
             const panel = document.getElementById(`tab-panel-${t}`);
             if (t === tabKey) {
-                btn?.classList.add('bg-indigo-600', 'text-white', 'shadow-xs');
-                btn?.classList.remove('bg-white', 'text-gray-700', 'hover:bg-gray-50');
+                btn?.classList.add('bg-purple-600', 'text-white', 'border-purple-600', 'shadow-xs');
+                btn?.classList.remove('bg-white', 'text-purple-700', 'hover:bg-purple-50', 'border-purple-500', 'text-gray-700', 'hover:bg-gray-50', 'border-gray-200', 'bg-indigo-600');
                 panel?.classList.remove('hidden');
             } else {
-                btn?.classList.remove('bg-indigo-600', 'text-white', 'shadow-xs');
-                btn?.classList.add('bg-white', 'text-gray-700', 'hover:bg-gray-50');
+                btn?.classList.remove('bg-purple-600', 'text-white', 'border-purple-600', 'shadow-xs', 'bg-indigo-600');
+                btn?.classList.add('bg-white', 'text-purple-700', 'hover:bg-purple-50', 'border', 'border-purple-500');
                 panel?.classList.add('hidden');
             }
         });
@@ -18289,16 +18289,19 @@ window.handlePythonExtraction = async function (jsonString) {
                     // 6. Generate Session Table Content
                     let tableContent = '';
                     let sessionTotalStudents = 0;
-                    let sessionTotalRooms = 0;
+                    let sessionRegularRooms = 0;
+                    let sessionScribeRooms = 0;
+                    let sessionScribeStudents = 0;
 
                     sortedStreams.forEach(stream => {
                         const rooms = roomGroups[stream];
                         rooms.sort((a, b) => a.serial - b.serial);
+                        const isScribeStream = (stream === "Scribe");
 
                         tableContent += `
                             <tr class="bg-gray-100 print:bg-gray-100">
                                 <td colspan="3" style="padding: 8px; font-weight: bold; border: 1px solid #000; text-transform: uppercase; font-size: 0.9em;">
-                                    ${stream} Stream
+                                    ${stream} Stream ${isScribeStream ? '<span style="font-size: 0.8em; font-weight: normal; text-transform: none; color: #555;">(Already calculated in original rooms - excluded from total)</span>' : ''}
                                 </td>
                             </tr>
                         `;
@@ -18306,6 +18309,7 @@ window.handlePythonExtraction = async function (jsonString) {
                         rooms.forEach(room => {
                             const roomInfo = currentRoomConfig[room.name] || {};
                             const location = roomInfo.location ? roomInfo.location : `Hall #${room.serial}`;
+                            const isScribeRoom = isScribeStream || room.type === 'scribe';
 
                             tableContent += `
                                 <tr>
@@ -18313,18 +18317,24 @@ window.handlePythonExtraction = async function (jsonString) {
                                         ${room.serial}
                                     </td>
                                     <td style="padding: 6px; border: 1px solid #000; width: 65%;">
-                                        ${location}
+                                        ${location} ${isScribeRoom ? '<span style="font-size: 8pt; color: #555; font-weight: normal;">(Scribe Assistance)</span>' : ''}
                                     </td>
                                     <td style="padding: 6px; border: 1px solid #000; text-align: center; width: 20%; font-weight: bold;">
-                                        ${room.count}
+                                        ${room.count}${isScribeRoom ? '*' : ''}
                                     </td>
                                 </tr>
                             `;
-                            sessionTotalStudents += room.count;
-                            sessionTotalRooms++;
+                            if (isScribeRoom) {
+                                sessionScribeStudents += room.count;
+                                sessionScribeRooms++;
+                            } else {
+                                sessionTotalStudents += room.count;
+                                sessionRegularRooms++;
+                            }
                         });
                     });
 
+                    const sessionTotalRooms = sessionRegularRooms + sessionScribeRooms;
                     totalRoomsCount += sessionTotalRooms;
 
                     allPagesHtml += `
@@ -18349,12 +18359,19 @@ window.handlePythonExtraction = async function (jsonString) {
                                 <tfoot>
                                     <tr class="bg-gray-100 print:bg-gray-100">
                                         <td colspan="2" style="padding: 8px; border: 1px solid #000; text-align: right; font-weight: bold;">
-                                            SESSION TOTAL (${sessionTotalRooms} Rooms):
+                                            SESSION TOTAL (${sessionRegularRooms} Rooms${sessionScribeRooms > 0 ? ' - Excl. Scribes' : ''}):
                                         </td>
                                         <td style="padding: 8px; border: 1px solid #000; text-align: center; font-weight: bold; font-size: 1.1em;">
                                             ${sessionTotalStudents}
                                         </td>
                                     </tr>
+                                    ${sessionScribeRooms > 0 ? `
+                                    <tr>
+                                        <td colspan="3" style="padding: 4px 8px; border: 1px solid #000; font-size: 8pt; color: #555; background: #fafafa;">
+                                            * Scribe students (${sessionScribeStudents}) are already calculated in their original rooms and excluded from this session total to prevent double-counting.
+                                        </td>
+                                    </tr>
+                                    ` : ''}
                                 </tfoot>
                             </table>
                             
