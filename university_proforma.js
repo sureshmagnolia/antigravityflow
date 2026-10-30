@@ -153,6 +153,93 @@
         },
 
 
+        // --- 1. Officials Management (DYNAMIC FROM STAFF & USER-EDITABLE) ---
+        // Helper: Find Staff by Role checking active dates in roleHistory and designation
+        findStaffByRole: function (staffData, roleType, refDate = new Date()) {
+            if (!Array.isArray(staffData) || staffData.length === 0) return '';
+            const now = (refDate instanceof Date && !isNaN(refDate)) ? refDate.getTime() : Date.now();
+
+            const isRoleActive = (roleObj) => {
+                if (!roleObj) return false;
+                if (roleObj.start) {
+                    const s = new Date(roleObj.start).getTime();
+                    if (!isNaN(s) && now < s) return false;
+                }
+                if (roleObj.end) {
+                    const e = new Date(roleObj.end).getTime();
+                    // allow until end of day
+                    if (!isNaN(e) && now > e + 86400000) return false;
+                }
+                return true;
+            };
+
+            const matchesRoleType = (rName) => {
+                if (!rName || typeof rName !== 'string') return false;
+                const clean = rName.trim().toLowerCase();
+                if (roleType === 'principal') {
+                    // Must contain principal, but EXCLUDE vice principal
+                    return clean.includes('principal') && !clean.includes('vice');
+                }
+                if (roleType === 'chief') {
+                    return clean.includes('chief sup') || clean.includes('chief superintendent') || clean === 'cs';
+                }
+                if (roleType === 'sas') {
+                    return clean.includes('senior asst') || clean.includes('senior assistant') || 
+                           clean.includes('senior sup') || clean.includes('senior superintendent') || clean === 'sas';
+                }
+                if (roleType === 'os') {
+                    return clean.includes('office sup') || clean.includes('office superintendent') || clean === 'os';
+                }
+                if (roleType === 'accountant') {
+                    return clean.includes('head accountant') || clean.includes('accountant');
+                }
+                if (roleType === 'deo') {
+                    return clean.includes('data entry') || clean === 'deo';
+                }
+                if (roleType === 'clerk') {
+                    return clean.includes('clerk') || clean.includes('ldc') || clean.includes('udc');
+                }
+                if (roleType === 'peon') {
+                    return clean.includes('peon') || clean.includes('office attendant') || clean === 'oa';
+                }
+                if (roleType === 'sweeper') {
+                    return clean.includes('sweeper') || clean.includes('cleaning');
+                }
+                return false;
+            };
+
+            const activeMatches = [];
+            const pastMatches = [];
+
+            staffData.forEach(st => {
+                const name = (st.name || '').trim();
+                if (!name) return;
+
+                // 1. Direct designation or role on staff object
+                if (matchesRoleType(st.role) || matchesRoleType(st.designation) || matchesRoleType(st.Designation)) {
+                    activeMatches.push(name);
+                    return;
+                }
+
+                // 2. Check roleHistory array (from invigilation module)
+                if (Array.isArray(st.roleHistory)) {
+                    st.roleHistory.forEach(rh => {
+                        if (matchesRoleType(rh.role)) {
+                            if (isRoleActive(rh)) {
+                                activeMatches.push(name);
+                            } else {
+                                pastMatches.push(name);
+                            }
+                        }
+                    });
+                }
+            });
+
+            if (activeMatches.length > 0) return activeMatches[0];
+            if (pastMatches.length > 0) return pastMatches[pastMatches.length - 1];
+            return '';
+        },
+
         getOfficials: function () {
             const saved = localStorage.getItem(PROFORMA_OFFICIALS_KEY);
             let conf = saved ? JSON.parse(saved) : {};
@@ -160,35 +247,21 @@
             const collegeName = localStorage.getItem('examCollegeName') || '';
             const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
 
-            const findStaffName = (roleKeywords) => {
-                for (const kw of roleKeywords) {
-                    const q = kw.toLowerCase();
-                    const found = staffData.find(s => {
-                        if (s.roleHistory && Array.isArray(s.roleHistory)) {
-                            if (s.roleHistory.some(r => r.role && r.role.toLowerCase().includes(q))) return true;
-                        }
-                        if (s.role && s.role.toLowerCase().includes(q)) return true;
-                        if (s.designation && s.designation.toLowerCase().includes(q)) return true;
-                        if (s.Designation && s.Designation.toLowerCase().includes(q)) return true;
-                        return false;
-                    });
-                    if (found) return found.name;
-                }
-                return '';
-            };
+            // Check if user has explicitly saved a non-generic name
+            const isSaved = (val) => val !== undefined && val !== null && String(val).trim().length > 0 && String(val).trim().toLowerCase() !== 'principal';
 
             return {
                 collegeName: conf.collegeName !== undefined ? conf.collegeName : collegeName,
                 period: conf.period || '',
-                chiefSupdt: conf.chiefSupdt !== undefined ? conf.chiefSupdt : findStaffName(['chief supdt', 'chief superintendent']),
-                seniorSupdt: conf.seniorSupdt !== undefined ? conf.seniorSupdt : findStaffName(['senior assistant', 'senior supdt', 'sas']),
-                officeSupdt: conf.officeSupdt !== undefined ? conf.officeSupdt : findStaffName(['office supdt', 'office superintendent', 'os']),
-                headAccountant: conf.headAccountant !== undefined ? conf.headAccountant : findStaffName(['head accountant', 'accountant']),
-                dataEntryOperator: conf.dataEntryOperator !== undefined ? conf.dataEntryOperator : findStaffName(['data entry', 'deo']),
-                clerk: conf.clerk !== undefined ? conf.clerk : findStaffName(['clerk', 'office clerk', 'ld clerk', 'ud clerk']),
-                peon: conf.peon !== undefined ? conf.peon : findStaffName(['peon', 'office attendant', 'oa']),
-                sweeper: conf.sweeper !== undefined ? conf.sweeper : findStaffName(['sweeper', 'cleaning staff']),
-                principal: conf.principal !== undefined ? conf.principal : (findStaffName(['principal']) || 'Principal'),
+                chiefSupdt: isSaved(conf.chiefSupdt) ? conf.chiefSupdt.trim() : this.findStaffByRole(staffData, 'chief'),
+                seniorSupdt: isSaved(conf.seniorSupdt) ? conf.seniorSupdt.trim() : this.findStaffByRole(staffData, 'sas'),
+                officeSupdt: isSaved(conf.officeSupdt) ? conf.officeSupdt.trim() : this.findStaffByRole(staffData, 'os'),
+                headAccountant: isSaved(conf.headAccountant) ? conf.headAccountant.trim() : this.findStaffByRole(staffData, 'accountant'),
+                dataEntryOperator: isSaved(conf.dataEntryOperator) ? conf.dataEntryOperator.trim() : this.findStaffByRole(staffData, 'deo'),
+                clerk: isSaved(conf.clerk) ? conf.clerk.trim() : this.findStaffByRole(staffData, 'clerk'),
+                peon: isSaved(conf.peon) ? conf.peon.trim() : this.findStaffByRole(staffData, 'peon'),
+                sweeper: isSaved(conf.sweeper) ? conf.sweeper.trim() : this.findStaffByRole(staffData, 'sweeper'),
+                principal: isSaved(conf.principal) ? conf.principal.trim() : this.findStaffByRole(staffData, 'principal'),
                 advanceReceived: conf.advanceReceived !== undefined ? Number(conf.advanceReceived) : 0,
                 advanceDetails: conf.advanceDetails !== undefined ? conf.advanceDetails : 'Vide Cheque No. .............. dated ...........',
                 certSeniorSupdtNo: conf.certSeniorSupdtNo || '',
@@ -200,40 +273,23 @@
             localStorage.setItem(PROFORMA_OFFICIALS_KEY, JSON.stringify(newOfficials));
         },
 
-        // --- 2. Auto-Detect from Staff Directory ---
+        // --- 2. Auto-Detect from Staff Directory (Invigilation Module) ---
         autoDetectFromStaff: function (showToast) {
             const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
             const collegeName = localStorage.getItem('examCollegeName') || '';
 
-            const findStaffName = (roleKeywords) => {
-                for (const kw of roleKeywords) {
-                    const q = kw.toLowerCase();
-                    const found = staffData.find(s => {
-                        if (s.roleHistory && Array.isArray(s.roleHistory)) {
-                            if (s.roleHistory.some(r => r.role && r.role.toLowerCase().includes(q))) return true;
-                        }
-                        if (s.role && s.role.toLowerCase().includes(q)) return true;
-                        if (s.designation && s.designation.toLowerCase().includes(q)) return true;
-                        if (s.Designation && s.Designation.toLowerCase().includes(q)) return true;
-                        return false;
-                    });
-                    if (found) return found.name;
-                }
-                return '';
-            };
-
             const detected = {
                 collegeName: collegeName,
                 period: document.getElementById('tab-prof-period')?.value || '',
-                chiefSupdt: findStaffName(['chief supdt', 'chief superintendent']),
-                seniorSupdt: findStaffName(['senior assistant', 'senior supdt', 'sas']),
-                officeSupdt: findStaffName(['office supdt', 'office superintendent', 'os']),
-                headAccountant: findStaffName(['head accountant', 'accountant']),
-                dataEntryOperator: findStaffName(['data entry', 'deo']),
-                clerk: findStaffName(['clerk', 'office clerk', 'ld clerk', 'ud clerk']),
-                peon: findStaffName(['peon', 'office attendant', 'oa']),
-                sweeper: findStaffName(['sweeper', 'cleaning staff']),
-                principal: findStaffName(['principal']) || 'Principal',
+                chiefSupdt: this.findStaffByRole(staffData, 'chief'),
+                seniorSupdt: this.findStaffByRole(staffData, 'sas'),
+                officeSupdt: this.findStaffByRole(staffData, 'os'),
+                headAccountant: this.findStaffByRole(staffData, 'accountant'),
+                dataEntryOperator: this.findStaffByRole(staffData, 'deo'),
+                clerk: this.findStaffByRole(staffData, 'clerk'),
+                peon: this.findStaffByRole(staffData, 'peon'),
+                sweeper: this.findStaffByRole(staffData, 'sweeper'),
+                principal: this.findStaffByRole(staffData, 'principal'),
                 advanceReceived: Number(document.getElementById('tab-prof-advance')?.value) || 0,
                 advanceDetails: document.getElementById('tab-prof-advance-details')?.value || 'Vide Cheque No. .............. dated ...........'
             };
@@ -1831,7 +1887,7 @@
 
                     <div class="flex justify-end mt-12 mb-16">
                         <div class="text-center">
-                            <div class="font-bold">${dispName(data.officials.principal, 'Principal')}</div>
+                            <div class="font-bold">${dispName(data.officials.principal, '................................')}</div>
                             <div>Principal</div>
                         </div>
                     </div>
@@ -1855,7 +1911,7 @@
 
                     <div class="flex justify-end mt-12">
                         <div class="text-center">
-                            <div class="font-bold">${dispName(data.officials.principal, 'Principal')}</div>
+                            <div class="font-bold">${dispName(data.officials.principal, '................................')}</div>
                             <div>Principal</div>
                         </div>
                     </div>
