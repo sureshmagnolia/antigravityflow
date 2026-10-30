@@ -21285,26 +21285,44 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
     let swapSourceRoom = null; // Track which room is selected for swapping
 
+    window.confirmMoveInvigilator = async function (targetRoom, staffName, fromRoom) {
+        if (await UiModal.confirm('Reassign Invigilator', `${staffName} is currently assigned to ${fromRoom}.\n\nDo you want to move them to ${targetRoom}?`)) {
+            await window.saveInvigAssignment(targetRoom, staffName);
+        }
+    };
+
     window.cleanupGhostInvigilatorMappings = function (sessionKey) {
         if (!sessionKey) return;
         const allMappings = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
         const sessionMapping = allMappings[sessionKey];
-        if (!sessionMapping) return;
+        if (!sessionMapping || Object.keys(sessionMapping).length === 0) return;
 
         const validRooms = new Set();
-        if (typeof currentSessionAllotment !== 'undefined' && currentSessionAllotment) {
+        // Check persistent storage first, then in-memory
+        const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+        const sessionAllotment = allAllotments[sessionKey];
+        if (Array.isArray(sessionAllotment) && sessionAllotment.length > 0) {
+            sessionAllotment.forEach(room => validRooms.add(room.roomName));
+        } else if (typeof currentSessionAllotment !== 'undefined' && currentSessionAllotment && sessionKey === currentSessionKey) {
             currentSessionAllotment.forEach(room => validRooms.add(room.roomName));
         }
         
-        const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         const sessionScribeMap = allScribeAllotments[sessionKey] || {};
         Object.values(sessionScribeMap).forEach(roomName => validRooms.add(roomName));
         
+        // Safety guard: If no valid rooms exist in storage/memory at all, do NOT purge
+        // (prevents accidental wiping while async IndexedDB loads or during initial parse)
+        if (validRooms.size === 0) return;
+
         let cleaned = false;
         Object.keys(sessionMapping).forEach(roomName => {
             if (!validRooms.has(roomName)) {
                 console.log(`🧹 [Ghost Cleanup] Removing orphaned mapping for room: ${roomName}`);
                 delete sessionMapping[roomName];
+                if (typeof currentInvigMapping !== 'undefined' && currentInvigMapping) {
+                    delete currentInvigMapping[roomName];
+                }
                 if (typeof window.currentInvigMapping !== 'undefined' && window.currentInvigMapping) {
                     delete window.currentInvigMapping[roomName];
                 }
@@ -21313,6 +21331,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
         });
         
         if (cleaned) {
+            allMappings[sessionKey] = sessionMapping;
             localStorage.setItem('examInvigilatorMapping', JSON.stringify(allMappings));
             if (typeof syncDataToCloud === 'function') {
                 syncDataToCloud('staff', sessionKey).catch(e => console.log(e));
@@ -21326,7 +21345,6 @@ window.toggleAllArchiveCheckboxes = function(check) {
         const list = document.getElementById('invigilator-list-container');
         const sessionKey = allotmentSessionSelect.value; 
 
-        
         if (!sessionKey) {
             if (section) section.classList.add('hidden');
             return;
@@ -21336,23 +21354,39 @@ window.toggleAllArchiveCheckboxes = function(check) {
             window.cleanupGhostInvigilatorMappings(sessionKey);
         }
 
-        // A. Consolidate Rooms
+        // A. Consolidate Rooms (Persistent Storage + In-Memory Fallback)
         const roomDataMap = {};
-        if (typeof currentSessionAllotment !== 'undefined' && currentSessionAllotment && currentSessionAllotment.length > 0) {
-            currentSessionAllotment.forEach(room => {
+        let sessionAllotment = [];
+        if (sessionKey === currentSessionKey && typeof currentSessionAllotment !== 'undefined' && currentSessionAllotment && currentSessionAllotment.length > 0) {
+            sessionAllotment = currentSessionAllotment;
+        } else {
+            const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+            sessionAllotment = allAllotments[sessionKey] || [];
+        }
+
+        if (sessionAllotment && sessionAllotment.length > 0) {
+            sessionAllotment.forEach(room => {
                 if (!roomDataMap[room.roomName]) roomDataMap[room.roomName] = { name: room.roomName, count: 0, streams: new Set(), isScribe: false };
-                roomDataMap[room.roomName].count += room.students.length;
-                roomDataMap[room.roomName].streams.add(room.stream || "Regular");
+                roomDataMap[room.roomName].count += (room.students ? room.students.length : 0);
+                roomDataMap[room.roomName].streams.add(room.stream || 'Regular');
             });
         }
-        const sessionScribeMap = typeof currentScribeAllotment !== 'undefined' ? currentScribeAllotment : {};
+        
+        let sessionScribeMap = {};
+        if (sessionKey === currentSessionKey && typeof currentScribeAllotment !== 'undefined' && currentScribeAllotment && Object.keys(currentScribeAllotment).length > 0) {
+            sessionScribeMap = currentScribeAllotment;
+        } else {
+            const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+            sessionScribeMap = allScribeAllotments[sessionKey] || {};
+        }
+
         Object.values(sessionScribeMap).forEach(roomName => {
             if (!roomDataMap[roomName]) roomDataMap[roomName] = { name: roomName, count: 0, streams: new Set(), isScribe: true };
             roomDataMap[roomName].count += 1;
-            roomDataMap[roomName].streams.add("Scribe");
+            roomDataMap[roomName].streams.add('Scribe');
         });
 
-        const allRooms = Object.values(roomDataMap);
+const allRooms = Object.values(roomDataMap);
         if (allRooms.length === 0) {
             section.classList.add('hidden');
             return;
@@ -21629,7 +21663,27 @@ window.toggleAllArchiveCheckboxes = function(check) {
     }
 
 
-        const assignedSet = new Set(Object.values(currentInvigMapping));
+        if (typeof window.cleanupGhostInvigilatorMappings === 'function') {
+            window.cleanupGhostInvigilatorMappings(sessionKey);
+        }
+
+        // Active valid rooms for this session (Storage + In-Memory)
+        const validActiveRooms = new Set();
+        const allAllot = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+        const sessAllot = allAllot[sessionKey];
+        if (Array.isArray(sessAllot) && sessAllot.length > 0) {
+            sessAllot.forEach(r => validActiveRooms.add(r.roomName));
+        } else if (typeof currentSessionAllotment !== 'undefined' && currentSessionAllotment && sessionKey === currentSessionKey) {
+            currentSessionAllotment.forEach(r => validActiveRooms.add(r.roomName));
+        }
+        const allScribes = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+        Object.values(allScribes[sessionKey] || {}).forEach(r => validActiveRooms.add(r));
+
+        // Invert mapping: StaffName -> AssignedRoom
+        const staffRoomMap = {};
+        Object.entries(currentInvigMapping).forEach(([r, sName]) => {
+            staffRoomMap[sName] = r;
+        });
 
         // Render Function
         const renderList = (filter = "") => {
@@ -21642,20 +21696,27 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
                 if (staff.name.toLowerCase().includes(q)) {
                     hasResults = true;
-                    // Check if assigned to another room
-                    const isTaken = assignedSet.has(staff.name) && currentInvigMapping[roomName] !== staff.name;
+                    const assignedRoom = staffRoomMap[staff.name];
+                    const isSelf = (assignedRoom === roomName);
+                    const isTakenInValidRoom = Boolean(assignedRoom && !isSelf && validActiveRooms.has(assignedRoom));
 
-                    const bgClass = isTaken ? "bg-gray-50 opacity-60 cursor-not-allowed" : "hover:bg-indigo-50 cursor-pointer bg-white";
-                    const status = isTaken
-                        ? '<span class="text-[9px] text-red-500 font-bold bg-red-50 px-1 rounded border border-red-100">Busy</span>'
-                        : '<span class="text-[9px] text-green-600 font-bold bg-green-50 px-1 rounded border border-green-100">Select</span>';
+                    let bgClass = "hover:bg-indigo-50 cursor-pointer bg-white";
+                    let status = '<span class="text-[9px] text-green-600 font-bold bg-green-50 px-1 rounded border border-green-100">Select</span>';
 
-                    // Escape strings for safety
                     const safeRoom = roomName.replace(/'/g, "\\'");
                     const safeName = staff.name.replace(/'/g, "\\'");
+                    let clickAction = `onclick="window.saveInvigAssignment('${safeRoom}', '${safeName}')"`;
 
-                    // DIRECT ONCLICK (Fixes the click issue)
-                    const clickAction = isTaken ? "" : `onclick="window.saveInvigAssignment('${safeRoom}', '${safeName}')"`;
+                    if (isSelf) {
+                        bgClass = "bg-blue-50/60 border-blue-200 cursor-default";
+                        status = '<span class="text-[9px] text-blue-600 font-bold bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200">Current</span>';
+                        clickAction = "";
+                    } else if (isTakenInValidRoom) {
+                        const safeAssignedRoom = assignedRoom.replace(/'/g, "\\'");
+                        bgClass = "hover:bg-amber-50 cursor-pointer bg-white";
+                        status = `<span class="text-[9px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200" title="Click to move from ${assignedRoom}">In ${assignedRoom} (Move)</span>`;
+                        clickAction = `onclick="window.confirmMoveInvigilator('${safeRoom}', '${safeName}', '${safeAssignedRoom}')"`;
+                    }
 
                     html += `
                     <div ${clickAction} class="p-2 rounded border-b border-gray-100 last:border-0 flex justify-between items-center transition ${bgClass}">
@@ -21684,7 +21745,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
         } else if (!hasResults) {
             html = '<p class="text-center text-gray-400 text-xs py-2">No matching invigilators found.</p>';
         }
-        list.innerHTML = html;
+list.innerHTML = html;
         };
 
         renderList();
@@ -21811,17 +21872,45 @@ window.toggleAllArchiveCheckboxes = function(check) {
         const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
         const slot = invigSlots[sessionKey];
 
-        if (!slot || !slot.assigned) return await UiModal.alert("No staff available in portal.");
+        if (!slot || !slot.assigned || slot.assigned.length === 0) {
+            return await UiModal.alert("No staff available in portal.");
+        }
 
         const availableStaff = [...slot.assigned];
-        const usedNames = new Set(Object.values(currentInvigMapping));
-        let changeCount = 0;
 
+        // Retrieve valid room list from storage with in-memory fallback
         const allRoomNames = new Set();
-        if (currentSessionAllotment) currentSessionAllotment.forEach(r => allRoomNames.add(r.roomName));
+        const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+        const sessionAllotment = allAllotments[sessionKey];
+        if (Array.isArray(sessionAllotment) && sessionAllotment.length > 0) {
+            sessionAllotment.forEach(r => allRoomNames.add(r.roomName));
+        } else if (typeof currentSessionAllotment !== 'undefined' && currentSessionAllotment && sessionKey === currentSessionKey) {
+            currentSessionAllotment.forEach(r => allRoomNames.add(r.roomName));
+        }
+
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         const sessionScribeMap = allScribeAllotments[sessionKey] || {};
         Object.values(sessionScribeMap).forEach(r => allRoomNames.add(r));
+
+        if (allRoomNames.size === 0) {
+            return await UiModal.alert("No rooms allotted for this session.");
+        }
+
+        // Self-heal: Purge any mappings that don't belong to current active rooms
+        let purged = false;
+        Object.keys(currentInvigMapping).forEach(r => {
+            if (!allRoomNames.has(r)) {
+                delete currentInvigMapping[r];
+                purged = true;
+            }
+        });
+        if (purged) {
+            allMappings[sessionKey] = currentInvigMapping;
+            localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
+        }
+
+        const usedNames = new Set(Object.values(currentInvigMapping));
+        let changeCount = 0;
 
         const serialMap = getRoomSerialMap(sessionKey);
         const sortedRooms = Array.from(allRoomNames).sort((a, b) => (serialMap[a] || 999) - (serialMap[b] || 999));
@@ -21852,7 +21941,6 @@ window.toggleAllArchiveCheckboxes = function(check) {
             updateSyncStatus("Saving...", "neutral");
             if (typeof syncDataToCloud === 'function') {
                 // 📡 DUAL-SYNC FIX: Update BOTH the master staff list and the session record
-                // This prevents the refresh listener from overwriting with empty data.
                 await syncDataToCloud('staff', sessionKey); // FIX: Ensure mapping sticks
                 if (typeof syncSessionToCloud === 'function') {
                     await syncSessionToCloud(sessionKey);
@@ -21862,16 +21950,15 @@ window.toggleAllArchiveCheckboxes = function(check) {
             
             renderInvigilationPanel();
 
-            
             updateSyncStatus("Saved", "success");
             await UiModal.alert(`Auto-assigned ${changeCount} invigilators.`);
         } else {
             await UiModal.alert("No additional free staff found to assign.");
         }
-    }
+    };
 
-
-    // 7. Unassign All Invigilators
+    
+// 7. Unassign All Invigilators
     window.unassignAllInvigilators = async function () {
         const sessionKey = allotmentSessionSelect.value;
         if (!sessionKey) return;
