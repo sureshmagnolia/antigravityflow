@@ -19228,6 +19228,81 @@ async function loadInitialData() {
     const btnGenerateBill = document.getElementById('btn-generate-bill');
     const btnAcquittancePDF = document.getElementById('btn-generate-acquittance-pdf');
     const btnAcquittanceCSV = document.getElementById('btn-generate-acquittance-csv');
+    const btnRegularProformaHTML = document.getElementById('btn-regular-proforma-html');
+    const btnRegularProformaExcel = document.getElementById('btn-regular-proforma-excel');
+    const btnProformaSignatories = document.getElementById('btn-proforma-signatories');
+
+    function getFilteredStudentsForProforma() {
+        if (!allStudentData || allStudentData.length === 0) {
+            UiModal.alert("No student data loaded.");
+            return null;
+        }
+
+        const selectedStream = document.getElementById('bill-stream-select')?.value || 'Regular';
+        const mode = document.getElementById('bill-mode-select')?.value || 'exam';
+        const selectedExamName = document.getElementById('bill-exam-select')?.value || '';
+        const startDateInput = document.getElementById('bill-start-date')?.valueAsDate;
+        const endDateInput = document.getElementById('bill-end-date')?.valueAsDate;
+
+        const parseDate = (dStr) => {
+            if (!dStr) return new Date();
+            const parts = dStr.split(/[.-/]/);
+            let d = parts[0], m = parts[1], y = parts[2];
+            if (d.length === 4) [y, m, d] = [d, m, y]; 
+            return new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`);
+        };
+
+        const filtered = allStudentData.filter(s => {
+            const sStream = (s.Stream || "Regular").trim().toLowerCase();
+            const selStream = (selectedStream || "Regular").trim().toLowerCase();
+            if (sStream !== selStream) return false;
+
+            if (mode === 'exam' && selectedExamName) {
+                const sExam = (s['Exam Name'] || s.examName || '').trim();
+                if (sExam !== selectedExamName.trim()) return false;
+            } else if (mode === 'period' && (startDateInput || endDateInput)) {
+                const sDate = parseDate(s.Date || s.date);
+                if (startDateInput && sDate < startDateInput) return false;
+                if (endDateInput && sDate > endDateInput) return false;
+            }
+            return true;
+        });
+
+        if (filtered.length === 0) {
+            UiModal.alert(`No students found for stream "${selectedStream}" with current criteria.`);
+            return null;
+        }
+        return filtered;
+    }
+
+    if (btnRegularProformaHTML) {
+        btnRegularProformaHTML.addEventListener('click', () => {
+            const filtered = getFilteredStudentsForProforma();
+            if (!filtered) return;
+            if (window.UniversityProforma) {
+                window.UniversityProforma.openPreviewModal(filtered);
+            }
+        });
+    }
+
+    if (btnRegularProformaExcel) {
+        btnRegularProformaExcel.addEventListener('click', () => {
+            const filtered = getFilteredStudentsForProforma();
+            if (!filtered) return;
+            if (window.UniversityProforma) {
+                const data = window.UniversityProforma.aggregateData(filtered);
+                window.UniversityProforma.exportExcel(data);
+            }
+        });
+    }
+
+    if (btnProformaSignatories) {
+        btnProformaSignatories.addEventListener('click', () => {
+            if (window.UniversityProforma) {
+                window.UniversityProforma.openOfficialsModal();
+            }
+        });
+    }
 
     // 🛡️ Pro Check: Prepare Acquittance buttons (Hidden by default until Bill is generated)
     function checkProAcquittanceAccess() {
