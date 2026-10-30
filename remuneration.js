@@ -13,7 +13,7 @@ const RATE_TEMPLATES = {
         // Scheme (Legacy or Calicut_2026)
         calculation_scheme: "Calicut_2026",
         // Fixed
-        data_entry_operator: 890, accountant: 1000, contingent_charge: 0.40,
+        data_entry_operator: 890, accountant: 1000, contingent_charge: 0.40, scribe_rate: 150,
         // Flags
         is_sde_mode: false, has_peon: false
     },
@@ -30,7 +30,7 @@ const RATE_TEMPLATES = {
         peon_single: 250, peon_double: 400, peon_ratio: 500,
         sweeper_single: 225, sweeper_double: 350, sweeper_ratio: 100,
 
-        data_entry_operator: 0, accountant: 0, contingent_charge: 2.00,
+        data_entry_operator: 0, accountant: 0, contingent_charge: 2.00, scribe_rate: 150,
 
         // Flags
         is_sde_mode: true, has_peon: true
@@ -144,6 +144,7 @@ function renderRateConfigForm() {
                     <h4 class="font-semibold text-xs text-blue-600 uppercase border-b pb-1">Fixed / Allowances</h4>
                     ${createRateInput('Data Entry', 'data_entry_operator', rates.data_entry_operator, disabledAttr, bgClass)}
                     ${createRateInput('Accountant', 'accountant', rates.accountant, disabledAttr, bgClass)}
+                    ${createRateInput('Amanuensis / Scribe', 'scribe_rate', rates.scribe_rate || 150, disabledAttr, bgClass)}
                     ${createRateInput('Contingency', 'contingent_charge', rates.contingent_charge, disabledAttr, bgClass)}
                 </div>
             </div>
@@ -177,6 +178,7 @@ function renderRateConfigForm() {
                     <h4 class="font-semibold text-xs text-orange-600 uppercase border-b pb-1">Ratios & Allowances</h4>
                     ${createRateInput('Invig Ratio', 'invigilator_ratio', rates.invigilator_ratio, disabledAttr, bgClass)}
                     ${createRateInput('Clerk/Peon Ratio', 'clerk_ratio', rates.clerk_ratio, disabledAttr, bgClass)}
+                    ${createRateInput('Amanuensis / Scribe', 'scribe_rate', rates.scribe_rate || 150, disabledAttr, bgClass)}
                     ${createRateInput('Contingency', 'contingent_charge', rates.contingent_charge, disabledAttr, bgClass)}
                 </div>
             </div>
@@ -208,6 +210,12 @@ function renderRateConfigForm() {
                 }
                 
                 localStorage.setItem(REMUNERATION_CONFIG_KEY, JSON.stringify(allRates));
+                if (typeof UniversityProforma !== 'undefined' && typeof UniversityProforma.refreshDocumentRender === 'function') {
+                    UniversityProforma.refreshDocumentRender();
+                }
+                if (typeof SdeProforma !== 'undefined' && typeof SdeProforma.refreshDocumentRender === 'function') {
+                    SdeProforma.refreshDocumentRender();
+                }
             });
         });
     }
@@ -245,6 +253,12 @@ window.toggleRemunerationLock = function() {
         // 2. Sync to Cloud (V2 Modular Target: 'settings')
         if(typeof syncDataToCloud === 'function') {
             syncDataToCloud('settings');
+        }
+        if (typeof UniversityProforma !== 'undefined' && typeof UniversityProforma.refreshDocumentRender === 'function') {
+            UniversityProforma.refreshDocumentRender();
+        }
+        if (typeof SdeProforma !== 'undefined' && typeof SdeProforma.refreshDocumentRender === 'function') {
+            SdeProforma.refreshDocumentRender();
         } else {
             console.warn("Cloud sync not available.");
         }
@@ -444,5 +458,6 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
 window.initRemunerationModule = initRemunerationModule;
 window.renderRateConfigForm = renderRateConfigForm;
 window.generateBillForSessions = generateBillForSessions;
+window.allRates = allRates;
 
 loadRates();
