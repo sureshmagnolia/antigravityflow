@@ -1,19 +1,22 @@
 /**
  * university_proforma.js
  * Calicut University Proforma I & II Remuneration & Contingency Package
- * Specifically designed for Regular Stream examinations matching official format:
+ * Specifically designed for Regular Stream examinations:
  * - Proforma I (Parts A to F)
  * - Annexure I (Acquittance Roll)
  * - Proforma II (Contingent Charges @ Rs.4/- per candidate)
  * - Consolidated Statement
  * - Annexure II (Receipt for Contingent Charges)
  * - Certificates (1 & 2 for Senior Supdt & Head Accountant posts)
+ *
+ * NOTE: Names are fully configurable and never hardcoded to any specific college.
  */
 
 (function (window) {
     'use strict';
 
     const PROFORMA_OFFICIALS_KEY = 'examProformaOfficials';
+    let currentActiveSubTab = 'all';
 
     // Helper: Number to Indian Words Converter
     function numberToIndianWords(num) {
@@ -63,7 +66,7 @@
 
     // Helper: Split name into Title and Display Name
     function splitTitleAndName(fullName) {
-        if (!fullName) return { title: 'Sri.', name: '' };
+        if (!fullName) return { title: '', name: '' };
         const clean = fullName.trim();
         const prefixes = ['Dr.', 'Dr', 'Prof.', 'Prof', 'Sri.', 'Sri', 'Smt.', 'Smt', 'Ms.', 'Ms', 'Mr.', 'Mr'];
         for (const p of prefixes) {
@@ -73,17 +76,17 @@
                 return { title: normTitle, name: rest };
             }
         }
-        return { title: 'Sri.', name: clean };
+        return { title: '', name: clean };
     }
 
-    // Helper: Parse DD.MM.YYYY into Date object
+    // Helper: Parse DD.MM.YYYY or YYYY-MM-DD into Date object (Local Time)
     function parseDateStr(str) {
         if (!str) return new Date();
-        const parts = str.trim().split(/[.-/]/);
+        const parts = str.trim().split(/[.\-\/]/);
         if (parts.length === 3) {
             let d = parts[0], m = parts[1], y = parts[2];
             if (d.length === 4) [y, m, d] = [d, m, y];
-            return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+            return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
         }
         return new Date(str);
     }
@@ -114,12 +117,12 @@
     }
 
     const UniversityProforma = {
-        // --- 1. Officials Management ---
+        // --- 1. Officials Management (NO HARDCODING) ---
         getOfficials: function () {
             const saved = localStorage.getItem(PROFORMA_OFFICIALS_KEY);
             let conf = saved ? JSON.parse(saved) : {};
 
-            const collegeName = localStorage.getItem('examCollegeName') || 'Sree Neelakanta Government Sanskrit College Pattambi';
+            const collegeName = localStorage.getItem('examCollegeName') || '';
             const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
 
             const findStaffName = (roleKeywords) => {
@@ -140,19 +143,19 @@
             };
 
             return {
-                collegeName: conf.collegeName || collegeName,
+                collegeName: conf.collegeName !== undefined ? conf.collegeName : collegeName,
                 period: conf.period || '',
-                chiefSupdt: conf.chiefSupdt || findStaffName(['chief supdt', 'chief superintendent']) || 'Dr. Vivek PJ',
-                seniorSupdt: conf.seniorSupdt || findStaffName(['senior assistant', 'senior supdt', 'sas']) || 'Dr. Hyderali K',
-                officeSupdt: conf.officeSupdt || findStaffName(['office supdt', 'office superintendent', 'os']) || 'Smt. Rekha C',
-                headAccountant: conf.headAccountant || findStaffName(['head accountant', 'accountant']) || 'Sri. Ashokan',
-                dataEntryOperator: conf.dataEntryOperator || findStaffName(['data entry', 'deo']) || 'Smt. Ambili M',
-                clerk: conf.clerk || findStaffName(['clerk', 'office clerk', 'ld clerk', 'ud clerk']) || 'Smt. Raseena A',
-                peon: conf.peon || findStaffName(['peon', 'office attendant', 'oa']) || 'Sri. Babukuttan',
-                sweeper: conf.sweeper || findStaffName(['sweeper', 'cleaning staff']) || 'Sri. Babu C',
-                principal: conf.principal || findStaffName(['principal']) || 'Principal',
+                chiefSupdt: conf.chiefSupdt !== undefined ? conf.chiefSupdt : findStaffName(['chief supdt', 'chief superintendent']),
+                seniorSupdt: conf.seniorSupdt !== undefined ? conf.seniorSupdt : findStaffName(['senior assistant', 'senior supdt', 'sas']),
+                officeSupdt: conf.officeSupdt !== undefined ? conf.officeSupdt : findStaffName(['office supdt', 'office superintendent', 'os']),
+                headAccountant: conf.headAccountant !== undefined ? conf.headAccountant : findStaffName(['head accountant', 'accountant']),
+                dataEntryOperator: conf.dataEntryOperator !== undefined ? conf.dataEntryOperator : findStaffName(['data entry', 'deo']),
+                clerk: conf.clerk !== undefined ? conf.clerk : findStaffName(['clerk', 'office clerk', 'ld clerk', 'ud clerk']),
+                peon: conf.peon !== undefined ? conf.peon : findStaffName(['peon', 'office attendant', 'oa']),
+                sweeper: conf.sweeper !== undefined ? conf.sweeper : findStaffName(['sweeper', 'cleaning staff']),
+                principal: conf.principal !== undefined ? conf.principal : (findStaffName(['principal']) || 'Principal'),
                 advanceReceived: conf.advanceReceived !== undefined ? Number(conf.advanceReceived) : 0,
-                advanceDetails: conf.advanceDetails || 'Vide Cheque No. .............. dated ...........',
+                advanceDetails: conf.advanceDetails !== undefined ? conf.advanceDetails : 'Vide Cheque No. .............. dated ...........',
                 certSeniorSupdtNo: conf.certSeniorSupdtNo || '',
                 certHeadAcctNo: conf.certHeadAcctNo || ''
             };
@@ -162,15 +165,247 @@
             localStorage.setItem(PROFORMA_OFFICIALS_KEY, JSON.stringify(newOfficials));
         },
 
-        // --- 2. Data Aggregator for Regular Stream ---
-        aggregateData: function (filteredStudents) {
-            const officials = this.getOfficials();
-            const students = filteredStudents || (window.allStudentData || []).filter(s => {
-                const stream = (s.Stream || s.stream || 'Regular').trim().toLowerCase();
-                return stream === 'regular';
+        // --- 2. Auto-Detect from Staff Directory ---
+        autoDetectFromStaff: function (showToast) {
+            const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+            const collegeName = localStorage.getItem('examCollegeName') || '';
+
+            const findStaffName = (roleKeywords) => {
+                for (const kw of roleKeywords) {
+                    const q = kw.toLowerCase();
+                    const found = staffData.find(s => {
+                        if (s.roleHistory && Array.isArray(s.roleHistory)) {
+                            if (s.roleHistory.some(r => r.role && r.role.toLowerCase().includes(q))) return true;
+                        }
+                        if (s.role && s.role.toLowerCase().includes(q)) return true;
+                        if (s.designation && s.designation.toLowerCase().includes(q)) return true;
+                        if (s.Designation && s.Designation.toLowerCase().includes(q)) return true;
+                        return false;
+                    });
+                    if (found) return found.name;
+                }
+                return '';
+            };
+
+            const detected = {
+                collegeName: collegeName,
+                period: document.getElementById('tab-prof-period')?.value || '',
+                chiefSupdt: findStaffName(['chief supdt', 'chief superintendent']),
+                seniorSupdt: findStaffName(['senior assistant', 'senior supdt', 'sas']),
+                officeSupdt: findStaffName(['office supdt', 'office superintendent', 'os']),
+                headAccountant: findStaffName(['head accountant', 'accountant']),
+                dataEntryOperator: findStaffName(['data entry', 'deo']),
+                clerk: findStaffName(['clerk', 'office clerk', 'ld clerk', 'ud clerk']),
+                peon: findStaffName(['peon', 'office attendant', 'oa']),
+                sweeper: findStaffName(['sweeper', 'cleaning staff']),
+                principal: findStaffName(['principal']) || 'Principal',
+                advanceReceived: Number(document.getElementById('tab-prof-advance')?.value) || 0,
+                advanceDetails: document.getElementById('tab-prof-advance-details')?.value || 'Vide Cheque No. .............. dated ...........'
+            };
+
+            this.saveOfficials(detected);
+            this.populateTabInputs(detected);
+            this.refreshDocumentRender();
+
+            if (showToast && window.UiModal && typeof window.UiModal.toast === 'function') {
+                window.UiModal.toast('Auto-detected staff designations applied successfully!');
+            }
+        },
+
+        // --- 2b. Filtering (By Exam Name or Period) ---
+        populateExamDropdown: function () {
+            const examSelect = document.getElementById('prof-exam-select');
+            if (!examSelect) return;
+
+            let all = [];
+            if (typeof window.getMyAllStudentData === 'function' && window.getMyAllStudentData().length > 0) {
+                all = window.getMyAllStudentData();
+            } else if (window.allStudentData && Array.isArray(window.allStudentData) && window.allStudentData.length > 0) {
+                all = window.allStudentData;
+            } else {
+                try {
+                    const raw = localStorage.getItem('examBaseData');
+                    all = raw ? JSON.parse(raw) : [];
+                } catch (e) {
+                    all = [];
+                }
+            }
+
+            const regularStudents = all.filter(s => (s.Stream || s.stream || 'Regular').trim().toLowerCase() === 'regular');
+
+            const examMap = {};
+            const allDates = [];
+
+            regularStudents.forEach(s => {
+                const exName = (s['Exam Name'] || s.examName || 'Regular Examination').trim();
+                const regNo = (s['Register Number'] || s['Register No'] || s['Register No.'] || s.RegisterNo || s.regNo || s.reg_no || s.Name || '').trim();
+                const rawDate = (s.Date || s.date || '').trim();
+
+                if (!examMap[exName]) {
+                    examMap[exName] = { candidates: new Set(), dates: new Set() };
+                }
+                if (regNo) examMap[exName].candidates.add(regNo.toLowerCase());
+                if (rawDate) {
+                    examMap[exName].dates.add(rawDate);
+                    const d = parseDateStr(rawDate);
+                    allDates.push(d);
+                }
             });
 
+            const currentVal = examSelect.value;
+            examSelect.innerHTML = '<option value="">-- All Regular Examinations --</option>';
+
+            const sortedExams = Object.keys(examMap).sort();
+            sortedExams.forEach(name => {
+                const info = examMap[name];
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = `${name} (${info.candidates.size} Candidates, ${info.dates.size} Days)`;
+                if (name === currentVal) opt.selected = true;
+                examSelect.appendChild(opt);
+            });
+
+            if (allDates.length > 0) {
+                allDates.sort((a, b) => a - b);
+                const toISODate = (d) => {
+                    const y = d.getFullYear();
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${day}`;
+                };
+                const minISO = toISODate(allDates[0]);
+                const maxISO = toISODate(allDates[allDates.length - 1]);
+
+                const startInput = document.getElementById('prof-start-date');
+                const endInput = document.getElementById('prof-end-date');
+                if (startInput && !startInput.value) startInput.value = minISO;
+                if (endInput && !endInput.value) endInput.value = maxISO;
+            }
+        },
+
+        onFilterModeChange: function () {
+            const mode = document.getElementById('prof-filter-mode')?.value || 'all';
+            const examContainer = document.getElementById('prof-exam-dropdown-container');
+            const periodContainer = document.getElementById('prof-date-range');
+
+            if (examContainer) {
+                if (mode === 'exam') examContainer.classList.remove('hidden');
+                else examContainer.classList.add('hidden');
+            }
+            if (periodContainer) {
+                if (mode === 'period') periodContainer.classList.remove('hidden');
+                else periodContainer.classList.add('hidden');
+            }
+
+            this.onFilterChange();
+        },
+
+        onFilterChange: function () {
+            const mode = document.getElementById('prof-filter-mode')?.value || 'all';
+            const summaryEl = document.getElementById('prof-filter-summary');
+            const examSelect = document.getElementById('prof-exam-select');
+
+            const data = this.aggregateData();
+
+            if (summaryEl) {
+                if (!data || data.partARows.length === 0) {
+                    summaryEl.innerHTML = '<span class="text-rose-600 font-semibold">⚠️ No examination records found matching current filter</span>';
+                } else if (mode === 'exam') {
+                    const exName = examSelect?.value || 'All Regular Examinations';
+                    summaryEl.innerHTML = `Showing Exam: <strong>${exName}</strong> (${data.partARows.length} examination dates, ${data.totalContingencyCandidates} registered candidates)`;
+                } else if (mode === 'period') {
+                    summaryEl.innerHTML = `Showing Period: <strong>${data.startDateDot} to ${data.endDateDot}</strong> (${data.partARows.length} examination dates, ${data.totalContingencyCandidates} registered candidates)`;
+                } else {
+                    summaryEl.innerHTML = `Showing all regular examination sessions (${data.partARows.length} examination dates, ${data.totalContingencyCandidates} registered candidates)`;
+                }
+            }
+
+            if (data && data.period) {
+                const periodInput = document.getElementById('tab-prof-period');
+                if (periodInput && (!periodInput.value || periodInput.dataset.autoManaged === 'true')) {
+                    periodInput.value = data.period;
+                    periodInput.dataset.autoManaged = 'true';
+                    const off = this.getOfficials();
+                    off.period = data.period;
+                    this.saveOfficials(off);
+                }
+            }
+
+            this.refreshDocumentRender();
+        },
+
+        resetFilters: function () {
+            const modeSelect = document.getElementById('prof-filter-mode');
+            if (modeSelect) modeSelect.value = 'all';
+
+            const examSelect = document.getElementById('prof-exam-select');
+            if (examSelect) examSelect.value = '';
+
+            const startInput = document.getElementById('prof-start-date');
+            const endInput = document.getElementById('prof-end-date');
+            if (startInput) startInput.value = '';
+            if (endInput) endInput.value = '';
+
+            this.populateExamDropdown();
+            this.onFilterModeChange();
+        },
+
+        // --- 3. Data Aggregator for Regular Stream ---
+        aggregateData: function (filteredStudents) {
+            const officials = this.getOfficials();
+            let students = filteredStudents;
+
+            if (!students) {
+                let all = [];
+                if (typeof window.getMyAllStudentData === 'function' && window.getMyAllStudentData().length > 0) {
+                    all = window.getMyAllStudentData();
+                } else if (window.allStudentData && Array.isArray(window.allStudentData) && window.allStudentData.length > 0) {
+                    all = window.allStudentData;
+                } else {
+                    try {
+                        const raw = localStorage.getItem('examBaseData');
+                        all = raw ? JSON.parse(raw) : [];
+                    } catch (e) {
+                        all = [];
+                    }
+                }
+
+                students = all.filter(s => {
+                    const stream = (s.Stream || s.stream || 'Regular').trim().toLowerCase();
+                    return stream === 'regular';
+                });
+
+                const filterMode = document.getElementById('prof-filter-mode')?.value || 'all';
+                if (filterMode === 'exam') {
+                    const selectedExam = (document.getElementById('prof-exam-select')?.value || '').trim();
+                    if (selectedExam) {
+                        students = students.filter(s => (s['Exam Name'] || s.examName || '').trim().toLowerCase() === selectedExam.toLowerCase());
+                    }
+                } else if (filterMode === 'period') {
+                    const startVal = document.getElementById('prof-start-date')?.value;
+                    const endVal = document.getElementById('prof-end-date')?.value;
+                    const startDate = startVal ? parseDateStr(startVal) : null;
+                    if (startDate) startDate.setHours(0, 0, 0, 0);
+                    const endDate = endVal ? parseDateStr(endVal) : null;
+                    if (endDate) endDate.setHours(23, 59, 59, 999);
+
+                    if (startDate || endDate) {
+                        students = students.filter(s => {
+                            const rawDate = (s.Date || s.date || '').trim();
+                            if (!rawDate) return false;
+                            const d = parseDateStr(rawDate);
+                            d.setHours(12, 0, 0, 0);
+                            if (startDate && d < startDate) return false;
+                            if (endDate && d > endDate) return false;
+                            return true;
+                        });
+                    }
+                }
+            }
+
             if (!students || students.length === 0) return null;
+
+            const filteredRegSet = new Set(students.map(s => (s['Register Number'] || s['Register No'] || s['Register No.'] || s.RegisterNo || s.regNo || s.reg_no || s.Name || s.name || '').trim().toLowerCase()).filter(Boolean));
 
             // External lookups
             const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
@@ -238,23 +473,22 @@
             datesList.sort((a, b) => a.dateObj - b.dateObj);
 
             // Determine default period string if not set
-            const minDate = datesList[0].dateObj;
-            const maxDate = datesList[datesList.length - 1].dateObj;
+            const minDate = datesList[0] ? datesList[0].dateObj : new Date();
+            const maxDate = datesList[datesList.length - 1] ? datesList[datesList.length - 1].dateObj : new Date();
             const defaultPeriod = `${formatMonthYear(minDate)} to ${formatMonthYear(maxDate)}`;
             if (!officials.period) officials.period = defaultPeriod;
 
             // Track unique scribes
-            let totalUniqueScribeCount = 0;
             const uniqueScribeRegs = new Set();
             students.forEach(s => {
                 const regNo = (s['Register Number'] || s['Register No'] || s['Register No.'] || s.RegisterNo || s.regNo || s.reg_no || s.Name || s.name || '').trim();
                 const isScribe = (s.Scribe === 'Yes' || s.isScribe || (regNo && scribeRegSet.has(regNo.toLowerCase())));
                 if (isScribe && regNo) uniqueScribeRegs.add(regNo.toLowerCase());
             });
-            totalUniqueScribeCount = uniqueScribeRegs.size;
+            const totalUniqueScribeCount = uniqueScribeRegs.size;
 
             // Track invigilators and duties
-            const staffDutyCounts = {}; // staffKey -> count
+            const staffDutyCounts = {};
             const staffInfoMap = {};
 
             // Calculate Part A rows
@@ -270,8 +504,6 @@
                 const scribe = dItem.fnScribes + dItem.anScribes;
                 const total = fn + an + scribe;
 
-                // Invigilators for this date:
-                // Check all session keys for this date in invigMapping / roomAllotments
                 let dateInvigCount = 0;
                 const dateStaffInvolved = new Set();
 
@@ -281,9 +513,15 @@
 
                     if (rooms.length > 0) {
                         rooms.forEach(r => {
-                            dateInvigCount++;
-                            const teacherKey = mapping[r.roomName];
-                            if (teacherKey) dateStaffInvolved.add(teacherKey);
+                            const hasRelevantStudents = !r.students || r.students.length === 0 || r.students.some(st => {
+                                const reg = (st['Register Number'] || st['Register No'] || st['Register No.'] || st.RegisterNo || st.regNo || st.Name || '').trim().toLowerCase();
+                                return filteredRegSet.has(reg);
+                            });
+                            if (hasRelevantStudents) {
+                                dateInvigCount++;
+                                const teacherKey = mapping[r.roomName];
+                                if (teacherKey) dateStaffInvolved.add(teacherKey);
+                            }
                         });
                     } else if (invigSlots[sessKey] && Array.isArray(invigSlots[sessKey].assigned)) {
                         dateInvigCount += invigSlots[sessKey].assigned.length;
@@ -404,11 +642,9 @@
             const balanceClaim = consolidatedTotal - advanceReceived;
 
             // Build Annexure I Invigilator rows
-            // Map teachers from staffDutyCounts or from staffData with duties
             const invigilatorRows = [];
             let invigDutyTally = 0;
 
-            // Build staff lookup
             staffData.forEach(st => {
                 if (st.name) staffInfoMap[st.name.toLowerCase()] = st;
                 if (st.email) staffInfoMap[st.email.toLowerCase()] = st;
@@ -432,7 +668,6 @@
                     });
                 });
             } else {
-                // If individual staff tracking is absent, generate consolidated invigilation lines
                 invigilatorRows.push({
                     title: '',
                     name: 'Allotted Invigilation Staff (Summary)',
@@ -444,7 +679,6 @@
                 invigDutyTally = sumInvigCount;
             }
 
-            // Annexure I total (Supervisory + Support + Invigilators)
             const annexureITotal = partBTotalAmt + partCAmt + partEAmt + sumClerkAmt + sumPeonAmt + sumSweeperAmt + sumInvigAmt;
 
             return {
@@ -454,7 +688,6 @@
                 startDateDot: formatDateDot(minDate),
                 endDateDot: formatDateDot(maxDate),
                 period: officials.period,
-                // Part A
                 partARows: partARows,
                 sumFN: sumFN,
                 sumAN: sumAN,
@@ -469,38 +702,30 @@
                 sumANSessions: sumANSessions,
                 partATotalAmt: partATotalAmt,
                 partATotalWords: numberToIndianWords(partATotalAmt),
-                // Part B
                 totalSessions: totalSessions,
                 csAmt: csAmt,
                 sasAmt: sasAmt,
                 osAmt: osAmt,
                 partBTotalAmt: partBTotalAmt,
                 partBTotalWords: numberToIndianWords(partBTotalAmt),
-                // Part C
                 partCAmt: partCAmt,
                 partCWords: numberToIndianWords(partCAmt),
-                // Part D
                 uniqueScribesCount: totalUniqueScribeCount || (sumScribe > 0 ? Math.ceil(sumScribe / 2) : 0),
                 scribeDuties: scribeDuties,
                 scribeRate: scribeRate,
                 partDAmt: partDAmt,
                 partDWords: numberToIndianWords(partDAmt),
-                // Part E
                 partEAmt: partEAmt,
                 partEWords: numberToIndianWords(partEAmt),
-                // Part F
                 grandTotalProformaI: grandTotalProformaI,
                 grandTotalProformaIWords: numberToIndianWords(grandTotalProformaI),
-                // Annexure I
                 invigilatorRows: invigilatorRows,
                 annexureITotal: annexureITotal,
                 annexureITotalWords: numberToIndianWords(annexureITotal),
-                // Proforma II
                 proformaIIRows: proformaIIRows,
                 totalContingencyCandidates: totalContingencyCandidates,
                 totalContingencyAmt: totalContingencyAmt,
                 totalContingencyWords: numberToIndianWords(totalContingencyAmt),
-                // Consolidated
                 consolidatedTotal: consolidatedTotal,
                 consolidatedTotalWords: numberToIndianWords(consolidatedTotal),
                 advanceReceived: advanceReceived,
@@ -509,7 +734,7 @@
             };
         },
 
-        // --- 3. Multi-Sheet Excel Exporter (SheetJS) ---
+        // --- 4. Multi-Sheet Excel Workbook Builder ---
         buildWorkbook: function (data) {
             if (!data) data = this.aggregateData();
             if (!data) return null;
@@ -517,28 +742,19 @@
                 alert("SheetJS library is not loaded.");
                 return null;
             }
-            if (!data) data = this.aggregateData();
-            if (!data) {
-                alert("No student data available to generate Excel.");
-                return;
-            }
-
-            if (typeof XLSX === 'undefined') {
-                alert("SheetJS library is not loaded. Please ensure internet connectivity.");
-                return;
-            }
 
             const wb = XLSX.utils.book_new();
             const N = data.partARows.length;
-            const S = 10 + N; // Total row in Part A
+            const S = 10 + N;
 
-            // ==========================================
+            // Helper to get formatted name or blank
+            const offName = (val) => (val && val.trim()) ? val.trim() : "";
+
             // SHEET 1: Part A
-            // ==========================================
             const wsA_data = [];
             wsA_data.push(["PROFORMA -1"]);
             wsA_data.push(["Theory Examinations  - Remuneration  - Human Resources"]);
-            wsA_data.push([`Statement  for the conduct of Calicut University Examinations held at \n${data.officials.collegeName}\nFrom ${data.period}`]);
+            wsA_data.push([`Statement  for the conduct of Calicut University Examinations held at \n${offName(data.officials.collegeName)}\nFrom ${data.period}`]);
             wsA_data.push([]);
             wsA_data.push(["Part - A"]);
             wsA_data.push(["Sl.No", "Date", "No.of Candidates", "", "", "", "Invigilator", "", "Clerk", "", "Peon", "", "Sweeper", ""]);
@@ -566,7 +782,6 @@
                 ]);
             });
 
-            // Summary row S
             const sumRow = new Array(26).fill("");
             sumRow[0] = "";
             sumRow[1] = "Total";
@@ -581,16 +796,13 @@
             sumRow[25] = { t: 'n', f: `SUM(Z10:Z${S - 1})`, v: data.sumANSessions };
             wsA_data.push(sumRow);
 
-            wsA_data.push([]); // blank S+1
-
-            // Row S+2: Total Amount
+            wsA_data.push([]);
             const totAmtRow = new Array(14).fill("");
             totAmtRow[1] = "Total Amount ( Column 8+10+12+14)       =";
             totAmtRow[9] = { t: 'n', f: `H${S}+J${S}+L${S}+N${S}`, v: data.partATotalAmt };
             totAmtRow[10] = "/-";
             wsA_data.push(totAmtRow);
 
-            // Row S+3: Words
             const wordsRow = new Array(14).fill("");
             wordsRow[1] = `(Rupees ${data.partATotalWords} only)`;
             wsA_data.push(wordsRow);
@@ -617,7 +829,6 @@
                 { wch: 6 }, { wch: 10 }
             ];
 
-            // Add session flags columns Y and Z
             for (let i = 0; i < N; i++) {
                 const rNum = 10 + i;
                 const dItem = data.partARows[i];
@@ -629,9 +840,7 @@
 
             XLSX.utils.book_append_sheet(wb, wsA, "Part A");
 
-            // ==========================================
             // SHEET 2: Part B,C
-            // ==========================================
             const wsBC_data = [
                 [],
                 ["PART B"],
@@ -644,7 +853,7 @@
                 [`Rs. ${data.partBTotalAmt}/- ( Rupees ${data.partBTotalWords} only)`],
                 ["PART C"],
                 ["Designation", "Rate @890/- for odd and\neven semester examination", "Amount\nRs."],
-                ["Data Entry Operator", data.officials.dataEntryOperator, 890],
+                ["Data Entry Operator", offName(data.officials.dataEntryOperator), 890],
                 ["Rs.890/-(Rupees Eight hundred and Ninety only)"]
             ];
 
@@ -652,9 +861,8 @@
             wsBC['!cols'] = [{ wch: 8 }, { wch: 32 }, { wch: 16 }, { wch: 6 }, { wch: 14 }, { wch: 6 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, wsBC, "Part B,C");
 
-            // ==========================================
             // SHEET 3: Part D,E,F
-            // ==========================================
+            const chiefLabel = offName(data.officials.chiefSupdt) ? `${offName(data.officials.chiefSupdt)}\nChief Superintendent` : "Chief Superintendent";
             const wsDEF_data = [
                 ["PART D"],
                 ["Designation", "", "No. of Candidates permitted to\nutilize scribe", "", "Rate", "", "Total No. of Duties performed", "", "Total Amount"],
@@ -665,11 +873,11 @@
                 [],
                 ["PART E"],
                 ["Designation", "", "", "Rate @1000/- for odd and\neven semester examination", "", "", "", "Amount\nRs."],
-                ["Accountant", "", "", data.officials.headAccountant, "", "", "", 1000],
+                ["Accountant", "", "", offName(data.officials.headAccountant), "", "", "", 1000],
                 ["Rs.1000/-(Rupees One Thousand only)"],
                 [],
                 [],
-                ["( Office Seal)            ", "", "", "", "", "", `${data.officials.chiefSupdt}\nChief Superintendent`],
+                ["( Office Seal)            ", "", "", "", "", "", chiefLabel],
                 [],
                 [],
                 ["PART - F"],
@@ -684,29 +892,36 @@
                 [`(Rupees ${data.grandTotalProformaIWords} only)`],
                 [],
                 [],
-                ["( Office Seal)            ", "", "", "", "", "", `${data.officials.chiefSupdt}\nChief Superintendent`]
+                ["( Office Seal)            ", "", "", "", "", "", chiefLabel]
             ];
 
             const wsDEF = XLSX.utils.aoa_to_sheet(wsDEF_data);
             wsDEF['!cols'] = [{ wch: 14 }, { wch: 4 }, { wch: 16 }, { wch: 20 }, { wch: 8 }, { wch: 4 }, { wch: 16 }, { wch: 10 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, wsDEF, "Part D,E,F");
 
-            // ==========================================
             // SHEET 4: Annexure I (Acquittance Roll)
-            // ==========================================
+            const chiefParsed = splitTitleAndName(data.officials.chiefSupdt);
+            const sasParsed = splitTitleAndName(data.officials.seniorSupdt);
+            const osParsed = splitTitleAndName(data.officials.officeSupdt);
+            const acctParsed = splitTitleAndName(data.officials.headAccountant);
+            const deoParsed = splitTitleAndName(data.officials.dataEntryOperator);
+            const clerkParsed = splitTitleAndName(data.officials.clerk);
+            const peonParsed = splitTitleAndName(data.officials.peon);
+            const sweeperParsed = splitTitleAndName(data.officials.sweeper);
+
             const wsAnn1_data = [
                 ["ANNEXURE - I"],
                 ["Theory Examinations - Remuneration - Human Resources"],
-                [`Aquittance for conduct of Calicut University Examinations From ${data.period} at  ${data.officials.collegeName} Centre`],
+                [`Aquittance for conduct of Calicut University Examinations From ${data.period} at  ${offName(data.officials.collegeName)} Centre`],
                 ["Sl.\nNo", "Name", "", "Designation", "Amount\nRs.", "Signature"],
-                [1, splitTitleAndName(data.officials.chiefSupdt).title, splitTitleAndName(data.officials.chiefSupdt).name, "Chief Supdt.", { t: 'n', f: `'Part B,C'!G5`, v: data.csAmt }, ""],
-                [2, splitTitleAndName(data.officials.seniorSupdt).title, splitTitleAndName(data.officials.seniorSupdt).name, "SAS", { t: 'n', f: `'Part B,C'!G6`, v: data.sasAmt }, ""],
-                [3, splitTitleAndName(data.officials.officeSupdt).title, splitTitleAndName(data.officials.officeSupdt).name, "Office\nSupdt.", { t: 'n', f: `'Part B,C'!G7`, v: data.osAmt }, ""],
-                [4, splitTitleAndName(data.officials.headAccountant).title, splitTitleAndName(data.officials.headAccountant).name, "Head Accountant", 1000, ""],
-                [5, splitTitleAndName(data.officials.dataEntryOperator).title, splitTitleAndName(data.officials.dataEntryOperator).name, "Data  Entry\nOperator", 890, ""],
-                [6, splitTitleAndName(data.officials.clerk).title, splitTitleAndName(data.officials.clerk).name, "Clerk", { t: 'n', f: `'Part A'!J${S}`, v: data.sumClerkAmt }, ""],
-                [7, splitTitleAndName(data.officials.peon).title, splitTitleAndName(data.officials.peon).name, "Office attendant", { t: 'n', f: `'Part A'!L${S}`, v: data.sumPeonAmt }, ""],
-                [8, splitTitleAndName(data.officials.sweeper).title, splitTitleAndName(data.officials.sweeper).name, "Sweeper", { t: 'n', f: `'Part A'!N${S}`, v: data.sumSweeperAmt }, ""]
+                [1, chiefParsed.title, chiefParsed.name, "Chief Supdt.", { t: 'n', f: `'Part B,C'!G5`, v: data.csAmt }, ""],
+                [2, sasParsed.title, sasParsed.name, "SAS", { t: 'n', f: `'Part B,C'!G6`, v: data.sasAmt }, ""],
+                [3, osParsed.title, osParsed.name, "Office\nSupdt.", { t: 'n', f: `'Part B,C'!G7`, v: data.osAmt }, ""],
+                [4, acctParsed.title, acctParsed.name, "Head Accountant", 1000, ""],
+                [5, deoParsed.title, deoParsed.name, "Data  Entry\nOperator", 890, ""],
+                [6, clerkParsed.title, clerkParsed.name, "Clerk", { t: 'n', f: `'Part A'!J${S}`, v: data.sumClerkAmt }, ""],
+                [7, peonParsed.title, peonParsed.name, "Office attendant", { t: 'n', f: `'Part A'!L${S}`, v: data.sumPeonAmt }, ""],
+                [8, sweeperParsed.title, sweeperParsed.name, "Sweeper", { t: 'n', f: `'Part A'!N${S}`, v: data.sumSweeperAmt }, ""]
             ];
 
             const invigStartRow = 13;
@@ -735,7 +950,7 @@
 
             wsAnn1_data.push([]);
             wsAnn1_data.push([
-                "", "", "( Office Seal)", "", "", `${data.officials.chiefSupdt}\nChief Superintendent`
+                "", "", "( Office Seal)", "", "", chiefLabel
             ]);
 
             const wsAnn1 = XLSX.utils.aoa_to_sheet(wsAnn1_data);
@@ -752,13 +967,11 @@
             ];
             XLSX.utils.book_append_sheet(wb, wsAnn1, "Annexure I");
 
-            // ==========================================
             // SHEET 5: Proforma II (Contingency)
-            // ==========================================
             const wsII_data = [
                 ["PROFORMA - II"],
                 ["Theory Examinations - Contingent Charges"],
-                [`Statement   for  the  conduct   of   Calicut  University  Examinations  From ${data.period} at  ${data.officials.collegeName}  Centre.`],
+                [`Statement   for  the  conduct   of   Calicut  University  Examinations  From ${data.period} at  ${offName(data.officials.collegeName)}  Centre.`],
                 ["Sl.\nNo.", "Name of Examination", "Total No. of candidates registered for the Examination", "Rate per Candidate @ Rs.4/-", "Total Amount Rs."]
             ];
 
@@ -780,7 +993,7 @@
             ]);
             wsII_data.push([`Rs.${data.totalContingencyAmt}/- ( Rupees ${data.totalContingencyWords} only)`]);
             wsII_data.push([]);
-            wsII_data.push(["( Office Seal)", "", `${data.officials.chiefSupdt}\nChief Superintendent`]);
+            wsII_data.push(["( Office Seal)", "", chiefLabel]);
 
             const wsII = XLSX.utils.aoa_to_sheet(wsII_data);
             wsII['!merges'] = [
@@ -792,11 +1005,9 @@
             wsII['!cols'] = [{ wch: 6 }, { wch: 55 }, { wch: 20 }, { wch: 14 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, wsII, "Proforma II");
 
-            // ==========================================
             // SHEET 6: Consolidated
-            // ==========================================
             const wsCons_data = [
-                [`Consolidated Statement  for the  conduct  of  Calicut  University  Examinations\n From ${data.period} at  ${data.officials.collegeName} Centre`],
+                [`Consolidated Statement  for the  conduct  of  Calicut  University  Examinations\n From ${data.period} at  ${offName(data.officials.collegeName)} Centre`],
                 ["Sl.\nNo", "Particulars", "", "", "", "Amount in Rs."],
                 [1, "Theory Examinations  - Remuneration- Human Resources  (Proforma. I)", "", "", "", { t: 'n', f: `'Part D,E,F'!C24`, v: data.grandTotalProformaI }],
                 [2, "Theory Examinations - Contingent Charges (Proforma II)", "", "", "", { t: 'n', f: `'Proforma II'!E${totIIRowNum}`, v: data.totalContingencyAmt }],
@@ -809,7 +1020,7 @@
                 [],
                 [],
                 [],
-                ["( Office Seal)            ", "", "", `${data.officials.chiefSupdt}\nChief Superintendent`]
+                ["( Office Seal)            ", "", "", chiefLabel]
             ];
 
             const wsCons = XLSX.utils.aoa_to_sheet(wsCons_data);
@@ -825,9 +1036,7 @@
             wsCons['!cols'] = [{ wch: 8 }, { wch: 45 }, { wch: 4 }, { wch: 25 }, { wch: 10 }, { wch: 16 }];
             XLSX.utils.book_append_sheet(wb, wsCons, "Consolidated");
 
-            // ==========================================
             // SHEET 7: receipt (Annexure II)
-            // ==========================================
             const wsRec_data = [
                 [],
                 [],
@@ -835,7 +1044,7 @@
                 ["RECEIPT"],
                 [`Received from the Finance Officer, University of Calicut an amount of Rs.${data.totalContingencyAmt}/- (Rupees ${data.totalContingencyWords} only) being the contingent charges @ Rs. 4/- per candidate for the conduct of ${data.period} theory examinations during the period from ${data.startDateStr}  to ${data.endDateStr}.`],
                 [],
-                ["( Office Seal)            ", "", "", "", "", `${data.officials.chiefSupdt}\nChief Superintendent`]
+                ["( Office Seal)            ", "", "", "", "", chiefLabel]
             ];
 
             const wsRec = XLSX.utils.aoa_to_sheet(wsRec_data);
@@ -848,13 +1057,12 @@
             ];
             XLSX.utils.book_append_sheet(wb, wsRec, "receipt");
 
-            // ==========================================
             // SHEET 8: certificates
-            // ==========================================
+            const princLabel = offName(data.officials.principal) || "Principal";
             const wsCert_data = [
                 [],
                 [],
-                [`No. ${data.officials.certSeniorSupdtNo}`, "", "", "", "", data.officials.collegeName],
+                [`No. ${data.officials.certSeniorSupdtNo}`, "", "", "", "", offName(data.officials.collegeName)],
                 ["", "", "", "", "", "Dated:"],
                 [],
                 [],
@@ -867,7 +1075,7 @@
                 [],
                 [],
                 [],
-                ["", "", "", "", "", "", "", data.officials.principal],
+                ["", "", "", "", "", "", "", princLabel],
                 [],
                 [],
                 [],
@@ -875,7 +1083,7 @@
                 [],
                 [],
                 [],
-                [`No. ${data.officials.certHeadAcctNo}`, "", "", "", "", data.officials.collegeName],
+                [`No. ${data.officials.certHeadAcctNo}`, "", "", "", "", offName(data.officials.collegeName)],
                 ["", "", "", "", "", "Dated:"],
                 [],
                 [],
@@ -888,7 +1096,7 @@
                 [],
                 [],
                 [],
-                ["", "", "", "", "", "", "", data.officials.principal]
+                ["", "", "", "", "", "", "", princLabel]
             ];
 
             const wsCert = XLSX.utils.aoa_to_sheet(wsCert_data);
@@ -918,14 +1126,29 @@
             XLSX.writeFile(wb, fileName);
         },
 
-        // --- 4. Interactive HTML Printable Preview Generator ---
+        // --- 5. Interactive HTML Printable Preview Generator ---
         renderHTML: function (data, activeTab) {
             if (!data) data = this.aggregateData();
-            if (!data) return '<p class="text-red-500 font-bold p-6">No data found for the Regular stream.</p>';
+            if (!data || !data.partARows || data.partARows.length === 0) {
+                return `
+                    <div class="p-12 text-center text-gray-500 bg-white rounded-lg border border-dashed border-gray-300 my-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-purple-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <h4 class="text-base font-bold text-gray-700">No Regular Examination Records Found</h4>
+                        <p class="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+                            There are no sessions or candidates matching the selected filter in the Regular Stream.
+                            Please select a different filter or ensure regular examination student data is loaded.
+                        </p>
+                        <button type="button" onclick="UniversityProforma.resetFilters()" class="mt-4 px-4 py-2 bg-purple-700 text-white rounded font-medium text-xs hover:bg-purple-800 transition">
+                            Reset Filter to All Regular Sessions
+                        </button>
+                    </div>
+                `;
+            }
 
-            const currentTab = activeTab || 'all';
+            const currentTab = activeTab || currentActiveSubTab || 'all';
 
-            // Common Print Styles
             const printStyles = `
                 <style>
                     .proforma-container {
@@ -939,7 +1162,7 @@
                     .proforma-table {
                         width: 100%;
                         border-collapse: collapse;
-                        font-size: 11pt;
+                        font-size: 10pt;
                         margin-top: 10px;
                         margin-bottom: 12px;
                     }
@@ -972,6 +1195,10 @@
                         padding-top: 20px;
                         border-top: 1px dashed #ccc;
                     }
+                    .blank-entry {
+                        color: #999;
+                        font-style: italic;
+                    }
                     @media print {
                         body { background: #fff !important; }
                         .no-print { display: none !important; }
@@ -981,6 +1208,11 @@
                 </style>
             `;
 
+            const dispName = (n, defaultBlank = "................................") => {
+                if (n && n.trim()) return n.trim();
+                return `<span class="blank-entry">${defaultBlank}</span>`;
+            };
+
             // HTML Section: Part A
             const renderPartA = () => `
                 <div class="proforma-page">
@@ -988,7 +1220,7 @@
                         <div class="font-bold text-lg">PROFORMA - 1</div>
                         <div class="font-bold text-base">Theory Examinations - Remuneration - Human Resources</div>
                         <div class="text-sm mt-1">Statement for the conduct of Calicut University Examinations held at</div>
-                        <div class="font-bold text-base">${data.officials.collegeName}</div>
+                        <div class="font-bold text-base">${dispName(data.officials.collegeName, '[College Name]')}</div>
                         <div class="text-sm font-semibold">From ${data.period}</div>
                         <div class="font-bold text-left mt-2">Part - A</div>
                     </div>
@@ -1032,13 +1264,13 @@
                                     <td class="text-center">${r.scribe || ''}</td>
                                     <td class="text-center font-bold">${r.total}</td>
                                     <td class="text-center">${r.invigCount}</td>
-                                    <td class="text-right">${r.invigAmt}</td>
+                                    <td class="text-right">₹${r.invigAmt}</td>
                                     <td class="text-center">${r.clerkCount}</td>
-                                    <td class="text-right">${r.clerkAmt}</td>
+                                    <td class="text-right">₹${r.clerkAmt}</td>
                                     <td class="text-center">${r.peonCount}</td>
-                                    <td class="text-right">${r.peonAmt}</td>
+                                    <td class="text-right">₹${r.peonAmt}</td>
                                     <td class="text-center">${r.sweeperCount}</td>
-                                    <td class="text-right">${r.sweeperAmt}</td>
+                                    <td class="text-right">₹${r.sweeperAmt}</td>
                                 </tr>
                             `).join('')}
                             <tr class="font-bold" style="background-color: #f7f7f7;">
@@ -1140,7 +1372,7 @@
                         <tbody>
                             <tr>
                                 <td>Data Entry Operator</td>
-                                <td>${data.officials.dataEntryOperator} (Rate @890/- for odd & even sem)</td>
+                                <td>${dispName(data.officials.dataEntryOperator, '[Enter DEO Name]')} (Rate @890/- for odd & even sem)</td>
                                 <td class="text-right font-bold">₹${data.partCAmt}</td>
                             </tr>
                         </tbody>
@@ -1202,7 +1434,7 @@
                         <tbody>
                             <tr>
                                 <td>Accountant</td>
-                                <td>${data.officials.headAccountant} (Rate @1000/- for odd & even sem)</td>
+                                <td>${dispName(data.officials.headAccountant, '[Enter Accountant Name]')} (Rate @1000/- for odd & even sem)</td>
                                 <td class="text-right font-bold">₹${data.partEAmt}</td>
                             </tr>
                         </tbody>
@@ -1221,7 +1453,7 @@
                                     <tr><td><strong>Part C</strong> (Data Entry Operator)</td><td class="text-center">=</td><td class="text-right font-mono">₹${data.partCAmt.toLocaleString('en-IN')}</td></tr>
                                     <tr><td><strong>Part D</strong> (Amanuensis / Scribes)</td><td class="text-center">=</td><td class="text-right font-mono">₹${data.partDAmt.toLocaleString('en-IN')}</td></tr>
                                     <tr><td><strong>Part E</strong> (Accountant)</td><td class="text-center">=</td><td class="text-right font-mono">₹${data.partEAmt.toLocaleString('en-IN')}</td></tr>
-                                    <tr style="background: #f3f3f3; font-weight: bold; font-size: 12pt;">
+                                    <tr style="background: #f3f3f3; font-weight: bold; font-size: 11pt;">
                                         <td>TOTAL PROFORMA - I</td><td class="text-center">=</td><td class="text-right font-mono">₹${data.grandTotalProformaI.toLocaleString('en-IN')}/-</td>
                                     </tr>
                                 </tbody>
@@ -1235,7 +1467,7 @@
                     <div class="sign-block">
                         <div>( Office Seal )</div>
                         <div class="text-center">
-                            <div>${data.officials.chiefSupdt}</div>
+                            <div>${dispName(data.officials.chiefSupdt, '................................')}</div>
                             <div>Chief Superintendent</div>
                         </div>
                     </div>
@@ -1249,7 +1481,7 @@
                         <div class="font-bold text-lg">ANNEXURE - I</div>
                         <div class="font-bold text-base">Theory Examinations - Remuneration - Human Resources</div>
                         <div class="font-bold text-sm">Acquittance Roll for the conduct of Calicut University Examinations</div>
-                        <div class="text-sm font-semibold">From ${data.period} at ${data.officials.collegeName} Centre</div>
+                        <div class="text-sm font-semibold">From ${data.period} at ${dispName(data.officials.collegeName, '[College Name]')} Centre</div>
                     </div>
 
                     <table class="proforma-table">
@@ -1266,7 +1498,7 @@
                         <tbody>
                             <tr>
                                 <td class="text-center">1</td>
-                                <td>${data.officials.chiefSupdt}</td>
+                                <td>${dispName(data.officials.chiefSupdt)}</td>
                                 <td>Chief Superintendent</td>
                                 <td class="text-center">${data.totalSessions} sess</td>
                                 <td class="text-right font-bold">₹${data.csAmt.toLocaleString('en-IN')}</td>
@@ -1274,7 +1506,7 @@
                             </tr>
                             <tr>
                                 <td class="text-center">2</td>
-                                <td>${data.officials.seniorSupdt}</td>
+                                <td>${dispName(data.officials.seniorSupdt)}</td>
                                 <td>Senior Assistant Supdt.</td>
                                 <td class="text-center">${data.totalSessions} sess</td>
                                 <td class="text-right font-bold">₹${data.sasAmt.toLocaleString('en-IN')}</td>
@@ -1282,7 +1514,7 @@
                             </tr>
                             <tr>
                                 <td class="text-center">3</td>
-                                <td>${data.officials.officeSupdt}</td>
+                                <td>${dispName(data.officials.officeSupdt)}</td>
                                 <td>Office Superintendent</td>
                                 <td class="text-center">${data.totalSessions} sess</td>
                                 <td class="text-right font-bold">₹${data.osAmt.toLocaleString('en-IN')}</td>
@@ -1290,7 +1522,7 @@
                             </tr>
                             <tr>
                                 <td class="text-center">4</td>
-                                <td>${data.officials.headAccountant}</td>
+                                <td>${dispName(data.officials.headAccountant)}</td>
                                 <td>Head Accountant</td>
                                 <td class="text-center">-</td>
                                 <td class="text-right font-bold">₹${data.partEAmt}</td>
@@ -1298,7 +1530,7 @@
                             </tr>
                             <tr>
                                 <td class="text-center">5</td>
-                                <td>${data.officials.dataEntryOperator}</td>
+                                <td>${dispName(data.officials.dataEntryOperator)}</td>
                                 <td>Data Entry Operator</td>
                                 <td class="text-center">-</td>
                                 <td class="text-right font-bold">₹${data.partCAmt}</td>
@@ -1306,7 +1538,7 @@
                             </tr>
                             <tr>
                                 <td class="text-center">6</td>
-                                <td>${data.officials.clerk}</td>
+                                <td>${dispName(data.officials.clerk)}</td>
                                 <td>Clerk</td>
                                 <td class="text-center">-</td>
                                 <td class="text-right font-bold">₹${data.sumClerkAmt.toLocaleString('en-IN')}</td>
@@ -1314,7 +1546,7 @@
                             </tr>
                             <tr>
                                 <td class="text-center">7</td>
-                                <td>${data.officials.peon}</td>
+                                <td>${dispName(data.officials.peon)}</td>
                                 <td>Office Attendant / Peon</td>
                                 <td class="text-center">-</td>
                                 <td class="text-right font-bold">₹${data.sumPeonAmt.toLocaleString('en-IN')}</td>
@@ -1322,7 +1554,7 @@
                             </tr>
                             <tr>
                                 <td class="text-center">8</td>
-                                <td>${data.officials.sweeper}</td>
+                                <td>${dispName(data.officials.sweeper)}</td>
                                 <td>Sweeper</td>
                                 <td class="text-center">-</td>
                                 <td class="text-right font-bold">₹${data.sumSweeperAmt.toLocaleString('en-IN')}</td>
@@ -1331,14 +1563,14 @@
                             ${data.invigilatorRows.map((inv, i) => `
                                 <tr>
                                     <td class="text-center">${9 + i}</td>
-                                    <td>${inv.title} ${inv.name}</td>
+                                    <td>${inv.title ? inv.title + ' ' : ''}${inv.name}</td>
                                     <td>Invigilator</td>
                                     <td class="text-center">${inv.duties}</td>
                                     <td class="text-right font-mono">₹${inv.amount.toLocaleString('en-IN')}</td>
                                     <td></td>
                                 </tr>
                             `).join('')}
-                            <tr class="font-bold" style="background: #f7f7f7; font-size: 11pt;">
+                            <tr class="font-bold" style="background: #f7f7f7; font-size: 10pt;">
                                 <td colspan="4" class="text-center">TOTAL ACQUITTANCE CLAIM</td>
                                 <td class="text-right">₹${data.annexureITotal.toLocaleString('en-IN')}/-</td>
                                 <td></td>
@@ -1353,7 +1585,7 @@
                     <div class="sign-block">
                         <div>( Office Seal )</div>
                         <div class="text-center">
-                            <div>${data.officials.chiefSupdt}</div>
+                            <div>${dispName(data.officials.chiefSupdt, '................................')}</div>
                             <div>Chief Superintendent</div>
                         </div>
                     </div>
@@ -1367,7 +1599,7 @@
                         <div class="font-bold text-lg">PROFORMA - II</div>
                         <div class="font-bold text-base">Theory Examinations - Contingent Charges</div>
                         <div class="text-sm mt-1">Statement for the conduct of Calicut University Examinations</div>
-                        <div class="text-sm font-semibold">From ${data.period} at ${data.officials.collegeName} Centre</div>
+                        <div class="text-sm font-semibold">From ${data.period} at ${dispName(data.officials.collegeName, '[College Name]')} Centre</div>
                     </div>
 
                     <table class="proforma-table">
@@ -1390,7 +1622,7 @@
                                     <td class="text-right font-mono font-bold">₹${ex.amount.toLocaleString('en-IN')}</td>
                                 </tr>
                             `).join('')}
-                            <tr class="font-bold" style="background: #f7f7f7; font-size: 11pt;">
+                            <tr class="font-bold" style="background: #f7f7f7; font-size: 10pt;">
                                 <td colspan="2" class="text-center">Total</td>
                                 <td class="text-center">${data.totalContingencyCandidates}</td>
                                 <td></td>
@@ -1410,7 +1642,7 @@
                     <div class="sign-block">
                         <div>( Office Seal )</div>
                         <div class="text-center">
-                            <div>${data.officials.chiefSupdt}</div>
+                            <div>${dispName(data.officials.chiefSupdt, '................................')}</div>
                             <div>Chief Superintendent</div>
                         </div>
                     </div>
@@ -1423,7 +1655,7 @@
                     <div class="header-main">
                         <div class="font-bold text-lg">CONSOLIDATED STATEMENT</div>
                         <div class="text-sm mt-1">For the conduct of Calicut University Examinations</div>
-                        <div class="text-sm font-semibold">From ${data.period} at ${data.officials.collegeName} Centre</div>
+                        <div class="text-sm font-semibold">From ${data.period} at ${dispName(data.officials.collegeName, '[College Name]')} Centre</div>
                     </div>
 
                     <table class="proforma-table">
@@ -1445,7 +1677,7 @@
                                 <td>Theory Examinations - Contingent Charges (Proforma II)</td>
                                 <td class="text-right font-mono font-bold">₹${data.totalContingencyAmt.toLocaleString('en-IN')}</td>
                             </tr>
-                            <tr class="font-bold" style="background: #f7f7f7; font-size: 11pt;">
+                            <tr class="font-bold" style="background: #f7f7f7; font-size: 10pt;">
                                 <td colspan="2" class="text-center">Total Expenditure</td>
                                 <td class="text-right text-base">₹${data.consolidatedTotal.toLocaleString('en-IN')}/-</td>
                             </tr>
@@ -1480,7 +1712,7 @@
                     <div class="sign-block">
                         <div>( Office Seal )</div>
                         <div class="text-center">
-                            <div>${data.officials.chiefSupdt}</div>
+                            <div>${dispName(data.officials.chiefSupdt, '................................')}</div>
                             <div>Chief Superintendent</div>
                         </div>
                     </div>
@@ -1504,7 +1736,7 @@
                     <div class="sign-block" style="margin-top: 100px;">
                         <div>( Office Seal )</div>
                         <div class="text-center">
-                            <div>${data.officials.chiefSupdt}</div>
+                            <div>${dispName(data.officials.chiefSupdt, '................................')}</div>
                             <div>Chief Superintendent</div>
                         </div>
                     </div>
@@ -1518,7 +1750,7 @@
                     <div class="flex justify-between text-sm mb-6">
                         <div>No. <strong>${data.officials.certSeniorSupdtNo || '............................'}</strong></div>
                         <div class="text-right">
-                            <div class="font-bold">${data.officials.collegeName}</div>
+                            <div class="font-bold">${dispName(data.officials.collegeName, '[College Name]')}</div>
                             <div>Dated: ............................</div>
                         </div>
                     </div>
@@ -1531,7 +1763,7 @@
 
                     <div class="flex justify-end mt-12 mb-16">
                         <div class="text-center">
-                            <div class="font-bold">${data.officials.principal}</div>
+                            <div class="font-bold">${dispName(data.officials.principal, 'Principal')}</div>
                             <div>Principal</div>
                         </div>
                     </div>
@@ -1542,7 +1774,7 @@
                     <div class="flex justify-between text-sm mb-6">
                         <div>No. <strong>${data.officials.certHeadAcctNo || '............................'}</strong></div>
                         <div class="text-right">
-                            <div class="font-bold">${data.officials.collegeName}</div>
+                            <div class="font-bold">${dispName(data.officials.collegeName, '[College Name]')}</div>
                             <div>Dated: ............................</div>
                         </div>
                     </div>
@@ -1555,7 +1787,7 @@
 
                     <div class="flex justify-end mt-12">
                         <div class="text-center">
-                            <div class="font-bold">${data.officials.principal}</div>
+                            <div class="font-bold">${dispName(data.officials.principal, 'Principal')}</div>
                             <div>Principal</div>
                         </div>
                     </div>
@@ -1608,242 +1840,152 @@
             `;
         },
 
-        // --- 5. Modal Signatories Editor ---
-        openOfficialsModal: function (onSaveCallback) {
-            const current = this.getOfficials();
-            const modalId = 'proforma-officials-modal';
-            let existing = document.getElementById(modalId);
-            if (existing) existing.remove();
+        // --- 6. In-Page Tab Controller ---
+        populateTabInputs: function (officials) {
+            const setVal = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.value = val !== undefined ? val : '';
+            };
 
-            const modalHTML = `
-                <div id="${modalId}" class="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-                    <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-                        <div class="bg-indigo-900 text-white px-6 py-4 flex justify-between items-center">
-                            <div>
-                                <h3 class="font-bold text-lg">Proforma Signatories & College Details</h3>
-                                <p class="text-xs text-indigo-200">Configure institutional headers and official designations for Regular stream reports</p>
-                            </div>
-                            <button onclick="document.getElementById('${modalId}').remove()" class="text-gray-300 hover:text-white text-xl font-bold">&times;</button>
-                        </div>
-                        <div class="p-6 overflow-y-auto space-y-4 text-sm">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div class="md:col-span-2">
-                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">College Name</label>
-                                    <input type="text" id="prof-col-name" value="${current.collegeName}" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Exam Period (e.g. Sept 2025 to Feb 2026)</label>
-                                    <input type="text" id="prof-period" value="${current.period}" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Principal Name</label>
-                                    <input type="text" id="prof-principal" value="${current.principal}" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Chief Superintendent</label>
-                                    <input type="text" id="prof-chief" value="${current.chiefSupdt}" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Senior Assistant Supdt (SAS)</label>
-                                    <input type="text" id="prof-sas" value="${current.seniorSupdt}" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Office Superintendent (OS)</label>
-                                    <input type="text" id="prof-os" value="${current.officeSupdt}" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Head Accountant</label>
-                                    <input type="text" id="prof-acct" value="${current.headAccountant}" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Data Entry Operator</label>
-                                    <input type="text" id="prof-deo" value="${current.dataEntryOperator}" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Clerk</label>
-                                    <input type="text" id="prof-clerk" value="${current.clerk}" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Office Attendant / Peon</label>
-                                    <input type="text" id="prof-peon" value="${current.peon}" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Sweeper</label>
-                                    <input type="text" id="prof-sweeper" value="${current.sweeper}" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Advance Received (Rs.)</label>
-                                    <input type="number" id="prof-advance" value="${current.advanceReceived}" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Advance Cheque / DD Details</label>
-                                    <input type="text" id="prof-advance-details" value="${current.advanceDetails}" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="bg-gray-100 px-6 py-3 flex justify-end gap-3 border-t">
-                            <button onclick="document.getElementById('${modalId}').remove()" class="px-4 py-2 border rounded text-gray-700 hover:bg-gray-200">Cancel</button>
-                            <button id="btn-save-proforma-officials" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold shadow">Save Settings</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            document.body.insertAdjacentHTML('beforeend', modalHTML);
-
-            document.getElementById('btn-save-proforma-officials').addEventListener('click', () => {
-                const updated = {
-                    collegeName: document.getElementById('prof-col-name').value.trim(),
-                    period: document.getElementById('prof-period').value.trim(),
-                    principal: document.getElementById('prof-principal').value.trim(),
-                    chiefSupdt: document.getElementById('prof-chief').value.trim(),
-                    seniorSupdt: document.getElementById('prof-sas').value.trim(),
-                    officeSupdt: document.getElementById('prof-os').value.trim(),
-                    headAccountant: document.getElementById('prof-acct').value.trim(),
-                    dataEntryOperator: document.getElementById('prof-deo').value.trim(),
-                    clerk: document.getElementById('prof-clerk').value.trim(),
-                    peon: document.getElementById('prof-peon').value.trim(),
-                    sweeper: document.getElementById('prof-sweeper').value.trim(),
-                    advanceReceived: Number(document.getElementById('prof-advance').value) || 0,
-                    advanceDetails: document.getElementById('prof-advance-details').value.trim()
-                };
-                UniversityProforma.saveOfficials(updated);
-                document.getElementById(modalId).remove();
-                if (typeof onSaveCallback === 'function') onSaveCallback(updated);
-            });
+            setVal('tab-prof-college-name', officials.collegeName);
+            setVal('tab-prof-period', officials.period);
+            setVal('tab-prof-principal', officials.principal);
+            setVal('tab-prof-chief', officials.chiefSupdt);
+            setVal('tab-prof-sas', officials.seniorSupdt);
+            setVal('tab-prof-os', officials.officeSupdt);
+            setVal('tab-prof-acct', officials.headAccountant);
+            setVal('tab-prof-deo', officials.dataEntryOperator);
+            setVal('tab-prof-clerk', officials.clerk);
+            setVal('tab-prof-peon', officials.peon);
+            setVal('tab-prof-sweeper', officials.sweeper);
+            setVal('tab-prof-advance', officials.advanceReceived);
+            setVal('tab-prof-advance-details', officials.advanceDetails);
         },
 
-        // --- 6. Full Interactive Preview Modal ---
-        openPreviewModal: function (filteredStudents) {
-            const modalId = 'university-proforma-preview-modal';
-            let existing = document.getElementById(modalId);
-            if (existing) existing.remove();
+        getTabInputs: function () {
+            const getVal = (id) => (document.getElementById(id)?.value || '').trim();
+            return {
+                collegeName: getVal('tab-prof-college-name'),
+                period: getVal('tab-prof-period'),
+                principal: getVal('tab-prof-principal'),
+                chiefSupdt: getVal('tab-prof-chief'),
+                seniorSupdt: getVal('tab-prof-sas'),
+                officeSupdt: getVal('tab-prof-os'),
+                headAccountant: getVal('tab-prof-acct'),
+                dataEntryOperator: getVal('tab-prof-deo'),
+                clerk: getVal('tab-prof-clerk'),
+                peon: getVal('tab-prof-peon'),
+                sweeper: getVal('tab-prof-sweeper'),
+                advanceReceived: Number(document.getElementById('tab-prof-advance')?.value) || 0,
+                advanceDetails: getVal('tab-prof-advance-details')
+            };
+        },
 
-            let activeTab = 'all';
-            let data = this.aggregateData(filteredStudents);
-
-            if (!data) {
-                alert("No regular stream students found to generate University Proforma.");
-                return;
+        saveTabOfficials: function (showToast) {
+            const updated = this.getTabInputs();
+            this.saveOfficials(updated);
+            this.refreshDocumentRender();
+            if (showToast && window.UiModal && typeof window.UiModal.toast === 'function') {
+                window.UiModal.toast('Signatories and college details saved successfully!');
             }
+        },
 
-            const tabs = [
-                { id: 'all', label: 'All Documents (Print Package)' },
-                { id: 'partA', label: 'Part A (Daily HR)' },
-                { id: 'partBC', label: 'Part B & C (Supervisory & DEO)' },
-                { id: 'partDEF', label: 'Part D, E, F (Scribes & Summary)' },
-                { id: 'annexureI', label: 'Annexure I (Acquittance Roll)' },
-                { id: 'proformaII', label: 'Proforma II (Contingency)' },
-                { id: 'consolidated', label: 'Consolidated Statement' },
-                { id: 'receipt', label: 'Receipt (Annexure II)' },
-                { id: 'certificates', label: 'Certificates (1 & 2)' }
-            ];
+        onTabFieldChange: function () {
+            // Debounce save and refresh
+            if (this._fieldDebounce) clearTimeout(this._fieldDebounce);
+            this._fieldDebounce = setTimeout(() => {
+                const updated = this.getTabInputs();
+                this.saveOfficials(updated);
+                this.refreshDocumentRender();
+            }, 300);
+        },
 
-            const modalHTML = `
-                <div id="${modalId}" class="fixed inset-0 bg-slate-900/80 z-[9990] flex flex-col p-2 sm:p-6 backdrop-blur-sm animate-fade-in">
-                    <div class="bg-white rounded-xl shadow-2xl flex-1 flex flex-col overflow-hidden max-w-6xl w-full mx-auto border border-gray-300">
-                        <!-- Top Toolbar -->
-                        <div class="bg-gray-900 text-white px-5 py-3 flex flex-wrap justify-between items-center gap-3 shrink-0">
-                            <div class="flex items-center gap-3">
-                                <span class="text-xl">📋</span>
-                                <div>
-                                    <h2 class="font-bold text-base leading-tight">Calicut University Proforma Package (Regular Stream)</h2>
-                                    <p class="text-xs text-gray-300">${data.officials.collegeName} &bull; ${data.period}</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <button id="btn-prof-edit-signatories" class="bg-slate-700 hover:bg-slate-600 text-white text-xs px-3 py-1.5 rounded flex items-center gap-1 font-semibold transition">
-                                    ⚙️ Signatories
-                                </button>
-                                <button id="btn-prof-export-excel" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3.5 py-1.5 rounded flex items-center gap-1 font-bold shadow transition">
-                                    📊 Download Excel (.xlsx)
-                                </button>
-                                <button id="btn-prof-print" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3.5 py-1.5 rounded flex items-center gap-1 font-bold shadow transition">
-                                    🖨️ Print / Save PDF
-                                </button>
-                                <button onclick="document.getElementById('${modalId}').remove()" class="text-gray-400 hover:text-white text-2xl font-bold ml-2 leading-none">&times;</button>
-                            </div>
-                        </div>
+        refreshDocumentRender: function () {
+            const container = document.getElementById('tab-proforma-document-render');
+            if (!container) return;
+            const data = this.aggregateData();
+            container.innerHTML = `<div class="bg-white shadow-xl mx-auto rounded">${this.renderHTML(data, currentActiveSubTab)}</div>`;
+        },
 
-                        <!-- Tab Bar -->
-                        <div class="bg-gray-100 border-b border-gray-300 px-4 pt-2 flex gap-1 overflow-x-auto text-xs shrink-0 select-none">
-                            ${tabs.map(t => `
-                                <button class="tab-btn px-3 py-2 font-bold rounded-t border-t border-l border-r border-transparent transition-colors ${t.id === activeTab ? 'bg-white text-indigo-900 border-gray-300 shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'}" data-tab="${t.id}">
-                                    ${t.label}
-                                </button>
-                            `).join('')}
-                        </div>
+        renderInPageTab: function () {
+            const officials = this.getOfficials();
+            this.populateExamDropdown();
+            this.populateTabInputs(officials);
+            this.onFilterChange();
+        },
 
-                        <!-- Document Body -->
-                        <div id="prof-doc-container" class="flex-1 overflow-y-auto bg-slate-200 p-4 sm:p-8">
-                            <div class="bg-white shadow-xl mx-auto rounded">
-                                ${this.renderHTML(data, activeTab)}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            document.body.insertAdjacentHTML('beforeend', modalHTML);
-
-            // Wire Tabs
-            const tabButtons = document.querySelectorAll(`#${modalId} .tab-btn`);
-            const docContainer = document.getElementById('prof-doc-container');
-
-            tabButtons.forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    tabButtons.forEach(b => {
-                        b.classList.remove('bg-white', 'text-indigo-900', 'border-gray-300', 'shadow-sm');
-                        b.classList.add('text-gray-600', 'hover:bg-gray-200');
-                    });
-                    btn.classList.add('bg-white', 'text-indigo-900', 'border-gray-300', 'shadow-sm');
-                    btn.classList.remove('text-gray-600', 'hover:bg-gray-200');
-
-                    activeTab = btn.getAttribute('data-tab');
-                    data = UniversityProforma.aggregateData(filteredStudents);
-                    docContainer.innerHTML = `<div class="bg-white shadow-xl mx-auto rounded">${UniversityProforma.renderHTML(data, activeTab)}</div>`;
-                });
-            });
-
-            // Wire Excel Download
-            document.getElementById('btn-prof-export-excel').addEventListener('click', () => {
-                data = UniversityProforma.aggregateData(filteredStudents);
-                UniversityProforma.exportExcel(data);
-            });
-
-            // Wire Signatories Modal
-            document.getElementById('btn-prof-edit-signatories').addEventListener('click', () => {
-                UniversityProforma.openOfficialsModal(() => {
-                    data = UniversityProforma.aggregateData(filteredStudents);
-                    docContainer.innerHTML = `<div class="bg-white shadow-xl mx-auto rounded">${UniversityProforma.renderHTML(data, activeTab)}</div>`;
-                });
-            });
-
-            // Wire Print Button
-            document.getElementById('btn-prof-print').addEventListener('click', () => {
-                data = UniversityProforma.aggregateData(filteredStudents);
-                const fullHTML = UniversityProforma.renderHTML(data, 'all');
-                if (typeof window.openPdfPreview === 'function') {
-                    window.openPdfPreview(fullHTML, `Calicut_University_Proforma_${data.officials.period.replace(/\s+/g, '_')}`);
+        setSubTab: function (subTabId) {
+            currentActiveSubTab = subTabId;
+            const buttons = document.querySelectorAll('#subview-remun-proforma .doc-tab-btn');
+            buttons.forEach(btn => {
+                const tab = btn.getAttribute('data-subtab');
+                if (tab === subTabId) {
+                    btn.className = 'doc-tab-btn px-3 py-1.5 rounded-lg font-bold bg-purple-700 text-white shadow-sm transition';
                 } else {
-                    const printWindow = window.open('', '_blank');
-                    printWindow.document.write(`
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                            <title>Calicut University Proforma - ${data.officials.period}</title>
-                        </head>
-                        <body>
-                            ${fullHTML}
-                            <script>
-                                window.onload = function() { window.print(); };
-                            <\/script>
-                        </body>
-                        </html>
-                    `);
-                    printWindow.document.close();
+                    btn.className = 'doc-tab-btn px-3 py-1.5 rounded-lg font-semibold bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition';
                 }
             });
+            this.refreshDocumentRender();
+        },
+
+        printCurrentTab: function () {
+            const data = this.aggregateData();
+            if (!data) return;
+            const fullHTML = this.renderHTML(data, currentActiveSubTab);
+            const periodStr = (data.period || 'Regular').replace(/[^a-zA-Z0-9_-]/g, '_');
+            if (typeof window.openPdfPreview === 'function') {
+                window.openPdfPreview(fullHTML, `Calicut_University_Proforma_${periodStr}`);
+            } else {
+                const printWindow = window.open('', '_blank');
+                printWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head><title>Calicut University Proforma - ${data.period}</title></head>
+                    <body>
+                        ${fullHTML}
+                        <script>window.onload = function() { window.print(); };<\/script>
+                    </body>
+                    </html>
+                `);
+                printWindow.document.close();
+            }
+        }
+    };
+
+    // Global helper functions
+    window.switchProformaDocTab = function (subTabId) {
+        UniversityProforma.setSubTab(subTabId);
+    };
+
+    window.downloadProformaExcelFromTab = function () {
+        const data = UniversityProforma.aggregateData();
+        UniversityProforma.exportExcel(data);
+    };
+
+    window.printProformaPackageFromTab = function () {
+        UniversityProforma.printCurrentTab();
+    };
+
+    window.switchRemunerationTab = function (tab) {
+        const btnStandard = document.getElementById('tab-btn-remun-standard');
+        const btnProforma = document.getElementById('tab-btn-remun-proforma');
+        const subviewStandard = document.getElementById('subview-remun-standard');
+        const subviewProforma = document.getElementById('subview-remun-proforma');
+
+        if (!btnStandard || !btnProforma || !subviewStandard || !subviewProforma) return;
+
+        if (tab === 'proforma') {
+            btnProforma.className = 'remun-tab-btn px-5 py-2.5 rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2 bg-purple-700 text-white';
+            btnStandard.className = 'remun-tab-btn px-5 py-2.5 rounded-lg font-bold text-sm transition-all flex items-center gap-2 bg-white text-indigo-700 border border-indigo-300 hover:bg-indigo-50';
+            subviewStandard.classList.add('hidden');
+            subviewProforma.classList.remove('hidden');
+
+            UniversityProforma.renderInPageTab();
+        } else {
+            btnStandard.className = 'remun-tab-btn px-5 py-2.5 rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2 bg-indigo-600 text-white';
+            btnProforma.className = 'remun-tab-btn px-5 py-2.5 rounded-lg font-bold text-sm transition-all flex items-center gap-2 bg-white text-purple-700 border border-purple-500 hover:bg-purple-50';
+            subviewStandard.classList.remove('hidden');
+            subviewProforma.classList.add('hidden');
         }
     };
 

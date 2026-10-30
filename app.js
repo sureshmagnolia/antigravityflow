@@ -19162,6 +19162,9 @@ async function loadInitialData() {
             if (typeof initRemunerationModule === 'function') initRemunerationModule();
             // Auto-populate exam names when tab opens
             populateBillExamDropdown();
+            if (typeof UniversityProforma !== 'undefined' && typeof UniversityProforma.populateExamDropdown === 'function') {
+                UniversityProforma.populateExamDropdown();
+            }
         });
     }
 
