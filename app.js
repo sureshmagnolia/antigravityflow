@@ -6624,50 +6624,79 @@ if (toggleButton && sidebar) {
 
         // --- 📡 NEW: Scan Metadata Registry for Historical Sessions ---
         const registryRaw = localStorage.getItem('examAllKnownSessions');
-        if (registryRaw) {
-            const registry = JSON.parse(registryRaw);
-            const targetMonthStr = String(month + 1).padStart(2, '0');
-            const targetYearStr = String(year);
+        const historicalMeta = JSON.parse(localStorage.getItem('examHistoricalMeta') || '{}');
+        const activeSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+        const activeAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
 
-            registry.forEach(sessionKey => {
-                const [dateRaw, timeRaw] = sessionKey.split(' | ');
-                // Support both dots and slashes
-                const dParts = dateRaw.trim().split(/[./-]/);
-                if (dParts.length < 3) return;
-                const [d, m, y] = dParts;
-                
-                if (m === targetMonthStr && y === targetYearStr) {
-                    const dayKey = parseInt(d);
-                    const tNorm = timeRaw.toUpperCase();
-                    // Match the logic in common helpers
-                    const isPM = tNorm.includes("PM") || tNorm.includes("AN") || 
-                                 tNorm.startsWith("12:") || tNorm.startsWith("13:");
-                    const sessionKeyId = isPM ? 'pm' : 'am';
+        const registerSessionInMonth = (sessionKey) => {
+            if (!sessionKey || !sessionKey.includes('|')) return;
+            const [dateRaw, timeRaw] = sessionKey.split('|').map(s => s.trim());
+            if (!dateRaw || !timeRaw) return;
+            const dParts = dateRaw.split(/[./-]/);
+            if (dParts.length < 3) return;
+            const [d, m, y] = dParts;
 
+            if (m === targetMonthStr && y === targetYearStr) {
+                const dayKey = parseInt(d, 10);
+                const tNorm = timeRaw.toUpperCase();
+                const isPM = tNorm.includes("PM") || tNorm.includes("AN") || 
+                             tNorm.startsWith("12:") || tNorm.startsWith("13:");
+                const sessionKeyId = isPM ? 'pm' : 'am';
+
+                // Verify if this session actually has real data or is just an empty placeholder
+                const meta = historicalMeta[sessionKey];
+                const slot = activeSlots[sessionKey];
+                const allot = activeAllotments[sessionKey];
+
+                const metaStudents = (meta && typeof meta.studentCount === 'number') ? meta.studentCount : 0;
+                const slotAssignedCount = (slot && Array.isArray(slot.assigned)) ? slot.assigned.length : 0;
+                const allotCount = Array.isArray(allot) ? allot.length : 0;
+
+                // Only mark as active if it has actual students, allotted rooms, or assigned staff
+                if (metaStudents > 0 || slotAssignedCount > 0 || allotCount > 0) {
                     if (!monthData[dayKey]) {
                         monthData[dayKey] = {
                             am: { students: 0, regCount: 0, othCount: 0, scribeCount: 0, isMetadata: true },
                             pm: { students: 0, regCount: 0, othCount: 0, scribeCount: 0, isMetadata: true }
                         };
                     }
-                    // If no real students yet, mark as active so the red bubble appears
-                    if (monthData[dayKey][sessionKeyId].students === 0) {
-                        monthData[dayKey][sessionKeyId].students = "—"; // Indicator for 'Known via Metadata'
+                    
+                    const targetStats = monthData[dayKey][sessionKeyId];
+                    if (targetStats.students === 0) {
+                        if (metaStudents > 0) {
+                            targetStats.students = metaStudents;
+                            targetStats.regCount = (typeof meta.normalCount === 'number') ? meta.normalCount : metaStudents;
+                            targetStats.scribeCount = meta.scribeCount || 0;
+                        } else if (allotCount > 0 || slotAssignedCount > 0) {
+                            targetStats.students = "—"; // Indicator for active slot / allotment
+                            if (slot && slot.required) {
+                                targetStats.regCount = (slot.required - (slot.reserveCount || 1)) * 30;
+                            }
+                        }
                     }
                 }
-            });
+            }
+        };
+
+        const targetMonthStr = String(month + 1).padStart(2, '0');
+        const targetYearStr = String(year);
+
+        if (registryRaw) {
+            const registry = JSON.parse(registryRaw);
+            registry.forEach(registerSessionInMonth);
         }
 
-        // Keep your existing allStudentData scan...
+        // Also scan slots and historicalMeta for any valid session of this month
+        Object.keys(historicalMeta).forEach(registerSessionInMonth);
+        Object.keys(activeSlots).forEach(registerSessionInMonth);
+
+        // Keep your existing allStudentData scan (Authoritative live data)...
         if (allStudentData && allStudentData.length > 0) {
-
-            const targetMonthStr = String(month + 1).padStart(2, '0');
-            const targetYearStr = String(year);
-
             allStudentData.forEach(s => {
+                if (!s.Date || !s.Time) return;
                 const [d, m, y] = s.Date.split('.');
                 if (m === targetMonthStr && y === targetYearStr) {
-                    const dayKey = parseInt(d);
+                    const dayKey = parseInt(d, 10);
                     const timeStr = s.Time.toUpperCase();
                     const isPM = timeStr.includes("PM") || (timeStr.includes("12:") && !timeStr.includes("AM"));
                     const sessionKey = isPM ? 'pm' : 'am';
@@ -6679,14 +6708,17 @@ if (toggleButton && sidebar) {
 
                     const stats = monthData[dayKey][sessionKey];
                     
-                    // --- 🛠️ FIX: Clean the '—' placeholder back to 0 before we do math ---
-                    if (stats.students === "—") {
+                    // Reset placeholder values when real loaded student data is present
+                    if (typeof stats.students === 'string' || stats.isMetadata) {
                         stats.students = 0;
+                        stats.regCount = 0;
+                        stats.othCount = 0;
+                        stats.scribeCount = 0;
+                        stats.isMetadata = false;
                     }
                     stats.students++;
 
                     if (scribeRegNos.has(getRegNo(s))) {
-
                         stats.scribeCount++;
                     } else {
                         if (!s.Stream || s.Stream === "Regular") stats.regCount++;
@@ -6696,7 +6728,7 @@ if (toggleButton && sidebar) {
             });
         }
 
-        let html = "";
+let html = "";
         for (let i = 0; i < firstDayIndex; i++) html += `<div class="bg-gray-50 min-h-[90px] border-r border-b border-gray-100"></div>`;
 
         for (let day = 1; day <= daysInMonth; day++) {
@@ -6790,7 +6822,7 @@ if (toggleButton && sidebar) {
                                 <span class="md:hidden">FN</span>
                                 <span class="hidden md:inline">Morning (FN)</span>
                             </strong>
-                            <span class='text-gray-900 font-bold text-xs'>${data.am.students === "—" ? "Past Session (Click to Load)" : data.am.students}</span>
+                            <span class='text-gray-900 font-bold text-xs'>${data.am.students === "—" ? "Past Session (Click to Load)" : (typeof data.am.students === 'number' ? `${data.am.students} Students` : data.am.students)}</span>
                         </div>
                         <div class="mt-1 bg-gray-50 p-1.5 rounded border border-gray-100">
                             <div class="flex justify-between text-xs font-bold text-gray-700">
@@ -6823,7 +6855,7 @@ if (toggleButton && sidebar) {
                                 <span class="md:hidden">AN</span>
                                 <span class="hidden md:inline">Afternoon (AN)</span>
                             </strong>
-                           <span class='text-gray-900 font-bold text-xs'>${data.pm.students === "—" ? "Past Session (Click to Load)" : data.pm.students}</span>
+                           <span class='text-gray-900 font-bold text-xs'>${data.pm.students === "—" ? "Past Session (Click to Load)" : (typeof data.pm.students === 'number' ? `${data.pm.students} Students` : data.pm.students)}</span>
                         </div>
                         <div class="mt-1 bg-gray-50 p-1.5 rounded border border-gray-100">
                             <div class="flex justify-between text-xs font-bold text-gray-700">
