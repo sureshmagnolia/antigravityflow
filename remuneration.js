@@ -13,7 +13,7 @@ const RATE_TEMPLATES = {
         // Scheme (Legacy or Calicut_2026)
         calculation_scheme: "Calicut_2026",
         // Fixed
-        data_entry_operator: 890, accountant: 1000, contingent_charge: 0.40,
+        data_entry_operator: 890, accountant: 1000, contingent_charge: 0.40, scribe_rate: 150,
         // Flags
         is_sde_mode: false, has_peon: false
     },
@@ -144,6 +144,7 @@ function renderRateConfigForm() {
                     <h4 class="font-semibold text-xs text-blue-600 uppercase border-b pb-1">Fixed / Allowances</h4>
                     ${createRateInput('Data Entry', 'data_entry_operator', rates.data_entry_operator, disabledAttr, bgClass)}
                     ${createRateInput('Accountant', 'accountant', rates.accountant, disabledAttr, bgClass)}
+                    ${createRateInput('Amanuensis / Scribe', 'scribe_rate', rates.scribe_rate || 150, disabledAttr, bgClass)}
                     ${createRateInput('Contingency', 'contingent_charge', rates.contingent_charge, disabledAttr, bgClass)}
                 </div>
             </div>

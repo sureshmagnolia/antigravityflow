@@ -118,6 +118,37 @@
 
     const UniversityProforma = {
         // --- 1. Officials Management (NO HARDCODING) ---
+        // --- 1b. Rate Card Config Integration ---
+        getRates: function () {
+            let savedConfig = {};
+            try {
+                const raw = localStorage.getItem('examRemunerationConfig');
+                if (raw) savedConfig = JSON.parse(raw);
+            } catch (e) {}
+
+            const reg = savedConfig['Regular'] || {};
+
+            return {
+                chiefSupdt: (Number(reg.chief_supdt) > 0) ? Number(reg.chief_supdt) : 123,
+                seniorSupdt: (Number(reg.senior_supdt) > 0) ? Number(reg.senior_supdt) : 105,
+                officeSupdt: (Number(reg.office_supdt) > 0) ? Number(reg.office_supdt) : 90,
+                invigilator: (Number(reg.invigilator) > 0) ? Number(reg.invigilator) : 90,
+                clerkFull: (Number(reg.clerk_full_slab) > 0) ? Number(reg.clerk_full_slab) : 113,
+                clerkSlab1: (Number(reg.clerk_slab_1) > 0) ? Number(reg.clerk_slab_1) : 38,
+                clerkSlab2: (Number(reg.clerk_slab_2) > 0) ? Number(reg.clerk_slab_2) : 75,
+                peonFull: (Number(reg.peon_full_slab || reg.clerk_full_slab) > 0) ? Number(reg.peon_full_slab || reg.clerk_full_slab) : 113,
+                peonSlab1: (Number(reg.peon_slab_1 || reg.clerk_slab_1) > 0) ? Number(reg.peon_slab_1 || reg.clerk_slab_1) : 38,
+                peonSlab2: (Number(reg.peon_slab_2 || reg.clerk_slab_2) > 0) ? Number(reg.peon_slab_2 || reg.clerk_slab_2) : 75,
+                sweeperRate: (Number(reg.sweeper_rate) > 0) ? Number(reg.sweeper_rate) : 35,
+                sweeperMin: (Number(reg.sweeper_min) > 0) ? Number(reg.sweeper_min) : 25,
+                dataEntryOperator: (Number(reg.data_entry_operator) > 0) ? Number(reg.data_entry_operator) : 890,
+                headAccountant: (Number(reg.accountant) > 0) ? Number(reg.accountant) : 1000,
+                scribeRate: (Number(reg.scribe_rate || reg.amanuensis_rate) > 0) ? Number(reg.scribe_rate || reg.amanuensis_rate) : 150,
+                contingencyPerCandidate: (Number(reg.contingent_charge_regular || reg.contingency_rate) > 0) ? Number(reg.contingent_charge_regular || reg.contingency_rate) : 4.00
+            };
+        },
+
+
         getOfficials: function () {
             const saved = localStorage.getItem(PROFORMA_OFFICIALS_KEY);
             let conf = saved ? JSON.parse(saved) : {};
@@ -353,6 +384,7 @@
         // --- 3. Data Aggregator for Regular Stream ---
         aggregateData: function (filteredStudents) {
             const officials = this.getOfficials();
+            const rates = this.getRates();
             let students = filteredStudents;
 
             if (!students) {
@@ -409,7 +441,15 @@
 
             // External lookups
             const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
+            const scribeAllotmentRaw = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
             const scribeRegSet = new Set(scribeListRaw.map(sc => (sc.regNo || sc.registerNo || sc.candidateRegNo || '').trim().toLowerCase()).filter(Boolean));
+            Object.values(scribeAllotmentRaw).forEach(allotMap => {
+                if (allotMap && typeof allotMap === 'object') {
+                    Object.keys(allotMap).forEach(r => {
+                        if (r && r.trim()) scribeRegSet.add(r.trim().toLowerCase());
+                    });
+                }
+            });
             const invigMapping = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
             const roomAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
             const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
@@ -541,21 +581,27 @@
                     staffDutyCounts[stKey] = (staffDutyCounts[stKey] || 0) + 1;
                 });
 
-                // Math according to Calicut University rules
-                const invigAmt = dateInvigCount * 90;
+                // Math according to Calicut University rules using configured Rate Card
+                const invigAmt = dateInvigCount * rates.invigilator;
 
                 // Clerk & Peon formula:
-                // 113 * INT(Total/100) + IF(MOD(Total, 100) <= 30, 38, IF(MOD(Total, 100) <= 60, 75, 113))
+                // FullSlab * INT(Total/100) + Slab(rem)
                 const rem = total % 100;
-                let slab = 38;
-                if (rem > 60) slab = 113;
-                else if (rem > 30) slab = 75;
-                const clerkAmt = (113 * Math.floor(total / 100)) + (total > 0 ? slab : 0);
-                const peonAmt = clerkAmt;
+                let clerkSlab = rates.clerkSlab1;
+                if (rem > 60) clerkSlab = rates.clerkFull;
+                else if (rem > 30) clerkSlab = rates.clerkSlab2;
+                else if (rem === 0) clerkSlab = 0;
 
-                // Sweeper formula:
-                // MAX(35, CEILING(Total/100) * 25)
-                const sweeperAmt = total > 0 ? Math.max(35, Math.ceil(total / 100) * 25) : 0;
+                let peonSlab = rates.peonSlab1;
+                if (rem > 60) peonSlab = rates.peonFull;
+                else if (rem > 30) peonSlab = rates.peonSlab2;
+                else if (rem === 0) peonSlab = 0;
+
+                const clerkAmt = (rates.clerkFull * Math.floor(total / 100)) + (total > 0 ? clerkSlab : 0);
+                const peonAmt = (rates.peonFull * Math.floor(total / 100)) + (total > 0 ? peonSlab : 0);
+
+                // Sweeper formula: MAX(baseRate, CEILING(Total/100) * per100Rate)
+                const sweeperAmt = total > 0 ? Math.max(rates.sweeperRate, Math.ceil(total / 100) * rates.sweeperMin) : 0;
 
                 const hasFN = (fn + dItem.fnScribes) > 0 ? 1 : 0;
                 const hasAN = (an + dItem.anScribes) > 0 ? 1 : 0;
@@ -595,28 +641,28 @@
 
             const partATotalAmt = sumInvigAmt + sumClerkAmt + sumPeonAmt + sumSweeperAmt;
 
-            // Part B: Supervision
+            // Part B: Supervision (from Rate Card)
             const totalSessions = sumFNSessions + sumANSessions;
-            const csAmt = totalSessions * 123;
-            const sasAmt = totalSessions * 105;
-            const osAmt = totalSessions * 90;
+            const csAmt = totalSessions * rates.chiefSupdt;
+            const sasAmt = totalSessions * rates.seniorSupdt;
+            const osAmt = totalSessions * rates.officeSupdt;
             const partBTotalAmt = csAmt + sasAmt + osAmt;
 
-            // Part C: Data Entry Operator
-            const partCAmt = 890;
+            // Part C: Data Entry Operator (from Rate Card)
+            const partCAmt = rates.dataEntryOperator;
 
-            // Part D: Amanuensis / Scribes
+            // Part D: Amanuensis / Scribes (from Rate Card / U.O. No.2433/2022/PB)
             const scribeDuties = sumScribe;
-            const scribeRate = 150;
+            const scribeRate = rates.scribeRate;
             const partDAmt = scribeDuties * scribeRate;
 
-            // Part E: Accountant
-            const partEAmt = 1000;
+            // Part E: Accountant (from Rate Card)
+            const partEAmt = rates.headAccountant;
 
             // Part F: Grand Total
             const grandTotalProformaI = partATotalAmt + partBTotalAmt + partCAmt + partDAmt + partEAmt;
 
-            // Proforma II: Contingency
+            // Proforma II: Contingency (@ Rs. 4/- or from Rate Card)
             const examList = Object.keys(examRegistrations).sort();
             const proformaIIRows = [];
             let totalContingencyCandidates = 0;
@@ -624,14 +670,14 @@
 
             examList.forEach((eName, idx) => {
                 const count = examRegistrations[eName].size;
-                const amt = count * 4;
+                const amt = count * rates.contingencyPerCandidate;
                 totalContingencyCandidates += count;
                 totalContingencyAmt += amt;
                 proformaIIRows.push({
                     slNo: idx + 1,
                     examName: eName,
                     count: count,
-                    rate: 4,
+                    rate: rates.contingencyPerCandidate,
                     amount: amt
                 });
             });
@@ -651,38 +697,35 @@
             });
 
             const staffKeys = Object.keys(staffDutyCounts).sort();
-            if (staffKeys.length > 0) {
+            const hasInvigilationAttendance = staffKeys.length > 0;
+
+            if (hasInvigilationAttendance) {
                 staffKeys.forEach((key) => {
                     const dCount = staffDutyCounts[key];
                     const info = staffInfoMap[key.toLowerCase()] || { name: key };
                     const parsed = splitTitleAndName(info.name);
-                    const amount = dCount * 90;
+                    const amount = dCount * rates.invigilator;
                     invigDutyTally += dCount;
                     invigilatorRows.push({
                         title: parsed.title,
                         name: parsed.name,
                         designation: 'Invigilator',
                         duties: dCount,
-                        rate: 90,
+                        rate: rates.invigilator,
                         amount: amount
                     });
                 });
-            } else {
-                invigilatorRows.push({
-                    title: '',
-                    name: 'Allotted Invigilation Staff (Summary)',
-                    designation: 'Invigilator',
-                    duties: sumInvigCount,
-                    rate: 90,
-                    amount: sumInvigAmt
-                });
-                invigDutyTally = sumInvigCount;
             }
 
-            const annexureITotal = partBTotalAmt + partCAmt + partEAmt + sumClerkAmt + sumPeonAmt + sumSweeperAmt + sumInvigAmt;
+            // Annexure I total is only non-zero if invigilation attendance data exists
+            const annexureITotal = hasInvigilationAttendance
+                ? (partBTotalAmt + partCAmt + partEAmt + sumClerkAmt + sumPeonAmt + sumSweeperAmt + sumInvigAmt)
+                : 0;
 
             return {
                 officials: officials,
+                rates: rates,
+                hasInvigilationAttendance: hasInvigilationAttendance,
                 startDateStr: formatDateSlash(minDate),
                 endDateStr: formatDateSlash(maxDate),
                 startDateDot: formatDateDot(minDate),
@@ -772,13 +815,13 @@
                     r.scribe,
                     { t: 'n', f: `SUM(C${rowNum}:E${rowNum})`, v: r.total },
                     r.invigCount,
-                    { t: 'n', f: `G${rowNum}*90`, v: r.invigAmt },
+                    { t: 'n', f: `G${rowNum}*${data.rates.invigilator}`, v: r.invigAmt },
                     r.clerkCount,
-                    { t: 'n', f: `113*INT(F${rowNum}/100) + IF(F${rowNum}-100*INT(F${rowNum}/100) <= 30, 38, IF(F${rowNum}-100*INT(F${rowNum}/100) <= 60, 75, 113))`, v: r.clerkAmt },
+                    { t: 'n', f: `${data.rates.clerkFull}*INT(F${rowNum}/100) + IF(F${rowNum}-100*INT(F${rowNum}/100) <= 30, ${data.rates.clerkSlab1}, IF(F${rowNum}-100*INT(F${rowNum}/100) <= 60, ${data.rates.clerkSlab2}, ${data.rates.clerkFull}))`, v: r.clerkAmt },
                     r.peonCount,
-                    { t: 'n', f: `113*INT(F${rowNum}/100) + IF(F${rowNum}-100*INT(F${rowNum}/100) <= 30, 38, IF(F${rowNum}-100*INT(F${rowNum}/100) <= 60, 75, 113))`, v: r.peonAmt },
+                    { t: 'n', f: `${data.rates.peonFull}*INT(F${rowNum}/100) + IF(F${rowNum}-100*INT(F${rowNum}/100) <= 30, ${data.rates.peonSlab1}, IF(F${rowNum}-100*INT(F${rowNum}/100) <= 60, ${data.rates.peonSlab2}, ${data.rates.peonFull}))`, v: r.peonAmt },
                     r.sweeperCount,
-                    { t: 'n', f: `MAX(35, CEILING(F${rowNum}/100, 1) * 25)`, v: r.sweeperAmt }
+                    { t: 'n', f: `MAX(${data.rates.sweeperRate}, CEILING(F${rowNum}/100, 1) * ${data.rates.sweeperMin})`, v: r.sweeperAmt }
                 ]);
             });
 
@@ -846,14 +889,14 @@
                 ["PART B"],
                 ["Total No. of Sessions:                      ", "", "FN =  ", { t: 'n', f: `'Part A'!Y${S}`, v: data.sumFNSessions }, "AN=  ", { t: 'n', f: `'Part A'!Z${S}`, v: data.sumANSessions }, "Total=", { t: 'n', f: "D3+F3", v: data.totalSessions }],
                 ["Sl.No.", "Designation", "Total   No.   of\nSessions", "", "Amount       per\nsession Rs.", "", "Total\nRs."],
-                [1, "Chief Superintendent", { t: 'n', f: "$H$3", v: data.totalSessions }, "", 123, "", { t: 'n', f: "C5*E5", v: data.csAmt }],
-                [2, "Senior Assistant Superintendent", { t: 'n', f: "$H$3", v: data.totalSessions }, "", 105, "", { t: 'n', f: "C6*E6", v: data.sasAmt }],
-                [3, "Office Superintendent", { t: 'n', f: "$H$3", v: data.totalSessions }, "", 90, "", { t: 'n', f: "C7*E7", v: data.osAmt }],
+                [1, "Chief Superintendent", { t: 'n', f: "$H$3", v: data.totalSessions }, "", data.rates.chiefSupdt, "", { t: 'n', f: "C5*E5", v: data.csAmt }],
+                [2, "Senior Assistant Superintendent", { t: 'n', f: "$H$3", v: data.totalSessions }, "", data.rates.seniorSupdt, "", { t: 'n', f: "C6*E6", v: data.sasAmt }],
+                [3, "Office Superintendent", { t: 'n', f: "$H$3", v: data.totalSessions }, "", data.rates.officeSupdt, "", { t: 'n', f: "C7*E7", v: data.osAmt }],
                 ["", "Total", "", "", "", "", { t: 'n', f: "SUM(G5:G7)", v: data.partBTotalAmt }],
                 [`Rs. ${data.partBTotalAmt}/- ( Rupees ${data.partBTotalWords} only)`],
                 ["PART C"],
-                ["Designation", "Rate @890/- for odd and\neven semester examination", "Amount\nRs."],
-                ["Data Entry Operator", offName(data.officials.dataEntryOperator), 890],
+                ["Designation", `Rate @${data.rates.dataEntryOperator}/- for odd and\neven semester examination`, "Amount\nRs."],
+                ["Data Entry Operator", offName(data.officials.dataEntryOperator), data.rates.dataEntryOperator],
                 ["Rs.890/-(Rupees Eight hundred and Ninety only)"]
             ];
 
@@ -866,14 +909,14 @@
             const wsDEF_data = [
                 ["PART D"],
                 ["Designation", "", "No. of Candidates permitted to\nutilize scribe", "", "Rate", "", "Total No. of Duties performed", "", "Total Amount"],
-                ["Amanuensis", "", data.uniqueScribesCount, "", 150, "", { t: 'n', f: `'Part A'!E${S}`, v: data.scribeDuties }, "", { t: 'n', f: "E3*G3", v: data.partDAmt }],
+                ["Amanuensis", "", data.uniqueScribesCount, "", data.rates.scribeRate, "", { t: 'n', f: `'Part A'!E${S}`, v: data.scribeDuties }, "", { t: 'n', f: "E3*G3", v: data.partDAmt }],
                 ["Total", "", "", "", "", "", "", "", { t: 'n', f: "SUM(I3)", v: data.partDAmt }],
                 ["* U. O. No.2433/2022/PB dtd.28.11.2022"],
                 ["Scribe orders are attached"],
                 [],
                 ["PART E"],
-                ["Designation", "", "", "Rate @1000/- for odd and\neven semester examination", "", "", "", "Amount\nRs."],
-                ["Accountant", "", "", offName(data.officials.headAccountant), "", "", "", 1000],
+                ["Designation", "", "", `Rate @${data.rates.headAccountant}/- for odd and\neven semester examination`, "", "", "", "Amount\nRs."],
+                ["Accountant", "", "", offName(data.officials.headAccountant), "", "", "", data.rates.headAccountant],
                 ["Rs.1000/-(Rupees One Thousand only)"],
                 [],
                 [],
@@ -953,19 +996,21 @@
                 "", "", "( Office Seal)", "", "", chiefLabel
             ]);
 
-            const wsAnn1 = XLSX.utils.aoa_to_sheet(wsAnn1_data);
-            wsAnn1['!merges'] = [
-                { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
-                { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
-                { s: { r: 2, c: 0 }, e: { r: 2, c: 5 } },
-                { s: { r: 3, c: 1 }, e: { r: 3, c: 2 } },
-                { s: { r: totalInvRow - 1, c: 0 }, e: { r: totalInvRow - 1, c: 3 } }
-            ];
-            wsAnn1['!cols'] = [
-                { wch: 6 }, { wch: 8 }, { wch: 24 }, { wch: 18 }, { wch: 12 }, { wch: 16 },
-                { wch: 4 }, { wch: 4 }, { wch: 8 }, { wch: 24 }, { wch: 8 }, { wch: 10 }
-            ];
-            XLSX.utils.book_append_sheet(wb, wsAnn1, "Annexure I");
+            if (data.hasInvigilationAttendance) {
+                const wsAnn1 = XLSX.utils.aoa_to_sheet(wsAnn1_data);
+                wsAnn1['!merges'] = [
+                    { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
+                    { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
+                    { s: { r: 2, c: 0 }, e: { r: 2, c: 5 } },
+                    { s: { r: 3, c: 1 }, e: { r: 3, c: 2 } },
+                    { s: { r: totalInvRow - 1, c: 0 }, e: { r: totalInvRow - 1, c: 3 } }
+                ];
+                wsAnn1['!cols'] = [
+                    { wch: 6 }, { wch: 8 }, { wch: 24 }, { wch: 18 }, { wch: 12 }, { wch: 16 },
+                    { wch: 4 }, { wch: 4 }, { wch: 8 }, { wch: 24 }, { wch: 8 }, { wch: 10 }
+                ];
+                XLSX.utils.book_append_sheet(wb, wsAnn1, "Annexure I");
+            }
 
             // SHEET 5: Proforma II (Contingency)
             const wsII_data = [
@@ -983,7 +1028,7 @@
                     ex.examName,
                     ex.count,
                     "",
-                    { t: 'n', f: `C${rNum}*4`, v: ex.amount }
+                    { t: 'n', f: `C${rNum}*${data.rates.contingencyPerCandidate}`, v: ex.amount }
                 ]);
             });
 
@@ -1331,21 +1376,21 @@
                                 <td class="text-center">1</td>
                                 <td>Chief Superintendent</td>
                                 <td class="text-center">${data.totalSessions}</td>
-                                <td class="text-right">₹123</td>
+                                <td class="text-right">₹${data.rates.chiefSupdt}</td>
                                 <td class="text-right font-bold">₹${data.csAmt.toLocaleString('en-IN')}</td>
                             </tr>
                             <tr>
                                 <td class="text-center">2</td>
                                 <td>Senior Assistant Superintendent</td>
                                 <td class="text-center">${data.totalSessions}</td>
-                                <td class="text-right">₹105</td>
+                                <td class="text-right">₹${data.rates.seniorSupdt}</td>
                                 <td class="text-right font-bold">₹${data.sasAmt.toLocaleString('en-IN')}</td>
                             </tr>
                             <tr>
                                 <td class="text-center">3</td>
                                 <td>Office Superintendent</td>
                                 <td class="text-center">${data.totalSessions}</td>
-                                <td class="text-right">₹90</td>
+                                <td class="text-right">₹${data.rates.officeSupdt}</td>
                                 <td class="text-right font-bold">₹${data.osAmt.toLocaleString('en-IN')}</td>
                             </tr>
                             <tr class="font-bold" style="background: #f7f7f7;">
@@ -1372,7 +1417,7 @@
                         <tbody>
                             <tr>
                                 <td>Data Entry Operator</td>
-                                <td>${dispName(data.officials.dataEntryOperator, '[Enter DEO Name]')} (Rate @890/- for odd & even sem)</td>
+                                <td>${dispName(data.officials.dataEntryOperator, '[Enter DEO Name]')} (Rate @${data.rates.dataEntryOperator}/- for odd & even sem)</td>
                                 <td class="text-right font-bold">₹${data.partCAmt}</td>
                             </tr>
                         </tbody>
@@ -1434,7 +1479,7 @@
                         <tbody>
                             <tr>
                                 <td>Accountant</td>
-                                <td>${dispName(data.officials.headAccountant, '[Enter Accountant Name]')} (Rate @1000/- for odd & even sem)</td>
+                                <td>${dispName(data.officials.headAccountant, '[Enter Accountant Name]')} (Rate @${data.rates.headAccountant}/- for odd & even sem)</td>
                                 <td class="text-right font-bold">₹${data.partEAmt}</td>
                             </tr>
                         </tbody>
@@ -1474,8 +1519,26 @@
                 </div>
             `;
 
-            // HTML Section: Annexure I (Acquittance Roll)
-            const renderAnnexureI = () => `
+            // HTML Section: Annexure I (Acquittance Roll) - Only if attendance data exists
+            const renderAnnexureI = () => {
+                if (!data.hasInvigilationAttendance) {
+                    return `
+                        <div class="proforma-page" style="text-align: center; padding: 60px 24px;">
+                            <div style="font-size: 36px; margin-bottom: 12px;">📋</div>
+                            <div class="font-bold text-xl text-gray-800 uppercase tracking-wide">ANNEXURE - I (Acquittance Roll)</div>
+                            <div class="text-sm font-semibold text-amber-800 mt-3 max-w-md mx-auto bg-amber-50 border border-amber-200 rounded p-3">
+                                ⚠️ Annexure I is omitted for this claim because individual invigilator duty or attendance mapping data is not recorded in the software.
+                            </div>
+                            <div class="text-xs text-gray-600 mt-4 max-w-lg mx-auto bg-gray-50 p-4 border border-gray-300 rounded text-left leading-relaxed">
+                                <strong>Calicut University Regulation Note:</strong><br>
+                                Annexure I is an individual voucher roll where teachers sign upon receiving cash/cheque disbursement.
+                                When colleges disburse invigilation remuneration offline or have not mapped invigilators inside ExamFlow,
+                                <strong>Proforma I (Parts A to F), Proforma II, and the Consolidated Statement</strong> constitute the complete valid university submission.
+                            </div>
+                        </div>
+                    `;
+                }
+                return `
                 <div class="proforma-page">
                     <div class="header-main">
                         <div class="font-bold text-lg">ANNEXURE - I</div>
@@ -1590,7 +1653,8 @@
                         </div>
                     </div>
                 </div>
-            `;
+                `;
+            };
 
             // HTML Section: Proforma II (Contingency)
             const renderProformaII = () => `
@@ -1618,7 +1682,7 @@
                                     <td class="text-center">${ex.slNo}</td>
                                     <td>${ex.examName}</td>
                                     <td class="text-center font-bold">${ex.count}</td>
-                                    <td class="text-center">@ ₹4/-</td>
+                                    <td class="text-center">@ ₹${data.rates.contingencyPerCandidate}/-</td>
                                     <td class="text-right font-mono font-bold">₹${ex.amount.toLocaleString('en-IN')}</td>
                                 </tr>
                             `).join('')}
@@ -1803,8 +1867,7 @@
                     ${renderPartBC()}
                     <div class="page-break"></div>
                     ${renderPartDEF()}
-                    <div class="page-break"></div>
-                    ${renderAnnexureI()}
+                    ${data.hasInvigilationAttendance ? `<div class="page-break"></div>` + renderAnnexureI() : ''}
                     <div class="page-break"></div>
                     ${renderProformaII()}
                     <div class="page-break"></div>
