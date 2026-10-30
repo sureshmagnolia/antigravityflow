@@ -163,11 +163,31 @@
         getRates: function () {
             let savedConfig = {};
             try {
-                const raw = localStorage.getItem('examRemunerationConfig');
-                if (raw) savedConfig = JSON.parse(raw);
+                if (typeof window !== 'undefined' && window.allRates && typeof window.allRates === 'object' && Object.keys(window.allRates).length > 0) {
+                    savedConfig = window.allRates;
+                } else {
+                    const raw = localStorage.getItem('examRemunerationConfig');
+                    if (raw) savedConfig = JSON.parse(raw);
+                }
             } catch (e) {}
 
-            const sde = savedConfig['SDE_Default'] || savedConfig['EDE'] || savedConfig['Distance'] || {};
+            // Match direct key or search through keys
+            let sde = savedConfig['EDE'] || savedConfig['SDE'] || savedConfig['Distance'] || savedConfig['Other'] || savedConfig['SDE_Default'];
+
+            if (!sde) {
+                for (const k of Object.keys(savedConfig)) {
+                    const lk = k.toLowerCase();
+                    if (lk === 'ede' || lk === 'sde' || lk === 'distance' || lk === 'other' || lk.includes('sde') || lk.includes('distance') || lk.includes('ede')) {
+                        sde = savedConfig[k];
+                        break;
+                    }
+                    if (savedConfig[k] && savedConfig[k].is_sde_mode) {
+                        sde = savedConfig[k];
+                        break;
+                    }
+                }
+            }
+            if (!sde) sde = {};
 
             return {
                 invigilator: (Number(sde.invigilator) > 0) ? Number(sde.invigilator) : 350,

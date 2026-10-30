@@ -178,6 +178,7 @@ function renderRateConfigForm() {
                     <h4 class="font-semibold text-xs text-orange-600 uppercase border-b pb-1">Ratios & Allowances</h4>
                     ${createRateInput('Invig Ratio', 'invigilator_ratio', rates.invigilator_ratio, disabledAttr, bgClass)}
                     ${createRateInput('Clerk/Peon Ratio', 'clerk_ratio', rates.clerk_ratio, disabledAttr, bgClass)}
+                    ${createRateInput('Amanuensis / Scribe', 'scribe_rate', rates.scribe_rate || 150, disabledAttr, bgClass)}
                     ${createRateInput('Contingency', 'contingent_charge', rates.contingent_charge, disabledAttr, bgClass)}
                 </div>
             </div>
@@ -209,6 +210,12 @@ function renderRateConfigForm() {
                 }
                 
                 localStorage.setItem(REMUNERATION_CONFIG_KEY, JSON.stringify(allRates));
+                if (typeof UniversityProforma !== 'undefined' && typeof UniversityProforma.refreshDocumentRender === 'function') {
+                    UniversityProforma.refreshDocumentRender();
+                }
+                if (typeof SdeProforma !== 'undefined' && typeof SdeProforma.refreshDocumentRender === 'function') {
+                    SdeProforma.refreshDocumentRender();
+                }
             });
         });
     }
@@ -246,6 +253,12 @@ window.toggleRemunerationLock = function() {
         // 2. Sync to Cloud (V2 Modular Target: 'settings')
         if(typeof syncDataToCloud === 'function') {
             syncDataToCloud('settings');
+        }
+        if (typeof UniversityProforma !== 'undefined' && typeof UniversityProforma.refreshDocumentRender === 'function') {
+            UniversityProforma.refreshDocumentRender();
+        }
+        if (typeof SdeProforma !== 'undefined' && typeof SdeProforma.refreshDocumentRender === 'function') {
+            SdeProforma.refreshDocumentRender();
         } else {
             console.warn("Cloud sync not available.");
         }
@@ -445,5 +458,6 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
 window.initRemunerationModule = initRemunerationModule;
 window.renderRateConfigForm = renderRateConfigForm;
 window.generateBillForSessions = generateBillForSessions;
+window.allRates = allRates;
 
 loadRates();

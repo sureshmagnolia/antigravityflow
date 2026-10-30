@@ -122,8 +122,12 @@
         getRates: function () {
             let savedConfig = {};
             try {
-                const raw = localStorage.getItem('examRemunerationConfig');
-                if (raw) savedConfig = JSON.parse(raw);
+                if (typeof window !== 'undefined' && window.allRates && window.allRates['Regular']) {
+                    savedConfig = window.allRates;
+                } else {
+                    const raw = localStorage.getItem('examRemunerationConfig');
+                    if (raw) savedConfig = JSON.parse(raw);
+                }
             } catch (e) {}
 
             const reg = savedConfig['Regular'] || {};
