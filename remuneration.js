@@ -30,7 +30,7 @@ const RATE_TEMPLATES = {
         peon_single: 250, peon_double: 400, peon_ratio: 500,
         sweeper_single: 225, sweeper_double: 350, sweeper_ratio: 100,
 
-        data_entry_operator: 0, accountant: 0, contingent_charge: 2.00,
+        data_entry_operator: 0, accountant: 0, contingent_charge: 2.00, scribe_rate: 150,
 
         // Flags
         is_sde_mode: true, has_peon: true

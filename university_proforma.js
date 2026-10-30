@@ -2032,23 +2032,36 @@
     window.switchRemunerationTab = function (tab) {
         const btnStandard = document.getElementById('tab-btn-remun-standard');
         const btnProforma = document.getElementById('tab-btn-remun-proforma');
+        const btnSde = document.getElementById('tab-btn-remun-sde');
         const subviewStandard = document.getElementById('subview-remun-standard');
         const subviewProforma = document.getElementById('subview-remun-proforma');
+        const subviewSde = document.getElementById('subview-remun-sde');
 
-        if (!btnStandard || !btnProforma || !subviewStandard || !subviewProforma) return;
+        if (!btnStandard || !subviewStandard) return;
 
-        if (tab === 'proforma') {
-            btnProforma.className = 'remun-tab-btn px-5 py-2.5 rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2 bg-purple-700 text-white';
-            btnStandard.className = 'remun-tab-btn px-5 py-2.5 rounded-lg font-bold text-sm transition-all flex items-center gap-2 bg-white text-indigo-700 border border-indigo-300 hover:bg-indigo-50';
-            subviewStandard.classList.add('hidden');
-            subviewProforma.classList.remove('hidden');
+        // Reset all buttons to inactive style
+        btnStandard.className = 'remun-tab-btn px-5 py-2.5 rounded-lg font-bold text-sm transition-all flex items-center gap-2 bg-white text-indigo-700 border border-indigo-300 hover:bg-indigo-50';
+        if (btnProforma) btnProforma.className = 'remun-tab-btn px-5 py-2.5 rounded-lg font-bold text-sm transition-all flex items-center gap-2 bg-white text-purple-700 border border-purple-500 hover:bg-purple-50';
+        if (btnSde) btnSde.className = 'remun-tab-btn px-5 py-2.5 rounded-lg font-bold text-sm transition-all flex items-center gap-2 bg-white text-emerald-700 border border-emerald-500 hover:bg-emerald-50';
 
+        // Hide all subviews
+        subviewStandard.classList.add('hidden');
+        if (subviewProforma) subviewProforma.classList.add('hidden');
+        if (subviewSde) subviewSde.classList.add('hidden');
+
+        if (tab === 'sde') {
+            if (btnSde) btnSde.className = 'remun-tab-btn px-5 py-2.5 rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2 bg-emerald-700 text-white';
+            if (subviewSde) subviewSde.classList.remove('hidden');
+            if (window.SdeProforma && typeof window.SdeProforma.renderInPageTab === 'function') {
+                window.SdeProforma.renderInPageTab();
+            }
+        } else if (tab === 'proforma') {
+            if (btnProforma) btnProforma.className = 'remun-tab-btn px-5 py-2.5 rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2 bg-purple-700 text-white';
+            if (subviewProforma) subviewProforma.classList.remove('hidden');
             UniversityProforma.renderInPageTab();
         } else {
             btnStandard.className = 'remun-tab-btn px-5 py-2.5 rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2 bg-indigo-600 text-white';
-            btnProforma.className = 'remun-tab-btn px-5 py-2.5 rounded-lg font-bold text-sm transition-all flex items-center gap-2 bg-white text-purple-700 border border-purple-500 hover:bg-purple-50';
             subviewStandard.classList.remove('hidden');
-            subviewProforma.classList.add('hidden');
         }
     };
 

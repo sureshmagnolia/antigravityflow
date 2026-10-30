@@ -19165,6 +19165,9 @@ async function loadInitialData() {
             if (typeof UniversityProforma !== 'undefined' && typeof UniversityProforma.populateExamDropdown === 'function') {
                 UniversityProforma.populateExamDropdown();
             }
+            if (typeof SdeProforma !== 'undefined' && typeof SdeProforma.populateExamDropdown === 'function') {
+                SdeProforma.populateExamDropdown();
+            }
         });
     }
 
