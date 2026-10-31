@@ -21735,10 +21735,11 @@ const allRooms = Object.values(roomDataMap);
         const modal = document.getElementById('invigilator-select-modal');
         const list = document.getElementById('invig-options-list');
         const input = document.getElementById('invig-search-input');
-        const sessionKey = allotmentSessionSelect.value;
+        const sessionKey = (allotmentSessionSelect && allotmentSessionSelect.value) ? allotmentSessionSelect.value : (currentSessionKey || '');
 
         if (document.getElementById('invig-modal-subtitle')) {
             document.getElementById('invig-modal-subtitle').textContent = `Assigning to: ${roomName}`;
+            document.getElementById('invig-modal-subtitle').className = "text-xs text-gray-500 mb-4";
         }
 
         input.value = "";
@@ -21748,33 +21749,7 @@ const allRooms = Object.values(roomDataMap);
         // Get Data
         const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
         const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
-        const slot = invigSlots[sessionKey];
-
-    // GUEST/CUSTOM FALLBACK: If no portal data exists, allow manual typing
-    if (!slot || !slot.assigned || slot.assigned.length === 0) {
-        const renderCustomOnly = (query = "") => {
-            const safeRoom = roomName.replace(/'/g, "\\'");
-            const safeName = query.trim().replace(/'/g, "\\'");
-            list.innerHTML = `
-                <div class="p-4 bg-blue-50 border border-blue-100 rounded-lg text-center">
-                    <p class="text-[10px] text-blue-600 font-bold uppercase mb-2">Guest Mode / Manual Entry</p>
-                    <p class="text-xs text-gray-600 mb-3">Type a name in the search box above and click below.</p>
-                    ${query.trim().length > 2 ? `
-                        <button onclick="window.saveInvigAssignment('${safeRoom}', '${safeName}')" 
-                                class="w-full bg-blue-600 text-white text-xs font-bold py-2 rounded shadow hover:bg-blue-700 transition">
-                            Assign "${query}"
-                        </button>
-                    ` : `
-                        <div class="text-[10px] text-gray-400 italic">Enter at least 3 characters...</div>
-                    `}
-                </div>
-            `;
-        };
-        renderCustomOnly("");
-        input.oninput = (e) => renderCustomOnly(e.target.value);
-        return;
-    }
-
+        const slot = invigSlots[sessionKey] || {};
 
         if (typeof window.cleanupGhostInvigilatorMappings === 'function') {
             window.cleanupGhostInvigilatorMappings(sessionKey);
@@ -21792,78 +21767,176 @@ const allRooms = Object.values(roomDataMap);
         const allScribes = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         Object.values(allScribes[sessionKey] || {}).forEach(r => validActiveRooms.add(r));
 
-        // Invert mapping: StaffName -> AssignedRoom
+        // Load fresh mappings for current session
+        const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
+        currentInvigMapping = allMappings[sessionKey] || {};
+
+        // Invert mapping: StaffName (lowercase) -> AssignedRoom
         const staffRoomMap = {};
         Object.entries(currentInvigMapping).forEach(([r, sName]) => {
-            staffRoomMap[sName] = r;
+            if (sName) staffRoomMap[sName.trim().toLowerCase()] = r;
         });
 
-        // Render Function
-        const renderList = (filter = "") => {
-            let html = "";
-            const q = filter.toLowerCase();
-            let hasResults = false;
+        // 1. Identify Portal-Assigned Invigilators for this session
+        const portalAssignedRaw = Array.isArray(slot.assigned) ? slot.assigned : [];
+        const portalAssignedSet = new Set(portalAssignedRaw.map(x => String(x).trim().toLowerCase()));
 
-            slot.assigned.forEach(email => {
-                const staff = staffData.find(s => s.email === email) || { name: email.split('@')[0], dept: 'Unknown' };
+        // 2. Build unified list of all invigilators
+        const knownStaffEmails = new Set();
+        const knownStaffNames = new Set();
+        const allInvigilators = [];
 
-                if (staff.name.toLowerCase().includes(q)) {
-                    hasResults = true;
-                    const assignedRoom = staffRoomMap[staff.name];
-                    const isSelf = (assignedRoom === roomName);
-                    const isTakenInValidRoom = Boolean(assignedRoom && !isSelf && validActiveRooms.has(assignedRoom));
+        staffData.forEach(st => {
+            const name = (st.name || '').trim();
+            const email = (st.email || '').trim();
+            if (!name) return;
 
-                    let bgClass = "hover:bg-indigo-50 cursor-pointer bg-white";
-                    let status = '<span class="text-[9px] text-green-600 font-bold bg-green-50 px-1 rounded border border-green-100">Select</span>';
+            const isPortal = Boolean(
+                (email && portalAssignedSet.has(email.toLowerCase())) ||
+                (name && portalAssignedSet.has(name.toLowerCase()))
+            );
 
-                    const safeRoom = roomName.replace(/'/g, "\\'");
-                    const safeName = staff.name.replace(/'/g, "\\'");
-                    let clickAction = `onclick="window.saveInvigAssignment('${safeRoom}', '${safeName}')"`;
+            if (email) knownStaffEmails.add(email.toLowerCase());
+            if (name) knownStaffNames.add(name.toLowerCase());
 
-                    if (isSelf) {
-                        bgClass = "bg-blue-50/60 border-blue-200 cursor-default";
-                        status = '<span class="text-[9px] text-blue-600 font-bold bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200">Current</span>';
-                        clickAction = "";
-                    } else if (isTakenInValidRoom) {
-                        const safeAssignedRoom = assignedRoom.replace(/'/g, "\\'");
-                        bgClass = "hover:bg-amber-50 cursor-pointer bg-white";
-                        status = `<span class="text-[9px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200" title="Click to move from ${assignedRoom}">In ${assignedRoom} (Move)</span>`;
-                        clickAction = `onclick="window.confirmMoveInvigilator('${safeRoom}', '${safeName}', '${safeAssignedRoom}')"`;
-                    }
-
-                    html += `
-                    <div ${clickAction} class="p-2 rounded border-b border-gray-100 last:border-0 flex justify-between items-center transition ${bgClass}">
-                        <div>
-                            <div class="text-sm font-bold text-gray-800">${staff.name}</div>
-                            <div class="text-[10px] text-gray-500">${staff.dept}</div>
-                        </div>
-                        ${status}
-                    </div>
-                `;
-                }
+            allInvigilators.push({
+                name: name,
+                dept: st.dept || st.department || st.designation || 'Faculty',
+                email: email,
+                isPortalAssigned: isPortal
             });
+        });
 
-        if (!hasResults && q.length > 2) {
+        // If there are entries in slot.assigned not matching any staff in staffData, add them to the portal pool
+        portalAssignedRaw.forEach(item => {
+            const clean = String(item).trim();
+            const lower = clean.toLowerCase();
+            if (clean && !knownStaffEmails.has(lower) && !knownStaffNames.has(lower)) {
+                allInvigilators.push({
+                    name: clean.includes('@') ? clean.split('@')[0] : clean,
+                    dept: 'Portal Assigned',
+                    email: clean.includes('@') ? clean : '',
+                    isPortalAssigned: true
+                });
+            }
+        });
+
+        // Group into: Portal-Assigned (Top) vs Other Faculty
+        const portalAssignedList = allInvigilators.filter(s => s.isPortalAssigned);
+        const otherStaffList = allInvigilators.filter(s => !s.isPortalAssigned);
+
+        portalAssignedList.sort((a, b) => a.name.localeCompare(b.name));
+        otherStaffList.sort((a, b) => a.name.localeCompare(b.name));
+
+        const renderStaffRow = (staff, isPortal) => {
+            const safeKey = staff.name.trim().toLowerCase();
+            const assignedRoom = staffRoomMap[safeKey];
+            const isSelf = (assignedRoom === roomName);
+            const isTakenInValidRoom = Boolean(assignedRoom && !isSelf && validActiveRooms.has(assignedRoom));
+
+            let bgClass = "hover:bg-indigo-50/80 cursor-pointer bg-white";
+            let statusBadge = '<span class="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 hover:bg-emerald-100 transition">Select</span>';
+
             const safeRoom = roomName.replace(/'/g, "\\'");
-            const safeName = input.value.trim().replace(/'/g, "\\'");
-            html = `
-                <div class="p-3 bg-gray-50 border border-dashed border-gray-300 rounded text-center">
-                    <p class="text-[10px] text-gray-500 mb-2">No staff found matching "${input.value}"</p>
-                    <button onclick="window.saveInvigAssignment('${safeRoom}', '${safeName}')" 
-                            class="bg-gray-800 text-white text-[10px] font-bold px-4 py-1.5 rounded hover:bg-black transition">
-                        Assign as Custom Name
-                    </button>
+            const safeName = staff.name.replace(/'/g, "\\'");
+            let clickAction = `onclick="window.saveInvigAssignment('${safeRoom}', '${safeName}')"`;
+
+            if (isSelf) {
+                bgClass = "bg-blue-50/70 border-blue-200 cursor-default";
+                statusBadge = '<span class="text-[9px] text-blue-700 font-bold bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200">Current</span>';
+                clickAction = "";
+            } else if (isTakenInValidRoom) {
+                const safeAssignedRoom = assignedRoom.replace(/'/g, "\\'");
+                bgClass = "hover:bg-amber-50 cursor-pointer bg-white";
+                statusBadge = `<span class="text-[9px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200" title="Click to move from ${assignedRoom}">In ${assignedRoom} (Move)</span>`;
+                clickAction = `onclick="window.confirmMoveInvigilator('${safeRoom}', '${safeName}', '${safeAssignedRoom}')"`;
+            }
+
+            const portalTag = isPortal 
+                ? `<span class="text-[8px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded shrink-0">Portal Assigned</span>`
+                : '';
+
+            return `
+                <div ${clickAction} class="p-2 rounded border-b border-gray-100 last:border-0 flex justify-between items-center transition ${bgClass}">
+                    <div class="min-w-0 pr-2">
+                        <div class="text-sm font-bold text-gray-800 flex items-center gap-1.5 flex-wrap">
+                            <span class="truncate">${staff.name}</span>
+                            ${portalTag}
+                        </div>
+                        <div class="text-[10px] text-gray-500 truncate">${staff.dept}</div>
+                    </div>
+                    <div class="shrink-0">
+                        ${statusBadge}
+                    </div>
                 </div>
             `;
-        } else if (!hasResults) {
-            html = '<p class="text-center text-gray-400 text-xs py-2">No matching invigilators found.</p>';
-        }
-list.innerHTML = html;
+        };
+
+        const renderList = (filter = "") => {
+            const q = filter.trim().toLowerCase();
+            const filterFn = (s) => {
+                if (!q) return true;
+                return (s.name || '').toLowerCase().includes(q) ||
+                       (s.dept || '').toLowerCase().includes(q) ||
+                       (s.email || '').toLowerCase().includes(q);
+            };
+
+            const matchedPortal = portalAssignedList.filter(filterFn);
+            const matchedOthers = otherStaffList.filter(filterFn);
+
+            let html = "";
+
+            // Group 1: Portal Assigned (Appears at TOP)
+            if (matchedPortal.length > 0) {
+                html += `
+                    <div class="px-2 py-1 text-[10px] font-bold text-indigo-700 uppercase bg-indigo-50 rounded flex justify-between items-center sticky top-0 z-10 border-b border-indigo-100 shadow-sm">
+                        <span>Assigned in Portal (${matchedPortal.length})</span>
+                        <span class="text-[9px] font-medium lowercase text-indigo-500">priority pool</span>
+                    </div>
+                `;
+                matchedPortal.forEach(s => {
+                    html += renderStaffRow(s, true);
+                });
+            }
+
+            // Group 2: All Other Invigilators
+            if (matchedOthers.length > 0) {
+                html += `
+                    <div class="px-2 py-1 text-[10px] font-bold text-gray-600 uppercase bg-gray-100 rounded flex justify-between items-center sticky top-0 z-10 ${matchedPortal.length > 0 ? 'mt-2' : ''} border-b border-gray-200 shadow-sm">
+                        <span>All Other Invigilators (${matchedOthers.length})</span>
+                        <span class="text-[9px] font-medium lowercase text-gray-500">faculty directory</span>
+                    </div>
+                `;
+                matchedOthers.forEach(s => {
+                    html += renderStaffRow(s, false);
+                });
+            }
+
+            // If no match found
+            if (matchedPortal.length === 0 && matchedOthers.length === 0) {
+                if (q.length > 2) {
+                    const safeRoom = roomName.replace(/'/g, "\\'");
+                    const safeName = input.value.trim().replace(/'/g, "\\'");
+                    html = `
+                        <div class="p-4 bg-gray-50 border border-dashed border-gray-300 rounded text-center">
+                            <p class="text-xs text-gray-600 mb-2">No invigilator found matching "<strong>${input.value.trim()}</strong>"</p>
+                            <button onclick="window.saveInvigAssignment('${safeRoom}', '${safeName}')" 
+                                    class="bg-gray-800 text-white text-xs font-bold px-4 py-2 rounded hover:bg-black transition shadow">
+                                Assign "${input.value.trim()}" as Custom Name
+                            </button>
+                        </div>
+                    `;
+                } else {
+                    html = '<p class="text-center text-gray-400 text-xs py-4">No matching invigilators found.</p>';
+                }
+            }
+
+            list.innerHTML = html;
         };
 
         renderList();
         input.oninput = (e) => renderList(e.target.value);
-    }
+    };
 
     // 5. Save Assignment (And Close Modal)
     window.saveInvigAssignment = async function (room, name) {
@@ -21872,6 +21945,17 @@ list.innerHTML = html;
 
 
         // --- START FIX: Handle Old & New Invigilator in Pool ---
+        const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+        const newStaff = staffData.find(s => s.name === name);
+
+        if (!currentInvigMapping[room] && newStaff && newStaff.email) {
+            const allSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+            const slot = allSlots[sessionKey];
+            if (slot && Array.isArray(slot.assigned) && !slot.assigned.includes(newStaff.email)) {
+                slot.assigned.push(newStaff.email);
+                localStorage.setItem('examInvigilationSlots', JSON.stringify(allSlots));
+            }
+        }
         const oldName = currentInvigMapping[room];
         if (oldName && oldName !== name) { // If we are changing or replacing someone
             const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
