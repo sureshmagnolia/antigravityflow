@@ -1987,10 +1987,21 @@ window.recalcInvigSlots = async function () {
                 if (localRaw) {
                     try {
                         const localSlots = JSON.parse(localRaw);
-                        // Local takes precedence for 'assigned' array to preserve surgical edits
+                        // Local takes precedence for 'assigned' array ONLY if local actually has assigned staff
                         Object.keys(localSlots).forEach(k => {
-                            if (!mergedSlots[k]) mergedSlots[k] = localSlots[k];
-                            else if (localSlots[k].assigned) mergedSlots[k].assigned = localSlots[k].assigned;
+                            if (!mergedSlots[k]) {
+                                mergedSlots[k] = localSlots[k];
+                            } else {
+                                if (Array.isArray(localSlots[k].assigned) && localSlots[k].assigned.length > 0) {
+                                    mergedSlots[k].assigned = localSlots[k].assigned;
+                                }
+                                if (Array.isArray(localSlots[k].unavailable) && localSlots[k].unavailable.length > 0) {
+                                    mergedSlots[k].unavailable = localSlots[k].unavailable;
+                                }
+                                if (localSlots[k].isLocked !== undefined) {
+                                    mergedSlots[k].isLocked = localSlots[k].isLocked;
+                                }
+                            }
                         });
                     } catch(e){}
                 }
@@ -1998,8 +2009,10 @@ window.recalcInvigSlots = async function () {
                 if (Object.keys(mergedSlots).length > 0) {
                     localStorage.setItem('examInvigilationSlots', JSON.stringify(mergedSlots));
                 }
+                return mergedSlots;
             } catch (e) {
                 console.error("Failed to fetch slots from shards:", e);
+                return null;
             }
         };
 
@@ -2024,13 +2037,7 @@ window.recalcInvigSlots = async function () {
               }
           };
 
-// 🛡️ [AUDIT FIX] Force full sync of configuration and assignments on startup
-          // This ensures PC 2 picks up PC 1's changes immediately upon login.
-          fetchSettingsData();
-          if (typeof fetchAllocationData === 'function') fetchAllocationData();
-          if (typeof fetchStaffData === 'function') fetchStaffData();
-          if (typeof fetchSlotsData === 'function') fetchSlotsData();
-          if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
+// 🛡️ [AUDIT FIX] Configuration and assignments are fully awaited in preflight before UI load
         // 7. FETCH HEAVY DATA (HYBRID V2/V1 STRATEGY)
                 const fetchHeavyData = async () => {
             console.log("☁️ Fetching Data (Hybrid Mode)...");
@@ -2333,6 +2340,18 @@ loadInitialData();
 
 
        (async () => {
+        updateLoaderProgress(55, "Loading Staff & Invigilation Data...");
+        try {
+            await Promise.all([
+                typeof fetchSettingsData === 'function' ? fetchSettingsData() : Promise.resolve(),
+                typeof fetchAllocationData === 'function' ? fetchAllocationData() : Promise.resolve(),
+                typeof fetchStaffData === 'function' ? fetchStaffData() : Promise.resolve(),
+                typeof fetchSlotsData === 'function' ? fetchSlotsData() : Promise.resolve(),
+                typeof loadGlobalScribeList === 'function' ? loadGlobalScribeList() : Promise.resolve()
+            ]);
+        } catch (e) {
+            console.warn("Pre-flight data sync error:", e);
+        }
         await fetchHeavyData();
         
           // --- NEW: Automatic Cloud Healing (Full V2 Reconstruction) ---
@@ -22065,9 +22084,42 @@ const allRooms = Object.values(roomDataMap);
         const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
         currentInvigMapping = allMappings[sessionKey] || {};
 
-        const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
-        const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
-        const slot = invigSlots[sessionKey];
+        let invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+        let staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+        let slot = invigSlots[sessionKey];
+
+        // 🛡️ ON-DEMAND FETCH: If slot or assigned staff is missing, fetch latest shard from cloud before giving up
+        if ((!slot || !slot.assigned || slot.assigned.length === 0) && window.currentCollegeId && navigator.onLine) {
+            try {
+                const { getDoc, doc } = window.firebase;
+                const [dRaw] = sessionKey.split(' | ');
+                const dStr = (dRaw || '').replace(/[-/]/g, '.');
+                const parts = dStr.split('.');
+                if (parts.length >= 3) {
+                    const shardId = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                    const shardRef = doc(window.firebase.db, "colleges", window.currentCollegeId, "slots_daily", shardId);
+                    const shardSnap = await getDoc(shardRef);
+                    if (shardSnap.exists()) {
+                        const shardMap = JSON.parse(shardSnap.data().data || '{}');
+                        if (shardMap[sessionKey]) {
+                            invigSlots[sessionKey] = shardMap[sessionKey];
+                            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigSlots));
+                            slot = invigSlots[sessionKey];
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("On-demand slot fetch failed:", err);
+            }
+            // Fallback to fetchSlotsData if single shard wasn't found
+            if ((!slot || !slot.assigned || slot.assigned.length === 0) && typeof window.fetchSlotsData === 'function') {
+                const freshSlots = await window.fetchSlotsData();
+                if (freshSlots && freshSlots[sessionKey]) {
+                    invigSlots = freshSlots;
+                    slot = invigSlots[sessionKey];
+                }
+            }
+        }
 
         if (!slot || !slot.assigned || slot.assigned.length === 0) {
             return await UiModal.alert("No staff available in portal.");
