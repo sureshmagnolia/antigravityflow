@@ -298,14 +298,12 @@
                     const fullDoc = sSnap.data();
                     const allStudents = (fullDoc && fullDoc.students) ? fullDoc.students : {};
                     studentRecord = allStudents[regNo] || null;
-                    if (studentRecord) {
-                        try {
-                            localStorage.setItem(LS_KEY, JSON.stringify({
-                                timestamp: Date.now(),
-                                data: studentRecord
-                            }));
-                        } catch(e) {}
-                    }
+                    try {
+                        localStorage.setItem(LS_KEY, JSON.stringify({
+                            timestamp: Date.now(),
+                            data: studentRecord
+                        }));
+                    } catch(e) {}
                 }
             }
 
