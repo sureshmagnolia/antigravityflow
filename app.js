@@ -2829,9 +2829,11 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                 }
             }
 
+            const currentGateMins = parseInt(localStorage.getItem('studentPortalGateMinutes')) || 45;
             await setDoc(indexRef, {
                 collegeId: cid, // 🛡️ CRITICAL: Required for Firestore Rules
                 collegeName: localStorage.getItem('examCollegeName') || 'My College',
+                gateMinutes: currentGateMins,
                 sessions: existingSessions
             });
 
@@ -13403,7 +13405,8 @@ window.real_populate_qp_code_session_dropdown = function () {
                           const diffMins = diffMs / 60000;
 
                           // Within 45-min window before exam start
-                          if (diffMins >= 0 && diffMins <= 45) {
+                          const configuredGate = parseInt(localStorage.getItem('studentPortalGateMinutes')) || 45;
+                          if (diffMins >= 0 && diffMins <= configuredGate) {
                               const minsLeft = Math.round(diffMins);
                               // WARNING 1
                               const warn1 = await UiModal.confirm(
@@ -19719,6 +19722,12 @@ async function loadInitialData() {
 
     function updateStudentPortalLink() {
         const linkInput = document.getElementById('student-portal-link');
+        const gateSelect = document.getElementById('student-portal-gate-select');
+        const savedGate = localStorage.getItem('studentPortalGateMinutes') || '45';
+        if (gateSelect && gateSelect.value !== savedGate) {
+            gateSelect.value = savedGate;
+        }
+
         if (!linkInput) return;
 
         if (currentCollegeId) {
@@ -19726,8 +19735,8 @@ async function loadInitialData() {
             let currentUrl = window.location.href;
             let baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/'));
 
-            // 2. Construct Link with the correct ID format
-            const studentUrl = `${baseUrl}/student.html?id=/public_seating/${currentCollegeId}`;
+            // 2. Construct Link with the correct ID format & gate parameter
+            const studentUrl = `${baseUrl}/student.html?id=/public_seating/${currentCollegeId}&gate=${savedGate}`;
 
             linkInput.value = studentUrl;
             linkInput.classList.remove('text-gray-400', 'italic');
@@ -19736,6 +19745,42 @@ async function loadInitialData() {
             linkInput.value = "Please log in to generate your unique link.";
             linkInput.classList.add('text-gray-400', 'italic');
         }
+    }
+
+    // Gate Select Change Listener
+    const gateSelect = document.getElementById('student-portal-gate-select');
+    if (gateSelect) {
+        gateSelect.addEventListener('change', async (e) => {
+            const rawVal = e.target.value;
+            const val = (rawVal === 'locked') ? 'locked' : (parseInt(rawVal) || 45);
+            localStorage.setItem('studentPortalGateMinutes', val.toString());
+            updateStudentPortalLink();
+
+            const statusEl = document.getElementById('student-portal-gate-status');
+            if (statusEl) {
+                statusEl.textContent = 'Saving...';
+                statusEl.classList.remove('hidden');
+            }
+
+            if (typeof firebase !== 'undefined' && currentCollegeId) {
+                try {
+                    const { db, doc, setDoc } = window.firebase;
+                    const indexRef = doc(db, 'public_seating', currentCollegeId);
+                    await setDoc(indexRef, {
+                        gateMinutes: val,
+                        collegeId: currentCollegeId,
+                        collegeName: localStorage.getItem('examCollegeName') || 'My College'
+                    }, { merge: true });
+                } catch (err) {
+                    console.warn('Failed to update gateMinutes in Firestore index:', err);
+                }
+            }
+
+            if (statusEl) {
+                statusEl.textContent = (val === 'locked') ? '🔒 Locked' : '✓ Saved';
+                setTimeout(() => statusEl.classList.add('hidden'), 2500);
+            }
+        });
     }
 
     // 1. Update when clicking the Settings Tab
@@ -25869,9 +25914,11 @@ window.executeBulkDelete = async function() {
 
             // 🛡️ [PURGE FIX]: Remove { merge: true } to authoritatively overwrite the index.
             // This ensures that deleted sessions are actually removed from the student portal.
+            const currentGateMins = parseInt(localStorage.getItem('studentPortalGateMinutes')) || 45;
             await setDoc(indexRef, {
                 collegeId: currentCollegeId,
                 collegeName: localStorage.getItem('examCollegeName') || 'My College',
+                gateMinutes: currentGateMins,
                 sessions: newPublicSessions
             });
             console.log("🚀 [Portal Sync]: Authoritative Index Flush Complete.");
