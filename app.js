@@ -2829,9 +2829,12 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                 }
             }
 
+            const savedGateRaw = localStorage.getItem('studentPortalGateMinutes');
+            const currentGateMins = (savedGateRaw === 'locked') ? 'locked' : (parseInt(savedGateRaw) || 45);
             await setDoc(indexRef, {
                 collegeId: cid, // 🛡️ CRITICAL: Required for Firestore Rules
                 collegeName: localStorage.getItem('examCollegeName') || 'My College',
+                gateMinutes: currentGateMins,
                 sessions: existingSessions
             });
 
@@ -13403,7 +13406,8 @@ window.real_populate_qp_code_session_dropdown = function () {
                           const diffMins = diffMs / 60000;
 
                           // Within 45-min window before exam start
-                          if (diffMins >= 0 && diffMins <= 45) {
+                          const configuredGate = parseInt(localStorage.getItem('studentPortalGateMinutes')) || 45;
+                          if (diffMins >= 0 && diffMins <= configuredGate) {
                               const minsLeft = Math.round(diffMins);
                               // WARNING 1
                               const warn1 = await UiModal.confirm(
@@ -19719,6 +19723,12 @@ async function loadInitialData() {
 
     function updateStudentPortalLink() {
         const linkInput = document.getElementById('student-portal-link');
+        const gateSelect = document.getElementById('student-portal-gate-select');
+        const savedGate = localStorage.getItem('studentPortalGateMinutes') || '45';
+        if (gateSelect && gateSelect.value !== savedGate) {
+            gateSelect.value = savedGate;
+        }
+
         if (!linkInput) return;
 
         if (currentCollegeId) {
@@ -19726,7 +19736,7 @@ async function loadInitialData() {
             let currentUrl = window.location.href;
             let baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/'));
 
-            // 2. Construct Link with the correct ID format
+            // 2. Construct Clean Permanent Link (Gate policy is authoritatively read from Firestore)
             const studentUrl = `${baseUrl}/student.html?id=/public_seating/${currentCollegeId}`;
 
             linkInput.value = studentUrl;
@@ -19736,6 +19746,87 @@ async function loadInitialData() {
             linkInput.value = "Please log in to generate your unique link.";
             linkInput.classList.add('text-gray-400', 'italic');
         }
+    }
+
+    // Gate Lock Toggle & Select Listener
+    let isPortalGateLocked = true;
+    const togglePortalGateLockBtn = document.getElementById('toggle-portal-gate-lock-btn');
+    const gateSelect = document.getElementById('student-portal-gate-select');
+
+    function updatePortalGateLockUI() {
+        if (!togglePortalGateLockBtn || !gateSelect) return;
+        if (isPortalGateLocked) {
+            gateSelect.disabled = true;
+            gateSelect.classList.add('bg-gray-100', 'opacity-70', 'cursor-not-allowed');
+            gateSelect.classList.remove('bg-white');
+            togglePortalGateLockBtn.className = "text-xs flex items-center gap-1.5 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-200 transition shadow-xs";
+            togglePortalGateLockBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25 2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+                <span>Locked</span>
+            `;
+        } else {
+            gateSelect.disabled = false;
+            gateSelect.classList.remove('bg-gray-100', 'opacity-70', 'cursor-not-allowed');
+            gateSelect.classList.add('bg-white');
+            togglePortalGateLockBtn.className = "text-xs flex items-center gap-1.5 bg-red-50 text-red-600 border border-red-200 px-3 py-2 rounded-lg hover:bg-red-100 transition shadow-xs";
+            togglePortalGateLockBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+                <span>Unlocked</span>
+            `;
+        }
+    }
+
+    if (togglePortalGateLockBtn) {
+        togglePortalGateLockBtn.addEventListener('click', () => {
+            isPortalGateLocked = !isPortalGateLocked;
+            updatePortalGateLockUI();
+        });
+    }
+
+    if (gateSelect) {
+        gateSelect.addEventListener('change', async (e) => {
+            const rawVal = e.target.value;
+            const val = (rawVal === 'locked') ? 'locked' : (parseInt(rawVal) || 45);
+            localStorage.setItem('studentPortalGateMinutes', val.toString());
+            try {
+                // Keep local cache in sync so same-browser preview testing is instant without breaking student 10m cache
+                const cached = JSON.parse(localStorage.getItem('seating_index_cache'));
+                if (cached && cached.data) {
+                    cached.data.gateMinutes = val;
+                    localStorage.setItem('seating_index_cache', JSON.stringify(cached));
+                }
+            } catch(e) {}
+            updateStudentPortalLink();
+
+            const statusEl = document.getElementById('student-portal-gate-status');
+            if (statusEl) {
+                statusEl.textContent = 'Saving...';
+                statusEl.classList.remove('hidden');
+            }
+
+            if (window.firebase && currentCollegeId) {
+                try {
+                    const { db, doc, setDoc } = window.firebase;
+                    const indexRef = doc(db, 'public_seating', currentCollegeId);
+                    await setDoc(indexRef, {
+                        gateMinutes: val,
+                        collegeId: currentCollegeId,
+                        collegeName: localStorage.getItem('examCollegeName') || 'My College'
+                    }, { merge: true });
+                } catch (err) {
+                    console.warn('Failed to update gateMinutes in Firestore index:', err);
+                }
+            }
+
+            if (statusEl) {
+                statusEl.textContent = (val === 'locked') ? '🔒 Release Hold Active' : '✓ Saved';
+                setTimeout(() => statusEl.classList.add('hidden'), 2500);
+            }
+        });
     }
 
     // 1. Update when clicking the Settings Tab
@@ -25857,7 +25948,7 @@ window.executeBulkDelete = async function() {
 
         // --- ⚡ [AUTHORITATIVE PORTAL FLUSH]: Final Student Portal Sync ---
         // Authoritatively rebuild the Public Seating Index from the final registry.
-        if (typeof firebase !== 'undefined' && currentCollegeId) {
+        if (window.firebase && currentCollegeId) {
             const { db, doc, setDoc } = window.firebase;
             const indexRef = doc(db, 'public_seating', currentCollegeId);
             const newPublicSessions = {};
@@ -25869,9 +25960,12 @@ window.executeBulkDelete = async function() {
 
             // 🛡️ [PURGE FIX]: Remove { merge: true } to authoritatively overwrite the index.
             // This ensures that deleted sessions are actually removed from the student portal.
+            const savedGateRaw = localStorage.getItem('studentPortalGateMinutes');
+            const currentGateMins = (savedGateRaw === 'locked') ? 'locked' : (parseInt(savedGateRaw) || 45);
             await setDoc(indexRef, {
                 collegeId: currentCollegeId,
                 collegeName: localStorage.getItem('examCollegeName') || 'My College',
+                gateMinutes: currentGateMins,
                 sessions: newPublicSessions
             });
             console.log("🚀 [Portal Sync]: Authoritative Index Flush Complete.");

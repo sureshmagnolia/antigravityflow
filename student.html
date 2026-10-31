@@ -54,9 +54,75 @@
         const CACHE_KEY_INDEX = "seating_index_cache";
         const CACHE_KEY_SESSIONS = "seating_sessions_data";
 
+        function getGateLabel(mins) {
+            if (mins >= 60 && mins % 60 === 0) {
+                return `${mins / 60}h (${mins}m)`;
+            }
+            return `${mins}m`;
+        }
+
+        function getGateConfig() {
+            // 🛡️ AUTHORITATIVE SERVER POLICY (Firestore index):
+            // The server-configured gateMinutes is the authoritative security boundary.
+            let serverMinutes = 45;
+            let isServerLocked = false;
+
+            if (indexCache) {
+                if (indexCache.gateMinutes === 'locked' || indexCache.gateMinutes === -1) {
+                    isServerLocked = true;
+                } else if (indexCache.gateMinutes !== undefined && !isNaN(parseInt(indexCache.gateMinutes))) {
+                    serverMinutes = Math.max(5, parseInt(indexCache.gateMinutes));
+                }
+            } else {
+                // Fallback for same-device admin preview before index document arrives
+                try {
+                    const localGate = localStorage.getItem('studentPortalGateMinutes');
+                    if (localGate === 'locked' || localGate === -1) {
+                        isServerLocked = true;
+                    } else if (localGate && !isNaN(parseInt(localGate))) {
+                        serverMinutes = Math.max(5, parseInt(localGate));
+                    }
+                } catch(e) {}
+            }
+
+            // Server-mandated lock takes absolute precedence
+            if (isServerLocked) {
+                return { isLocked: true, minutes: -1, label: 'Locked' };
+            }
+
+            // 🛡️ ANTI-TAMPER CEILING:
+            // A student cannot bypass reveal time by editing &gate= in the URL.
+            // Any URL parameter can ONLY tighten the window or lock it; it can NEVER exceed serverMinutes.
+            const urlGate = urlParams.get('gate');
+            if (urlGate === 'locked' || urlGate === '-1') {
+                return { isLocked: true, minutes: -1, label: 'Locked' };
+            }
+            if (urlGate && !isNaN(parseInt(urlGate))) {
+                const requestedMins = Math.max(5, parseInt(urlGate));
+                const effectiveMins = Math.min(requestedMins, serverMinutes);
+                return { isLocked: false, minutes: effectiveMins, label: getGateLabel(effectiveMins) };
+            }
+
+            return { isLocked: false, minutes: serverMinutes, label: getGateLabel(serverMinutes) };
+        }
+
+        function updateGateBadgeDisplay() {
+            const gateCfg = getGateConfig();
+            const gateBadge = document.getElementById('gate-mins-text');
+            const gateContainer = document.getElementById('gate-info-badge');
+            if (gateBadge && gateContainer) {
+                if (gateCfg.isLocked) {
+                    gateContainer.innerHTML = `Seating info is <span class="font-bold text-amber-700">🔒 Locked by Admin</span>`;
+                } else {
+                    gateContainer.innerHTML = `Seating info reveals <span class="font-bold text-indigo-600">${gateCfg.label}</span> before each exam.`;
+                }
+            }
+        }
+
 
 
                async function loadData() {
+            updateGateBadgeDisplay();
             const statusEl = document.getElementById('status');
             if (!collegeId) {
                 statusEl.innerHTML = `<span class="text-red-500">Error: Invalid Link. Please contact office.</span>`;
@@ -113,7 +179,8 @@
                 const cachedIndex = JSON.parse(localStorage.getItem(CACHE_KEY_INDEX));
                 const now = Date.now();
 
-               if (cachedIndex && (now - cachedIndex.timestamp < 600000)) { 
+                // ⚡ Check Local Cache for Index (Cost Saver: 10 mins cache to prevent reads on rapid student refreshes)
+                if (cachedIndex && (now - cachedIndex.timestamp < 600000)) { 
                     indexCache = cachedIndex.data;
                     collegeName = indexCache.collegeName || "Exam Centre";
                     document.getElementById('college-name').textContent = collegeName;
@@ -127,6 +194,7 @@
                         document.getElementById('college-name').textContent = collegeName;
                     }
                 }
+                updateGateBadgeDisplay();
 
                 // --- 🛡️ UI LOCK GATE: Check if there are ANY exams today ---
                 const nowTotal = window.getExamsNow ? window.getExamsNow() : new Date();
@@ -197,15 +265,24 @@
     const sessions = indexCache.sessions || {};
     const now = window.getExamsNow ? window.getExamsNow() : new Date();
 
+    const gateCfg = getGateConfig();
+    updateGateBadgeDisplay();
+
     for (const [label, sInfo] of Object.entries(sessions)) {
         if (label.split(' | ')[0].trim() !== todayString) continue;
 
         const [dPart, tPart] = label.split(' | ');
         const sessionTime = parseSessionTime(dPart.trim(), tPart.trim());
-        const unlockTime = new Date(sessionTime.getTime() - (45 * 60 * 1000));
+        
+        let isUnlocked = false;
+        let unlockTime = null;
+        if (!gateCfg.isLocked) {
+            unlockTime = new Date(sessionTime.getTime() - (gateCfg.minutes * 60 * 1000));
+            isUnlocked = now >= unlockTime;
+        }
 
-        // SECURITY GATE: Only fetch document if within 45 minutes
-        if (now >= unlockTime) {
+        // SECURITY GATE: Only fetch document if unlocked by gate
+        if (isUnlocked) {
             const docId = sInfo.docId;
             const LS_KEY = `seating_student_${docId}_${regNo}`;
             const lsCache = JSON.parse(localStorage.getItem(LS_KEY));
@@ -221,14 +298,12 @@
                     const fullDoc = sSnap.data();
                     const allStudents = (fullDoc && fullDoc.students) ? fullDoc.students : {};
                     studentRecord = allStudents[regNo] || null;
-                    if (studentRecord) {
-                        try {
-                            localStorage.setItem(LS_KEY, JSON.stringify({
-                                timestamp: Date.now(),
-                                data: studentRecord
-                            }));
-                        } catch(e) {}
-                    }
+                    try {
+                        localStorage.setItem(LS_KEY, JSON.stringify({
+                            timestamp: Date.now(),
+                            data: studentRecord
+                        }));
+                    } catch(e) {}
                 }
             }
 
@@ -238,8 +313,14 @@
             });
 
         } else {
-            // Add minimal locked info to show the countdown but NO room data
-            allSessions.push({ date: dPart.trim(), time: tPart.trim(), isLockedByGate: true, fullDate: sessionTime });
+            // Add minimal locked info to show the countdown or admin lock
+            allSessions.push({ 
+                date: dPart.trim(), 
+                time: tPart.trim(), 
+                isLockedByGate: true, 
+                fullDate: sessionTime,
+                isPermanentlyLocked: gateCfg.isLocked
+            });
         }
     }
     statusEl.textContent = "";
@@ -279,7 +360,8 @@ if (session.isLockedByGate) {
     myExams.push({
         dateStr: session.date, timeStr: session.time, fullDate: session.fullDate,
         isLockedByGate: true, 
-        paperName: "Available 45m before exam" 
+        isPermanentlyLocked: session.isPermanentlyLocked || gateCfg.isLocked,
+        paperName: (session.isPermanentlyLocked || gateCfg.isLocked) ? "🔒 Locked by Admin" : `Available ${gateCfg.label} before exam` 
     });
 } else if (studentRecord && studentRoom !== "Not Allotted") {
 
@@ -300,7 +382,13 @@ if (session.isLockedByGate) {
                 localStorage.setItem('myExamRegNo', regNo);
                 const now = window.getExamsNow ? window.getExamsNow() : new Date();
                 myExams.forEach(exam => {
-                    const unlockTime = new Date(exam.fullDate.getTime() - (45 * 60 * 1000));
+                    let isUnlocked = false;
+                    let unlockTime = null;
+                    if (!gateCfg.isLocked && !exam.isPermanentlyLocked) {
+                        unlockTime = new Date(exam.fullDate.getTime() - (gateCfg.minutes * 60 * 1000));
+                        isUnlocked = now >= unlockTime;
+                    }
+
                     const scribeTag = exam.isScribeRoom ? `<span class="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded border border-orange-200 font-bold ml-2 uppercase">Scribe Room</span>` : "";
                     const card = document.createElement('div');
                     card.className = "bg-white p-5 rounded-xl shadow-lg border border-gray-100 mb-5 animate-fade-in";
@@ -319,7 +407,7 @@ if (session.isLockedByGate) {
                                 <div class="flex flex-col text-right"><span class="text-[10px] text-gray-500 uppercase font-bold">Time</span><span class="font-bold text-indigo-600 text-sm">${exam.timeStr}</span></div>
                             </div>
                         </div>`;
-                    if (now >= unlockTime) {
+                    if (isUnlocked) {
                         content += `
                             <div class="text-center py-2">
                                 <p class="text-xs text-gray-400 uppercase tracking-widest font-bold mb-2 flex items-center justify-center">Allotted Hall ${scribeTag}</p>
@@ -330,14 +418,22 @@ if (session.isLockedByGate) {
                                 </div>
                                 <p class="text-[10px] text-green-600 mt-5 font-bold flex items-center justify-center gap-1.5 uppercase tracking-wide">Seating Live</p>
                             </div>`;
-                        } else {
+                    } else if (gateCfg.isLocked || exam.isPermanentlyLocked) {
+                        content += `
+                            <div class="text-center py-6 bg-amber-50/70 rounded-lg border border-amber-200">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 text-amber-600 mx-auto mb-3"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25 2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                                <p class="text-sm text-gray-800 font-bold">Seating Info Locked</p>
+                                <p class="text-xs text-amber-700 font-bold mt-1">🔒 Release Hold Active</p>
+                                <p class="text-[10px] text-gray-500 mt-2">The exam cell will unlock seating information shortly.</p>
+                            </div>`;
+                    } else {
                         const timerId = `timer-${myExams.indexOf(exam)}`;
                         content += `
                             <div class="text-center py-6 bg-gray-50 rounded-lg border border-gray-100">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 text-gray-400 mx-auto mb-3"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25 2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
                                 <p class="text-sm text-gray-700 font-bold">Seating Info Locked</p>
                                 <p class="text-xs text-gray-500 mt-1">Reveals in <span id="${timerId}" class="font-mono font-bold text-red-500 bg-red-50 px-1 rounded border border-red-100">--:--</span></p>
-                                <p class="text-[10px] text-gray-400 mt-2">(Available 45m before exam)</p>
+                                <p class="text-[10px] text-gray-400 mt-2">(Available ${gateCfg.label} before exam)</p>
                             </div>`;
                         
                           const interval = setInterval(() => {
@@ -523,6 +619,7 @@ function parseSessionTime(dateStr, timeStr) {
             <h1 class="text-xl font-black text-gray-900 tracking-tight" id="college-name">Exam Centre</h1>
 
       <p class="text-xs font-bold text-indigo-600 uppercase tracking-widest mt-1">Student Seating Portal</p>   
+      <p id="gate-info-badge" class="text-[11px] text-gray-500 font-medium mt-1">Seating info reveals <span id="gate-mins-text" class="font-bold text-indigo-600">45m</span> before each exam.</p>
 
          <!-- 🕒 Analogue Clock -->
         <div id="analogue-clock-container" class="flex justify-center mb-2">
