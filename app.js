@@ -13636,7 +13636,10 @@ window.real_populate_qp_code_session_dropdown = function () {
                             return !allottedRegNos.has(getRegNo(s)) && sStream === lastRoomStream && studentMatchesExamGroup(s, group);
                         });
                         if (topUpCandidates.length > 0) {
-                            const topUpSlice = topUpCandidates.slice(0, freeSeats);
+                            const takeCount = (topUpCandidates.length <= (freeSeats + 3))
+                                ? Math.min(topUpCandidates.length, freeSeats + 3)
+                                : freeSeats;
+                            const topUpSlice = topUpCandidates.slice(0, takeCount);
                             const startSeat = lastRoom.students.length;
                             topUpSlice.forEach((s, idx) => {
                                 const reg = getRegNo(s);
@@ -13684,7 +13687,11 @@ window.real_populate_qp_code_session_dropdown = function () {
                 }
 
                 if (roomIndex >= selectedRooms.length) {
-                    break;
+                    const lastRoom = currentSessionAllotment[currentSessionAllotment.length - 1];
+                    const freeSeats = lastRoom ? ((parseInt(lastRoom.capacity) || 30) - lastRoom.students.length) : 0;
+                    if (freshRoomPerExam || freeSeats <= 0) {
+                        break;
+                    }
                 }
             }
         } else {
@@ -13835,6 +13842,46 @@ window.real_populate_qp_code_session_dropdown = function () {
             newStudents = [...sliceA, ...sliceB].slice(0, limit);
         } else {
             newStudents = candidates.slice(0, limit);
+        }
+
+        // 🏷️ TOP-UP ACROSS EXAMS (SILENT / AUTO-ALLOT): If "Start each Exam in a Fresh Room" is unchecked,
+        // and room has spare capacity (newStudents.length < limit), top up with subsequent exam groups in this session
+        const freshRoomCb = document.getElementById('modal-exam-fresh-room-cb') || document.getElementById('main-exam-fresh-room-cb');
+        const freshRoomPerExam = freshRoomCb ? freshRoomCb.checked : false;
+        const examGroupingMode = document.querySelector('input[name="modal-exam-grouping"]:checked')?.value || 
+                                 document.querySelector('input[name="main-exam-grouping"]:checked')?.value || 'separate';
+
+        if (!freshRoomPerExam && examGroupingMode === 'separate' && targetExamName && newStudents.length < limit) {
+            const detectedExams = (typeof getSessionExamTags === 'function') ? getSessionExamTags(currentSessionKey) : [];
+            const targetExamStr = (typeof targetExamName === 'string' ? targetExamName : (targetExamName?.examName || targetExamName?.name || '')).trim().toLowerCase();
+            const currentExamIdx = detectedExams.findIndex(g => (g.name || g.examName || '').trim().toLowerCase() === targetExamStr);
+            if (currentExamIdx !== -1) {
+                const roomRegNos = new Set(allottedRegNos);
+                newStudents.forEach(s => roomRegNos.add(getRegNo(s)));
+
+                for (let i = 0; i < detectedExams.length; i++) {
+                    if (i === currentExamIdx) continue;
+                    const nextGroup = detectedExams[i];
+                    const remainingCapacity = limit - newStudents.length;
+                    if (remainingCapacity <= 0) break;
+
+                    const nextGroupCandidates = sessionStudentRecords.filter(s => {
+                        const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
+                        return !roomRegNos.has(getRegNo(s)) && 
+                               sStream === targetStreamNormalized && 
+                               studentMatchesExamGroup(s, nextGroup);
+                    });
+
+                    if (nextGroupCandidates.length > 0) {
+                        const takeCount = (nextGroupCandidates.length <= (remainingCapacity + 3))
+                            ? Math.min(nextGroupCandidates.length, remainingCapacity + 3)
+                            : remainingCapacity;
+                        const topUpSlice = nextGroupCandidates.slice(0, takeCount);
+                        topUpSlice.forEach(s => roomRegNos.add(getRegNo(s)));
+                        newStudents = newStudents.concat(topUpSlice);
+                    }
+                }
+            }
         }
 
         if (newStudents.length === 0) return;
