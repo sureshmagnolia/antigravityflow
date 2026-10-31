@@ -1959,6 +1959,7 @@ window.recalcInvigSlots = async function () {
                 if (typeof loadRoomConfig === 'function') loadRoomConfig();
                 if (typeof loadStreamConfig === 'function') loadStreamConfig();
                 if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
+                if (typeof updateStudentPortalLink === 'function') updateStudentPortalLink();
             }
         };
 
@@ -2897,7 +2898,7 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                 const data = buildPayload([
                     'examCollegeName', 'examRoomConfig', 'examStreamsConfig',
                     'examSessionNames', 'examRulesConfig', 'examRemunerationConfig',
-                    'examAllKnownSessions', 'examMixingStrategy'
+                    'examAllKnownSessions', 'examMixingStrategy', 'studentPortalGateMinutes'
                 ]);
                 data.lastUpdated = timestamp;
                 
@@ -19811,14 +19812,21 @@ async function loadInitialData() {
             if (window.firebase && currentCollegeId) {
                 try {
                     const { db, doc, setDoc } = window.firebase;
+                    // 1. Update public seating index for student portal
                     const indexRef = doc(db, 'public_seating', currentCollegeId);
                     await setDoc(indexRef, {
                         gateMinutes: val,
                         collegeId: currentCollegeId,
                         collegeName: localStorage.getItem('examCollegeName') || 'My College'
                     }, { merge: true });
+
+                    // 2. Update college settings so any other admin system syncs this time
+                    const settingsRef = doc(db, 'colleges', currentCollegeId, 'system_data', 'settings');
+                    await setDoc(settingsRef, {
+                        studentPortalGateMinutes: val.toString()
+                    }, { merge: true });
                 } catch (err) {
-                    console.warn('Failed to update gateMinutes in Firestore index:', err);
+                    console.warn('Failed to update gateMinutes in Firestore:', err);
                 }
             }
 
@@ -23603,7 +23611,7 @@ if (displayLoc) {
                 const settingsKeys = [
                     'examCollegeName', 'examRoomConfig', 'examStreamsConfig',
                     'examSessionNames', 'examRulesConfig', 'examRemunerationConfig',
-                    'examAllKnownSessions', 'examMixingStrategy'
+                    'examAllKnownSessions', 'examMixingStrategy', 'studentPortalGateMinutes'
                 ];
                 const settingsData = {};
                 settingsKeys.forEach(k => {

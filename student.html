@@ -137,7 +137,8 @@
 
                 const timeSources = [
                     async () => {
-                        const resp = await fetch(window.location.href, { method: 'HEAD' });
+                        const syncUrl = window.location.href.split('#')[0].split('?')[0] + '?_sync=' + Date.now();
+                        const resp = await fetch(syncUrl, { method: 'HEAD', cache: 'no-store' });
                         const dateStr = resp.headers.get('Date');
                         return dateStr ? new Date(dateStr).getTime() : null;
                     },
