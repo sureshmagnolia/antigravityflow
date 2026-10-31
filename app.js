@@ -19792,6 +19792,14 @@ async function loadInitialData() {
             const rawVal = e.target.value;
             const val = (rawVal === 'locked') ? 'locked' : (parseInt(rawVal) || 45);
             localStorage.setItem('studentPortalGateMinutes', val.toString());
+            try {
+                // Keep local cache in sync so same-browser preview testing is instant without breaking student 10m cache
+                const cached = JSON.parse(localStorage.getItem('seating_index_cache'));
+                if (cached && cached.data) {
+                    cached.data.gateMinutes = val;
+                    localStorage.setItem('seating_index_cache', JSON.stringify(cached));
+                }
+            } catch(e) {}
             updateStudentPortalLink();
 
             const statusEl = document.getElementById('student-portal-gate-status');

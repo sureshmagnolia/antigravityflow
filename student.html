@@ -166,8 +166,8 @@
                 const cachedIndex = JSON.parse(localStorage.getItem(CACHE_KEY_INDEX));
                 const now = Date.now();
 
-               // Short 10s cache to ensure admin gate changes are immediately reflected
-               if (cachedIndex && (now - cachedIndex.timestamp < 10000) && cachedIndex.data && (cachedIndex.data.gateMinutes !== undefined)) { 
+                // ⚡ Check Local Cache for Index (Cost Saver: 10 mins cache to prevent reads on rapid student refreshes)
+                if (cachedIndex && (now - cachedIndex.timestamp < 600000)) { 
                     indexCache = cachedIndex.data;
                     collegeName = indexCache.collegeName || "Exam Centre";
                     document.getElementById('college-name').textContent = collegeName;
