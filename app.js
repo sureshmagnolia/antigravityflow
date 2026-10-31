@@ -19736,8 +19736,8 @@ async function loadInitialData() {
             let currentUrl = window.location.href;
             let baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/'));
 
-            // 2. Construct Link with the correct ID format & gate parameter
-            const studentUrl = `${baseUrl}/student.html?id=/public_seating/${currentCollegeId}&gate=${savedGate}`;
+            // 2. Construct Clean Permanent Link (Gate policy is authoritatively read from Firestore)
+            const studentUrl = `${baseUrl}/student.html?id=/public_seating/${currentCollegeId}`;
 
             linkInput.value = studentUrl;
             linkInput.classList.remove('text-gray-400', 'italic');

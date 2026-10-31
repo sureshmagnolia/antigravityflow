@@ -62,35 +62,48 @@
         }
 
         function getGateConfig() {
+            // 🛡️ AUTHORITATIVE SERVER POLICY (Firestore index):
+            // The server-configured gateMinutes is the authoritative security boundary.
+            let serverMinutes = 45;
+            let isServerLocked = false;
+
+            if (indexCache) {
+                if (indexCache.gateMinutes === 'locked' || indexCache.gateMinutes === -1) {
+                    isServerLocked = true;
+                } else if (indexCache.gateMinutes !== undefined && !isNaN(parseInt(indexCache.gateMinutes))) {
+                    serverMinutes = Math.max(5, parseInt(indexCache.gateMinutes));
+                }
+            } else {
+                // Fallback for same-device admin preview before index document arrives
+                try {
+                    const localGate = localStorage.getItem('studentPortalGateMinutes');
+                    if (localGate === 'locked' || localGate === -1) {
+                        isServerLocked = true;
+                    } else if (localGate && !isNaN(parseInt(localGate))) {
+                        serverMinutes = Math.max(5, parseInt(localGate));
+                    }
+                } catch(e) {}
+            }
+
+            // Server-mandated lock takes absolute precedence
+            if (isServerLocked) {
+                return { isLocked: true, minutes: -1, label: 'Locked' };
+            }
+
+            // 🛡️ ANTI-TAMPER CEILING:
+            // A student cannot bypass reveal time by editing &gate= in the URL.
+            // Any URL parameter can ONLY tighten the window or lock it; it can NEVER exceed serverMinutes.
             const urlGate = urlParams.get('gate');
             if (urlGate === 'locked' || urlGate === '-1') {
                 return { isLocked: true, minutes: -1, label: 'Locked' };
             }
             if (urlGate && !isNaN(parseInt(urlGate))) {
-                const m = Math.max(5, parseInt(urlGate));
-                return { isLocked: false, minutes: m, label: getGateLabel(m) };
+                const requestedMins = Math.max(5, parseInt(urlGate));
+                const effectiveMins = Math.min(requestedMins, serverMinutes);
+                return { isLocked: false, minutes: effectiveMins, label: getGateLabel(effectiveMins) };
             }
-            // Check local storage if tested on same device
-            try {
-                const localGate = localStorage.getItem('studentPortalGateMinutes');
-                if (localGate === 'locked' || localGate === '-1') {
-                    return { isLocked: true, minutes: -1, label: 'Locked' };
-                }
-                if (localGate && !isNaN(parseInt(localGate))) {
-                    const m = Math.max(5, parseInt(localGate));
-                    return { isLocked: false, minutes: m, label: getGateLabel(m) };
-                }
-            } catch(e) {}
-            if (indexCache) {
-                if (indexCache.gateMinutes === 'locked' || indexCache.gateMinutes === -1) {
-                    return { isLocked: true, minutes: -1, label: 'Locked' };
-                }
-                if (indexCache.gateMinutes && !isNaN(parseInt(indexCache.gateMinutes))) {
-                    const m = Math.max(5, parseInt(indexCache.gateMinutes));
-                    return { isLocked: false, minutes: m, label: getGateLabel(m) };
-                }
-            }
-            return { isLocked: false, minutes: 45, label: '45m' };
+
+            return { isLocked: false, minutes: serverMinutes, label: getGateLabel(serverMinutes) };
         }
 
         function updateGateBadgeDisplay() {
