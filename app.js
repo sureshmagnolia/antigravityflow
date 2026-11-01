@@ -7444,10 +7444,64 @@ let html = "";
                 const invigMap = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
                 const currentSessionInvigs = invigMap[sessionKeyPipe] || {};
                 const assignedInvigilatorName = currentSessionInvigs[session.Room] || "Name & Signature of Invigilator";
-                // --- 1. Footer Content (Modified for Scribe Reductions) ---
-                let courseSummaryRows = '';
-                const uniqueQPCodesInRoom = new Set();
+                // --- 1. Footer Content & Smart Print Manager Data Augmentation ---
+                const roomCourseSummary = [];
                 let sessionAdjustedTotal = 0;
+                const uniqueQPCodesInRoom = new Set();
+
+                // Pre-compute room course summaries & totals
+                for (const [comboKey, stats] of Object.entries(session.courseCounts)) {
+                    const [cName, cStream] = comboKey.split('|');
+                    const courseKey = getQpKey(cName, cStream);
+                    const qpCode = sessionQPCodes[courseKey] || "";
+
+                    if (qpCode) uniqueQPCodesInRoom.add(qpCode);
+                    else uniqueQPCodesInRoom.add(cName.substring(0, 10));
+
+                    const totalCount = stats.total;
+                    const scribeCount = stats.scribe;
+                    const adjustedCount = totalCount - scribeCount;
+                    sessionAdjustedTotal += adjustedCount;
+
+                    let smartName = getSmartCourseName(cName);
+                    if (scribeCount > 0) {
+                        smartName += ` (${scribeCount} Scribes)`;
+                    }
+
+                    roomCourseSummary.push({
+                        qpCode: qpCode,
+                        courseName: cName, // 100% full, complete course title
+                        smartCourseName: smartName,
+                        count: adjustedCount,
+                        totalCount: totalCount,
+                        scribeCount: scribeCount
+                    });
+                }
+
+                // Pre-compute room students roster with full, uncorrupted data
+                const sortedRoomStudents = [...session.students].sort((a, b) => (parseInt(a.seatNumber) || 0) - (parseInt(b.seatNumber) || 0));
+                const roomStudents = sortedRoomStudents.map(student => {
+                    const reg = (getRegNo(student) || '').toString().trim().toUpperCase();
+                    const isScribe = Boolean(student.isPlaceholder || student.isScribeChecked);
+                    const cKey = getQpKey(student.Course, student.Stream);
+                    const qp = sessionQPCodes[cKey] || "";
+                    let remarkText = student.remark || '';
+                    if (isScribe) {
+                        remarkText = (remarkText ? remarkText + ', ' : '') + 'SCRIBE';
+                    }
+                    return {
+                        seatNumber: parseInt(student.seatNumber) || student.seatNumber,
+                        regNo: reg, // 100% full, untruncated register number
+                        name: student.Name || '',
+                        courseName: student.Course || '', // 100% full, complete course title
+                        qpCode: qp,
+                        isScribe: isScribe,
+                        remarks: remarkText
+                    };
+                });
+                const roomUniqueQpCodes = Array.from(uniqueQPCodesInRoom);
+
+                let courseSummaryRows = '';
 
                 // Iterate through the stats object we built earlier
                 for (const [comboKey, stats] of Object.entries(session.courseCounts)) {
@@ -7456,9 +7510,6 @@ let html = "";
                     const courseKey = getQpKey(cName, cStream);
                     const qpCode = sessionQPCodes[courseKey];
                     const qpDisplay = qpCode || "N/A";
-
-                    if (qpCode) uniqueQPCodesInRoom.add(qpCode);
-                    else uniqueQPCodesInRoom.add(cName.substring(0, 10));
 
                     let smartName = getSmartCourseName(cName);
 
@@ -7472,14 +7523,13 @@ let html = "";
                         smartName += ` <b>(${scribeCount} Scribes)</b>`;
                     }
 
-                    sessionAdjustedTotal += adjustedCount;
-
                     // --- SMART PRINT MANAGER: Capture JSON Data ---
                     const qpCodeForJson = (qpCode || "").replace(/^[A-Za-z]+/, ''); // Strip Alpha prefix
                     const safeTime = (session.Time || '').replace(/:/g, '-');
                     const fileName = `${pageStream}_${session.Date || 'Date'}_${safeTime}_${qpCodeForJson}_${cName}.pdf`;
 
                     lastGeneratedRoomWiseSummary.push({
+                        // --- 1. EXISTING 8 FIELDS (100% untouched for Smart Print Manager QP printing) ---
                         stream: pageStream,
                         date: session.Date || '',
                         time: session.Time || '',
@@ -7488,7 +7538,22 @@ let html = "";
                         courseName: cName,
                         count: totalCount, // FIX: Use totalCount to include scribes
                         scribeCount: scribeCount, // Added for detail
-                        pdfFileName: fileName.trim()
+                        pdfFileName: fileName.trim(),
+
+                        // --- 2. AUGMENTED ROOM & SESSION METADATA (For Room Sheet Printing) ---
+                        collegeName: currentCollegeName,
+                        examName: examName,
+                        hallNumber: serialNo,
+                        roomName: session.Room,
+                        location: location,
+                        invigilatorName: assignedInvigilatorName,
+                        totalStudents: session.students.length,
+                        totalBookletsExclScribes: sessionAdjustedTotal,
+
+                        // --- 3. STRUCTURED ROSTER & COURSE SUMMARIES ---
+                        courseSummary: roomCourseSummary,
+                        uniqueQPCodes: roomUniqueQpCodes,
+                        students: roomStudents
                     });
 
                     courseSummaryRows += `
