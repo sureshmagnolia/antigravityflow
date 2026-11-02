@@ -29,7 +29,9 @@ if (typeof IDB_NAME === 'undefined') {
 
 // [V3 IDB UPGRADE]: Helpers for Scribe Isolation
 
-const IDB_VERSION = 5;
+if (typeof IDB_VERSION === 'undefined') {
+    window.IDB_VERSION = 5;
+}
 
 function openExamDB() {
     return new Promise((resolve, reject) => {

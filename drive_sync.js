@@ -94,7 +94,9 @@ const IDB_NAME = 'AntigravityDB';
 const IDB_STORE = 'examStore';
 const IDB_KEY = 'examBaseData';
 
-const IDB_VERSION = 5;
+if (typeof IDB_VERSION === 'undefined') {
+    window.IDB_VERSION = 5;
+}
 
 function openExamDB() {
     return new Promise((resolve, reject) => {
