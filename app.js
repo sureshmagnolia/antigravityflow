@@ -29,16 +29,38 @@ if (typeof IDB_NAME === 'undefined') {
 
 // [V3 IDB UPGRADE]: Helpers for Scribe Isolation
 
+const IDB_VERSION = 5;
+
 function openExamDB() {
     return new Promise((resolve, reject) => {
-        const req = indexedDB.open(IDB_NAME, 4);
+        const req = indexedDB.open(IDB_NAME, IDB_VERSION);
         req.onupgradeneeded = e => {
             const db = e.target.result;
             if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
             if (!db.objectStoreNames.contains('scribeVault')) db.createObjectStore('scribeVault');
             if (!db.objectStoreNames.contains('allotmentVault')) db.createObjectStore('allotmentVault');
         };
-        req.onsuccess = e => resolve(e.target.result);
+        req.onsuccess = e => {
+            const db = e.target.result;
+            // 🛡️ Self-healing check: if database opened without required stores, auto-upgrade
+            if (!db.objectStoreNames.contains(IDB_STORE) || 
+                !db.objectStoreNames.contains('scribeVault') || 
+                !db.objectStoreNames.contains('allotmentVault')) {
+                const nextVer = (db.version || IDB_VERSION) + 1;
+                db.close();
+                const upReq = indexedDB.open(IDB_NAME, nextVer);
+                upReq.onupgradeneeded = ue => {
+                    const udb = ue.target.result;
+                    if (!udb.objectStoreNames.contains(IDB_STORE)) udb.createObjectStore(IDB_STORE);
+                    if (!udb.objectStoreNames.contains('scribeVault')) udb.createObjectStore('scribeVault');
+                    if (!udb.objectStoreNames.contains('allotmentVault')) udb.createObjectStore('allotmentVault');
+                };
+                upReq.onsuccess = ue => resolve(ue.target.result);
+                upReq.onerror = ue => reject(ue.target.error);
+                return;
+            }
+            resolve(db);
+        };
         req.onerror = e => reject(e.target.error);
     });
 }
@@ -47,10 +69,24 @@ window.openExamDB = openExamDB;
 window.saveScribeAllotmentIDB = function(sessionKey, allotment) {
     return new Promise((resolve) => {
         openExamDB().then(db => {
-            const tx = db.transaction('scribeVault', 'readwrite');
-            tx.objectStore('scribeVault').put(allotment, sessionKey);
-            tx.oncomplete = () => { db.close(); resolve(true); };
-            tx.onerror = () => { db.close(); resolve(false); };
+            try {
+                if (!db.objectStoreNames.contains('scribeVault')) {
+                    db.close();
+                    resolve(false);
+                    return;
+                }
+                const tx = db.transaction('scribeVault', 'readwrite');
+                tx.objectStore('scribeVault').put(allotment, sessionKey);
+                tx.oncomplete = () => { db.close(); resolve(true); };
+                tx.onerror = () => { db.close(); resolve(false); };
+            } catch(e) {
+                console.warn("saveScribeAllotmentIDB error:", e);
+                try { db.close(); } catch(_) {}
+                resolve(false);
+            }
+        }).catch(err => {
+            console.warn("saveScribeAllotmentIDB openExamDB error:", err);
+            resolve(false);
         });
     });
 };
@@ -58,10 +94,21 @@ window.saveScribeAllotmentIDB = function(sessionKey, allotment) {
 window.getScribeAllotmentIDB = function(sessionKey) {
     return new Promise((resolve) => {
         openExamDB().then(db => {
-            const tx = db.transaction('scribeVault', 'readonly');
-            const req = tx.objectStore('scribeVault').get(sessionKey);
-            req.onsuccess = () => { db.close(); resolve(req.result || null); };
-            req.onerror = () => { db.close(); resolve(null); };
+            try {
+                if (!db.objectStoreNames.contains('scribeVault')) {
+                    db.close();
+                    resolve(null);
+                    return;
+                }
+                const tx = db.transaction('scribeVault', 'readonly');
+                const req = tx.objectStore('scribeVault').get(sessionKey);
+                req.onsuccess = () => { db.close(); resolve(req.result || null); };
+                req.onerror = () => { db.close(); resolve(null); };
+            } catch(e) {
+                console.warn("getScribeAllotmentIDB error:", e);
+                try { db.close(); } catch(_) {}
+                resolve(null);
+            }
         }).catch(() => resolve(null));
     });
 };
@@ -71,12 +118,18 @@ window.saveRoomAllotmentIDB = function(sessionKey, allotment) {
     return new Promise((resolve) => {
         openExamDB().then(db => {
             try {
+                if (!db.objectStoreNames.contains('allotmentVault')) {
+                    db.close();
+                    resolve(false);
+                    return;
+                }
                 const tx = db.transaction('allotmentVault', 'readwrite');
                 tx.objectStore('allotmentVault').put(allotment, sessionKey);
                 tx.oncomplete = () => { db.close(); resolve(true); };
                 tx.onerror = () => { db.close(); resolve(false); };
             } catch(e) {
-                db.close();
+                console.warn("saveRoomAllotmentIDB error:", e);
+                try { db.close(); } catch(_) {}
                 resolve(false);
             }
         }).catch(() => resolve(false));
@@ -87,12 +140,18 @@ window.getRoomAllotmentIDB = function(sessionKey) {
     return new Promise((resolve) => {
         openExamDB().then(db => {
             try {
+                if (!db.objectStoreNames.contains('allotmentVault')) {
+                    db.close();
+                    resolve(null);
+                    return;
+                }
                 const tx = db.transaction('allotmentVault', 'readonly');
                 const req = tx.objectStore('allotmentVault').get(sessionKey);
                 req.onsuccess = () => { db.close(); resolve(req.result || null); };
                 req.onerror = () => { db.close(); resolve(null); };
             } catch(e) {
-                db.close();
+                console.warn("getRoomAllotmentIDB error:", e);
+                try { db.close(); } catch(_) {}
                 resolve(null);
             }
         }).catch(() => resolve(null));
@@ -103,6 +162,11 @@ window.getAllAllotmentsIDB = function() {
     return new Promise((resolve) => {
         openExamDB().then(db => {
             try {
+                if (!db.objectStoreNames.contains('allotmentVault')) {
+                    db.close();
+                    resolve({});
+                    return;
+                }
                 const tx = db.transaction('allotmentVault', 'readonly');
                 const store = tx.objectStore('allotmentVault');
                 const req = store.openCursor();
@@ -119,7 +183,8 @@ window.getAllAllotmentsIDB = function() {
                 };
                 req.onerror = () => { db.close(); resolve({}); };
             } catch(e) {
-                db.close();
+                console.warn("getAllAllotmentsIDB error:", e);
+                try { db.close(); } catch(_) {}
                 resolve({});
             }
         }).catch(() => resolve({}));
@@ -130,12 +195,18 @@ window.deleteRoomAllotmentIDB = function(sessionKey) {
     return new Promise((resolve) => {
         openExamDB().then(db => {
             try {
+                if (!db.objectStoreNames.contains('allotmentVault')) {
+                    db.close();
+                    resolve(false);
+                    return;
+                }
                 const tx = db.transaction('allotmentVault', 'readwrite');
                 tx.objectStore('allotmentVault').delete(sessionKey);
                 tx.oncomplete = () => { db.close(); resolve(true); };
                 tx.onerror = () => { db.close(); resolve(false); };
             } catch(e) {
-                db.close();
+                console.warn("deleteRoomAllotmentIDB error:", e);
+                try { db.close(); } catch(_) {}
                 resolve(false);
             }
         }).catch(() => resolve(false));
@@ -902,21 +973,15 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==========================================
 // 💾 INDEXEDDB HELPER (replaces localStorage for examBaseData)
 // ==========================================
-/* Bumping to version 2 to force the missing store creation */
+/* Reuse unified openExamDB defined above */
 function openExamDB() {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open(IDB_NAME, 4);
+    return window.openExamDB ? window.openExamDB() : new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDB_NAME, IDB_VERSION);
         req.onupgradeneeded = e => {
             const db = e.target.result;
-            if (!db.objectStoreNames.contains(IDB_STORE)) {
-                db.createObjectStore(IDB_STORE);
-            }
-            if (!db.objectStoreNames.contains('scribeVault')) {
-                db.createObjectStore('scribeVault');
-            }
-            if (!db.objectStoreNames.contains('allotmentVault')) {
-                db.createObjectStore('allotmentVault');
-            }
+            if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+            if (!db.objectStoreNames.contains('scribeVault')) db.createObjectStore('scribeVault');
+            if (!db.objectStoreNames.contains('allotmentVault')) db.createObjectStore('allotmentVault');
         };
         req.onsuccess = e => resolve(e.target.result);
         req.onerror = e => reject(e.target.error);
@@ -1052,13 +1117,12 @@ async function migrateFromLocalStorage() {
             const dataArray = JSON.parse(oldData);
             // Save to IDB
             await new Promise(resolve => {
-                const req = indexedDB.open(IDB_NAME, 4);
-                req.onsuccess = e => {
-                    const db = e.target.result;
+                openExamDB().then(db => {
                     const tx = db.transaction(IDB_STORE, 'readwrite');
                     tx.objectStore(IDB_STORE).put(dataArray, IDB_KEY);
                     tx.oncomplete = () => { db.close(); resolve(); };
-                };
+                    tx.onerror = () => { db.close(); resolve(); };
+                }).catch(() => resolve());
             });
             // 🚨 CRITICAL: Remove from localStorage to free up the 5MB quota
             localStorage.removeItem(BASE_DATA_KEY);
@@ -14539,8 +14603,10 @@ window.real_populate_qp_code_session_dropdown = function () {
 
             if (sessionKey) {
                 loadRoomAllotment(sessionKey);
-                loadScribeAllotment(sessionKey).then(() => {
-                    renderInvigilationPanel(); // <--- ADD THIS LINE
+                Promise.resolve(loadScribeAllotment(sessionKey)).catch(e => {
+                    console.error("loadScribeAllotment error:", e);
+                }).finally(() => {
+                    renderInvigilationPanel();
                 });
             } else {
                 // Hide all sections
@@ -15113,44 +15179,61 @@ if (saveScribeBtn) {
 
     // NEW FUNCTION: This loads the scribe allotment data for the session
     async function loadScribeAllotment(sessionKey) {
-        // *** FIX: Ensure global scribe list is loaded before checking length ***
-        if (globalScribeList.length === 0) {
-            globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
-        }
-        // **********************************************************************
-
-        if (sessionKey && globalScribeList.length > 0) {
-            const vaultKey = `scrAllot_` + sessionKey.replace(/\s/g, '_');
-            const isDirty = localStorage.getItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_')) === 'true';
-
-            // 🛡️ [V3 IDB UPGRADE]: Multi-Tiered Load (Bidirectional Sync)
-            // 1. Get from Legacy (The shared mirrors)
-            const v1 = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-            const v2 = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
-            const legacyData = v1[sessionKey] || v2[sessionKey] || null;
-
-            // 2. Get from Private IDB (The Source of Truth)
-            const dbData = await window.getScribeAllotmentIDB(sessionKey);
-
-            // 3. Comparison Logic
-            if (!isDirty && legacyData && JSON.stringify(legacyData) !== JSON.stringify(dbData)) {
-                // External change detected (from V2 PC or Cloud Sync) -> Adoption
-                console.log("🔄 V3: Adoption triggered. Syncing IDB from Legacy changes...");
-                await window.saveScribeAllotmentIDB(sessionKey, legacyData);
-                currentScribeAllotment = legacyData;
-            } else {
-                // Use DB if available, fallback to Legacy
-                currentScribeAllotment = dbData || legacyData || {};
+        try {
+            // *** FIX: Ensure global scribe list is loaded before checking length ***
+            if (globalScribeList.length === 0) {
+                globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
             }
+            // **********************************************************************
 
-            // Sync Local Cache (Vault) for UI speed
-            try { localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment)); } catch(e) {}
+            if (sessionKey && globalScribeList.length > 0) {
+                const vaultKey = `scrAllot_` + sessionKey.replace(/\s/g, '_');
+                const isDirty = localStorage.getItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_')) === 'true';
 
-            scribeAllotmentListSection.classList.remove('hidden');
-            renderScribeAllotmentList(sessionKey);
-        } else {
-            scribeAllotmentListSection.classList.add('hidden');
-            if(scribeAllotmentList) scribeAllotmentList.innerHTML = "";
+                // 🛡️ [V3 IDB UPGRADE]: Multi-Tiered Load (Bidirectional Sync)
+                // 1. Get from Legacy (The shared mirrors)
+                const v1 = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+                const v2 = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
+                const legacyData = v1[sessionKey] || v2[sessionKey] || null;
+
+                // 2. Get from Private IDB (The Source of Truth)
+                let dbData = null;
+                try {
+                    dbData = await window.getScribeAllotmentIDB(sessionKey);
+                } catch(e) {
+                    console.warn("getScribeAllotmentIDB failed:", e);
+                }
+
+                // 3. Comparison Logic
+                if (!isDirty && legacyData && JSON.stringify(legacyData) !== JSON.stringify(dbData)) {
+                    // External change detected (from V2 PC or Cloud Sync) -> Adoption
+                    console.log("🔄 V3: Adoption triggered. Syncing IDB from Legacy changes...");
+                    try {
+                        await window.saveScribeAllotmentIDB(sessionKey, legacyData);
+                    } catch(e) {
+                        console.warn("saveScribeAllotmentIDB failed:", e);
+                    }
+                    currentScribeAllotment = legacyData;
+                } else {
+                    // Use DB if available, fallback to Legacy
+                    currentScribeAllotment = dbData || legacyData || {};
+                }
+
+                // Sync Local Cache (Vault) for UI speed
+                try { localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment)); } catch(e) {}
+
+                scribeAllotmentListSection.classList.remove('hidden');
+                renderScribeAllotmentList(sessionKey);
+            } else {
+                scribeAllotmentListSection.classList.add('hidden');
+                if(scribeAllotmentList) scribeAllotmentList.innerHTML = "";
+            }
+        } catch(err) {
+            console.error("Error in loadScribeAllotment:", err);
+            // Ensure section visibility does not hang
+            if (sessionKey) {
+                try { renderScribeAllotmentList(sessionKey); } catch(_) {}
+            }
         }
     }
 
