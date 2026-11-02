@@ -10535,7 +10535,14 @@ async function syncToPrintManager() {
         // 4. Clean up previous reports
         if (typeof clearReport === 'function') clearReport();
 
-        // 4b. Sync active session to Reports dropdown when opening Reports tab
+        // 4b. Update warning banners when entering Room Allotment or Reports
+        if (typeof window.updateAllotmentWarningBanners === 'function') {
+            if (viewToShow === viewRoomAllotment || viewToShow === viewReports) {
+                setTimeout(() => window.updateAllotmentWarningBanners(), 50);
+            }
+        }
+
+        // 4c. Sync active session to Reports dropdown when opening Reports tab
         if (viewToShow === viewReports) {
             const activeSession = (typeof window !== 'undefined' && window.currentSessionKey) 
                 ? window.currentSessionKey 
@@ -11985,6 +11992,9 @@ window.real_populate_qp_code_session_dropdown = function () {
                     await window.ensureSessionInLocalStorage(sk);
                 }
             }
+            if (typeof window.updateAllotmentWarningBanners === 'function') {
+                window.updateAllotmentWarningBanners();
+            }
         });
     }
 
@@ -13263,7 +13273,246 @@ window.real_populate_qp_code_session_dropdown = function () {
             // Only hide if empty AND saved (Clean State)
             saveSection.classList.add('hidden');
         }
+
+        if (typeof window.updateAllotmentWarningBanners === 'function') {
+            window.updateAllotmentWarningBanners();
+        }
     }
+
+    // ========================================================
+    // 🛡️ ALLOTMENT COMPLETION & INTEGRITY WARNING BANNERS (SELECTED SESSION)
+    // ========================================================
+    function checkSessionAllotmentStatus(sessionKey) {
+        if (!sessionKey || typeof allStudentData === 'undefined' || !Array.isArray(allStudentData) || allStudentData.length === 0) {
+            return {
+                hasData: false,
+                sessionKey: sessionKey || '',
+                totalStudents: 0,
+                allottedCount: 0,
+                unallottedCount: 0,
+                regularTotal: 0,
+                regularAllotted: 0,
+                regularUnallotted: 0,
+                scribeTotal: 0,
+                scribeAllotted: 0,
+                scribeUnallotted: 0,
+                isComplete: false
+            };
+        }
+
+        const [rawDate, rawTime] = sessionKey.split(' | ');
+        const date = (rawDate || '').trim();
+        const time = (rawTime || '').trim();
+
+        const sessionStudents = allStudentData.filter(s => {
+            const sDate = (s.Date || '').toString().trim();
+            const sTime = (s.Time || '').toString().trim();
+            return sDate === date && sTime === time;
+        });
+
+        if (sessionStudents.length === 0) {
+            return {
+                hasData: false,
+                sessionKey: sessionKey,
+                totalStudents: 0,
+                allottedCount: 0,
+                unallottedCount: 0,
+                regularTotal: 0,
+                regularAllotted: 0,
+                regularUnallotted: 0,
+                scribeTotal: 0,
+                scribeAllotted: 0,
+                scribeUnallotted: 0,
+                isComplete: false
+            };
+        }
+
+        // 1. Scribes from global list
+        let scribeList = [];
+        try {
+            scribeList = (typeof globalScribeList !== 'undefined' && Array.isArray(globalScribeList) && globalScribeList.length > 0)
+                ? globalScribeList
+                : JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
+        } catch(e) { scribeList = []; }
+        const globalScribeRegNos = new Set((scribeList || []).map(s => getRegNo(s).trim()).filter(Boolean));
+
+        // 2. Regular Allotments for this session
+        let rooms = [];
+        if (typeof currentSessionKey !== 'undefined' && currentSessionKey === sessionKey && typeof currentSessionAllotment !== 'undefined' && Array.isArray(currentSessionAllotment)) {
+            rooms = currentSessionAllotment;
+        } else if (typeof window.getRoomAllotmentSync === 'function') {
+            rooms = window.getRoomAllotmentSync(sessionKey) || [];
+        } else {
+            const allAllot = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+            rooms = allAllot[sessionKey] || [];
+        }
+
+        const allottedRegNos = new Set();
+        rooms.forEach(room => {
+            (room.students || []).forEach(s => {
+                const reg = (typeof s === 'object') ? getRegNo(s) : (s || '');
+                if (reg) allottedRegNos.add(reg.trim());
+            });
+        });
+
+        // 3. Scribe Allotments for this session
+        let sessionScribeMap = {};
+        if (typeof currentSessionKey !== 'undefined' && currentSessionKey === sessionKey && typeof currentScribeAllotment !== 'undefined' && currentScribeAllotment) {
+            sessionScribeMap = currentScribeAllotment;
+        } else {
+            const allScribes = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+            const v2Scribes = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
+            sessionScribeMap = allScribes[sessionKey] || v2Scribes[sessionKey] || {};
+        }
+
+        // 4. Unique students in session
+        const uniqueStudents = new Map();
+        sessionStudents.forEach(s => {
+            const r = getRegNo(s).trim();
+            if (r && !uniqueStudents.has(r)) {
+                uniqueStudents.set(r, s);
+            }
+        });
+
+        let regularTotal = 0;
+        let regularAllotted = 0;
+        let regularUnallotted = 0;
+
+        let scribeTotal = 0;
+        let scribeAllotted = 0;
+        let scribeUnallotted = 0;
+
+        uniqueStudents.forEach((student, reg) => {
+            const isScribe = globalScribeRegNos.has(reg);
+            if (isScribe) {
+                scribeTotal++;
+                const assignedRoom = (sessionScribeMap[reg] || '').trim();
+                if (assignedRoom && assignedRoom !== 'Unallotted') {
+                    scribeAllotted++;
+                } else {
+                    scribeUnallotted++;
+                }
+            } else {
+                regularTotal++;
+                if (allottedRegNos.has(reg)) {
+                    regularAllotted++;
+                } else {
+                    regularUnallotted++;
+                }
+            }
+        });
+
+        const totalStudents = regularTotal + scribeTotal;
+        const totalAllotted = regularAllotted + scribeAllotted;
+        const totalUnallotted = regularUnallotted + scribeUnallotted;
+        const isComplete = (totalStudents > 0 && totalUnallotted === 0);
+
+        return {
+            hasData: true,
+            sessionKey: sessionKey,
+            totalStudents,
+            allottedCount: totalAllotted,
+            unallottedCount: totalUnallotted,
+            regularTotal,
+            regularAllotted,
+            regularUnallotted,
+            scribeTotal,
+            scribeAllotted,
+            scribeUnallotted,
+            isComplete
+        };
+    }
+    window.checkSessionAllotmentStatus = checkSessionAllotmentStatus;
+
+    function renderSingleSessionBanner(bannerEl, sessionKey, tabName) {
+        if (!bannerEl) return;
+        if (!sessionKey || sessionKey === 'all') {
+            bannerEl.innerHTML = '';
+            bannerEl.classList.add('hidden');
+            return;
+        }
+
+        const status = checkSessionAllotmentStatus(sessionKey);
+        if (!status.hasData) {
+            bannerEl.innerHTML = '';
+            bannerEl.classList.add('hidden');
+            return;
+        }
+
+        if (!status.isComplete) {
+            // Warning state: at least one student or scribe without room
+            bannerEl.className = (tabName === 'reports') ? "mb-4 block" : "mb-5 block";
+            bannerEl.innerHTML = `
+            <div class="p-3.5 sm:p-4 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl shadow-xs border border-amber-200/80">
+                <div class="flex items-start gap-3">
+                    <div class="shrink-0 p-1.5 bg-amber-100 text-amber-700 rounded-lg">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex flex-wrap items-center justify-between gap-1.5">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs sm:text-sm font-black text-amber-950 uppercase tracking-wide">⚠️ Incomplete Room Allotment</span>
+                                <span class="px-2 py-0.5 text-[10px] font-black bg-amber-200 text-amber-900 rounded-full uppercase tracking-wider">${status.unallottedCount} Unallotted</span>
+                            </div>
+                            <span class="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">${status.sessionKey}</span>
+                        </div>
+                        <p class="text-xs sm:text-sm text-amber-900 mt-1 font-medium leading-relaxed">
+                            <strong>${status.unallottedCount} candidate(s)</strong> in this session have no assigned room. ${tabName === 'reports' ? 'Reports generated for this session will display unallotted students!' : 'Please complete room assignments.'}
+                        </p>
+                        <div class="flex flex-wrap gap-2 mt-2">
+                            ${status.regularUnallotted > 0 ? `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 bg-white border border-amber-300 text-amber-900 rounded-md shadow-2xs"><span>👤</span> ${status.regularUnallotted} Regular Candidate(s) without Room</span>` : ''}
+                            ${status.scribeUnallotted > 0 ? (tabName === 'allotment' ? `<button onclick="window.scrollToScribesInAllotment()" class="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 bg-amber-100 hover:bg-amber-200 border border-amber-400 text-amber-950 rounded-md shadow-2xs cursor-pointer transition"><span>✍️</span> ${status.scribeUnallotted} Scribe Candidate(s) without Room <span class="underline ml-1">Assign Scribe Rooms ↓</span></button>` : `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 bg-white border border-amber-300 text-amber-900 rounded-md shadow-2xs"><span>✍️</span> ${status.scribeUnallotted} Scribe Candidate(s) without Room</span>`) : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        } else {
+            // Complete state
+            bannerEl.className = (tabName === 'reports') ? "mb-4 block" : "mb-5 block";
+            bannerEl.innerHTML = `
+            <div class="p-2.5 sm:p-3 bg-emerald-50 border-l-4 border-emerald-500 rounded-r-xl shadow-xs border border-emerald-200/80">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <div class="flex items-center gap-2 text-xs sm:text-sm">
+                        <span class="flex items-center justify-center w-5 h-5 bg-emerald-100 text-emerald-700 rounded-full font-black text-xs">✓</span>
+                        <span class="font-bold text-emerald-950">Room Allotment Complete:</span>
+                        <span class="text-emerald-800">All <strong>${status.totalStudents}</strong> candidates (${status.regularTotal} Regular${status.scribeTotal > 0 ? `, ${status.scribeTotal} Scribes` : ''}) are allotted to rooms.</span>
+                    </div>
+                    <span class="text-[11px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">${status.sessionKey}</span>
+                </div>
+            </div>`;
+        }
+    }
+
+    window.updateAllotmentWarningBanners = function() {
+        // 1. Room Allotment Tab (Selected Session)
+        const allotmentBanner = document.getElementById('allotment-warning-banner');
+        if (allotmentBanner) {
+            const activeAllotSession = (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect && allotmentSessionSelect.value)
+                ? allotmentSessionSelect.value
+                : (typeof window.currentSessionKey !== 'undefined' ? window.currentSessionKey : '');
+            renderSingleSessionBanner(allotmentBanner, activeAllotSession, 'allotment');
+        }
+
+        // 2. Reports Center Tab (Selected Session)
+        const reportsBanner = document.getElementById('reports-warning-banner');
+        if (reportsBanner) {
+            let activeReportSession = (typeof reportsSessionSelect !== 'undefined' && reportsSessionSelect && reportsSessionSelect.value)
+                ? reportsSessionSelect.value
+                : '';
+            // If empty, fallback to active session
+            if (!activeReportSession && typeof window.currentSessionKey !== 'undefined') {
+                activeReportSession = window.currentSessionKey;
+            }
+            renderSingleSessionBanner(reportsBanner, activeReportSession, 'reports');
+        }
+    };
+
+    window.scrollToScribesInAllotment = function() {
+        const el = document.getElementById('scribe-allotment-list-section');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+    };
 
 
 
@@ -14609,6 +14858,9 @@ window.real_populate_qp_code_session_dropdown = function () {
                     console.error("loadScribeAllotment error:", e);
                 }).finally(() => {
                     renderInvigilationPanel();
+                    if (typeof window.updateAllotmentWarningBanners === 'function') {
+                        window.updateAllotmentWarningBanners();
+                    }
                 });
             } else {
                 // Hide all sections
@@ -15272,6 +15524,10 @@ function renderScribeAllotmentList(sessionKey) {
         }
     }
     // -------------------------------------------------------------------------------
+
+    if (typeof window.updateAllotmentWarningBanners === 'function') {
+        window.updateAllotmentWarningBanners();
+    }
 
     const scribeAllotmentList = document.getElementById('scribe-allotment-list');
     if (!scribeAllotmentList) return;
