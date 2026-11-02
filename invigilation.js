@@ -1830,7 +1830,13 @@ function renderStaffRankList(myEmail, targetDate = new Date()) {
         let roleBadge = "";
         if (s.roleHistory) {
             const today = new Date();
-            const activeRole = s.roleHistory.find(r => new Date(r.start) <= today && new Date(r.end) >= today);
+            const activeRole = s.roleHistory.find(r => {
+                const sDate = r.start ? new Date(r.start) : new Date(0);
+                const eDate = (r.end && String(r.end).trim()) ? new Date(r.end) : new Date("9999-12-31");
+                if (!isNaN(sDate.getTime())) sDate.setHours(0, 0, 0, 0);
+                if (!isNaN(eDate.getTime())) eDate.setHours(23, 59, 59, 999);
+                return sDate <= today && eDate >= today;
+            });
             if (activeRole) roleBadge = `<span class="ml-1 text-[8px] uppercase font-bold bg-purple-100 text-purple-700 px-1 py-0.5 rounded border border-purple-200">${activeRole.role}</span>`;
         }
 
@@ -3530,7 +3536,14 @@ window.generateWelcomeText = function(name, dept) {
     
     const getRolePhone = (role) => {
         const staff = staffData.find(s => 
-            s.roleHistory && s.roleHistory.some(r => r.role === role && new Date(r.start) <= today && new Date(r.end) >= today)
+            s.roleHistory && s.roleHistory.some(r => {
+                if (!r.role || (r.role !== role && !r.role.toLowerCase().includes(role.toLowerCase()))) return false;
+                const sDate = r.start ? new Date(r.start) : new Date(0);
+                const eDate = (r.end && String(r.end).trim()) ? new Date(r.end) : new Date("9999-12-31");
+                if (!isNaN(sDate.getTime())) sDate.setHours(0, 0, 0, 0);
+                if (!isNaN(eDate.getTime())) eDate.setHours(23, 59, 59, 999);
+                return sDate <= today && eDate >= today;
+            })
         );
         if (staff && staff.phone) {
              return staff.phone.replace(/\D/g, ''); // Return clean phone

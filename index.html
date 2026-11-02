@@ -17,7 +17,7 @@
     <script src="jspdf.plugin.autotable.min.js"></script>
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
-    <script src="drive_sync.js?v=v3"></script>
+    <script src="drive_sync.js?v=v5"></script>
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 
@@ -2194,6 +2194,9 @@
                         </button>
                     </div>
 
+                    <!-- 🛡️ Top Warning Banner for Reports Center (Selected Session) -->
+                    <div id="reports-warning-banner" class="mb-4 hidden"></div>
+
                     <div id="report-filter-section" class="bg-slate-50 border border-slate-200 p-3 rounded-lg mb-3 hidden">
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <div class="flex items-center gap-4">
@@ -2716,6 +2719,9 @@
             <div id="view-room-allotment" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
                 <div class="bg-white p-8 rounded-lg shadow-xl w-full">
                     <h1 class="text-3xl font-bold text-gray-800 mb-6">Room Allotment</h1>
+
+                    <!-- 🛡️ Top Warning Banner for Room Allotment (Selected Session) -->
+                    <div id="allotment-warning-banner" class="mb-5 hidden"></div>
 
                     <div id="room-allotment-content-wrapper">
                         <div class="mb-4">
@@ -5675,7 +5681,7 @@
 </div>
 
 <script src="session_export.js?v=12.8.36"></script>
-<script src="app.js?v=12.8.46"></script>
+<script src="app.js?v=12.8.53"></script>
 <script src="excel_extraction.js"></script>    
 <!-- Global Datalist for Searchable Parent Rooms -->
 <datalist id="parent-rooms-list"></datalist>

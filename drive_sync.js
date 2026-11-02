@@ -94,16 +94,39 @@ const IDB_NAME = 'AntigravityDB';
 const IDB_STORE = 'examStore';
 const IDB_KEY = 'examBaseData';
 
+if (typeof IDB_VERSION === 'undefined') {
+    window.IDB_VERSION = 5;
+}
+
 function openExamDB() {
     return new Promise((resolve, reject) => {
-        const req = indexedDB.open(IDB_NAME, 4);
+        const req = indexedDB.open(IDB_NAME, IDB_VERSION);
         req.onupgradeneeded = e => {
             const db = e.target.result;
             if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
             if (!db.objectStoreNames.contains('scribeVault')) db.createObjectStore('scribeVault');
             if (!db.objectStoreNames.contains('allotmentVault')) db.createObjectStore('allotmentVault');
         };
-        req.onsuccess = e => resolve(e.target.result);
+        req.onsuccess = e => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(IDB_STORE) || 
+                !db.objectStoreNames.contains('scribeVault') || 
+                !db.objectStoreNames.contains('allotmentVault')) {
+                const nextVer = (db.version || IDB_VERSION) + 1;
+                db.close();
+                const upReq = indexedDB.open(IDB_NAME, nextVer);
+                upReq.onupgradeneeded = ue => {
+                    const udb = ue.target.result;
+                    if (!udb.objectStoreNames.contains(IDB_STORE)) udb.createObjectStore(IDB_STORE);
+                    if (!udb.objectStoreNames.contains('scribeVault')) udb.createObjectStore('scribeVault');
+                    if (!udb.objectStoreNames.contains('allotmentVault')) udb.createObjectStore('allotmentVault');
+                };
+                upReq.onsuccess = ue => resolve(ue.target.result);
+                upReq.onerror = ue => reject(ue.target.error);
+                return;
+            }
+            resolve(db);
+        };
         req.onerror = e => reject(e.target.error);
     });
 }
