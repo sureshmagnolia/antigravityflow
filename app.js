@@ -22455,20 +22455,109 @@ const allRooms = Object.values(roomDataMap);
     };
 
 
-    // --- Helper: Fetch Active Official for Date ---
-    function getOfficialForDate(roleName, dateObj) {
-        const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
-        // Normalize Target Date
-        const target = new Date(dateObj);
-        target.setHours(12, 0, 0, 0); 
+    // --- Helper: Fetch Active Official for Date (Chief / Senior Asst. Superintendent / etc.) ---
+    window.getOfficialForDate = function(roleType, dateRef, customStaffData = null) {
+        try {
+            const staffList = customStaffData || JSON.parse(localStorage.getItem('examStaffData') || '[]');
+            if (!Array.isArray(staffList) || staffList.length === 0) return "";
 
-        const found = staffData.find(s => s.roleHistory && s.roleHistory.some(r => {
-            const start = new Date(r.start); start.setHours(0,0,0,0);
-            const end = new Date(r.end); end.setHours(23,59,59,999);
-            // Flexible Role Check
-            return (r.role === roleName) && (target >= start && target <= end);
-        }));
-        return found ? found.name : ""; 
+            let targetDate = new Date();
+            if (dateRef instanceof Date && !isNaN(dateRef.getTime())) {
+                targetDate = new Date(dateRef.getTime());
+            } else if (typeof dateRef === 'string' && dateRef.trim()) {
+                const parts = dateRef.trim().split('.');
+                if (parts.length === 3) {
+                    targetDate = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+                } else {
+                    const parsed = new Date(dateRef);
+                    if (!isNaN(parsed.getTime())) targetDate = parsed;
+                }
+            }
+            targetDate.setHours(12, 0, 0, 0);
+
+            const isRoleMatch = (roleStr) => {
+                if (!roleStr || typeof roleStr !== 'string') return false;
+                const clean = roleStr.toLowerCase().replace(/[\.\-_]/g, ' ').replace(/\s+/g, ' ').trim();
+                const q = (roleType || '').toLowerCase().replace(/[\.\-_]/g, ' ').replace(/\s+/g, ' ').trim();
+                
+                if (q.includes('chief') || q === 'cs') {
+                    return clean.includes('chief sup') || clean.includes('chief superintendent') || clean === 'cs' || clean.includes('exam chief');
+                }
+                if (q.includes('senior') || q.includes('asst') || q === 'sas') {
+                    return clean.includes('senior asst') || clean.includes('senior assistant') || clean.includes('senior sup') || clean.includes('senior superintendent') || clean === 'sas';
+                }
+                return clean.includes(q);
+            };
+
+            // 1. Check staff with active role in roleHistory for targetDate
+            // Notice: When end date is empty string or omitted, the role assignment is ongoing/active!
+            const activeMatches = [];
+            staffList.forEach(s => {
+                if (Array.isArray(s.roleHistory)) {
+                    s.roleHistory.forEach(r => {
+                        if (isRoleMatch(r.role)) {
+                            let start = r.start ? new Date(r.start) : new Date(0);
+                            if (isNaN(start.getTime())) start = new Date(0);
+                            start.setHours(0, 0, 0, 0);
+
+                            let end = (r.end && String(r.end).trim()) ? new Date(r.end) : new Date('9999-12-31');
+                            if (isNaN(end.getTime())) end = new Date('9999-12-31');
+                            end.setHours(23, 59, 59, 999);
+
+                            if (targetDate >= start && targetDate <= end) {
+                                activeMatches.push({ name: s.name, start: start.getTime() });
+                            }
+                        }
+                    });
+                }
+            });
+
+            if (activeMatches.length > 0) {
+                activeMatches.sort((a, b) => b.start - a.start);
+                return activeMatches[0].name;
+            }
+
+            // 2. Check direct s.role or s.designation
+            const direct = staffList.find(s => isRoleMatch(s.role) || isRoleMatch(s.designation) || isRoleMatch(s.Designation));
+            if (direct && direct.name) return direct.name;
+
+            // 3. Check examProformaOfficials in localStorage
+            try {
+                const proformaOfficials = JSON.parse(localStorage.getItem('examProformaOfficials') || '{}');
+                const q = (roleType || '').toLowerCase();
+                if ((q.includes('chief') || q === 'cs') && proformaOfficials.chiefSupdt && proformaOfficials.chiefSupdt.trim()) {
+                    return proformaOfficials.chiefSupdt.trim();
+                }
+                if ((q.includes('senior') || q.includes('asst') || q === 'sas') && proformaOfficials.seniorSupdt && proformaOfficials.seniorSupdt.trim()) {
+                    return proformaOfficials.seniorSupdt.trim();
+                }
+            } catch (e) {}
+
+            // 4. Fallback to latest past assignment in roleHistory
+            const pastMatches = [];
+            staffList.forEach(s => {
+                if (Array.isArray(s.roleHistory)) {
+                    s.roleHistory.forEach(r => {
+                        if (isRoleMatch(r.role)) {
+                            let start = r.start ? new Date(r.start) : new Date(0);
+                            pastMatches.push({ name: s.name, start: isNaN(start.getTime()) ? 0 : start.getTime() });
+                        }
+                    });
+                }
+            });
+            if (pastMatches.length > 0) {
+                pastMatches.sort((a, b) => b.start - a.start);
+                return pastMatches[0].name;
+            }
+
+            return "";
+        } catch (err) {
+            console.error("Error in getOfficialForDate:", err);
+            return "";
+        }
+    };
+    function getOfficialForDate(roleName, dateObj) {
+        return window.getOfficialForDate(roleName, dateObj);
     }
     
 
@@ -22711,26 +22800,8 @@ if (displayLoc) {
            // 6. Generate Print Window
     
     // FETCH OFFICIALS
-    let dateObj = new Date();
-    try {
-        const [d, m, y] = date.split('.');
-        dateObj = new Date(y, m - 1, d);
-    } catch(e) {}
-    
-    // Helper to get official (ensure this helper exists or use internal logic)
-    const getOfficial = (role) => {
-         // Fallback logic if helper is missing
-         const staff = staffData.find(s => s.roleHistory && s.roleHistory.some(r => {
-            const start = new Date(r.start); start.setHours(0,0,0,0);
-            const end = new Date(r.end); end.setHours(23,59,59,999);
-            // Flexible Role Check
-            return (r.role === role) && (dateObj >= start && dateObj <= end);
-        }));
-        return staff ? staff.name : "";
-    };
-
-    const seniorName = getOfficial("Senior Asst. Superintendent");
-    const chiefName = getOfficial("Chief Superintendent");
+    const seniorName = window.getOfficialForDate("Senior Asst. Superintendent", date, staffData);
+    const chiefName = window.getOfficialForDate("Chief Superintendent", date, staffData);
 
     const w = window.open('', '_blank');
     w.document.write(`
@@ -26282,24 +26353,8 @@ window.downloadInvigilationListPDF = async function () {
     if (finalY > 250) { doc.addPage(); finalY = 20; }
     
     // 1. Fetch Names Logic
-    const getOfficialName = (role) => {
-        const q = role.toLowerCase().replace('.', '').replace('assistant', 'asst');
-        const staff = staffData.find(s => {
-             if (s.roleHistory && s.roleHistory.some(r => {
-                 const rName = r.role.toLowerCase().replace('.', '').replace('assistant', 'asst');
-                 const [d, m, y] = date.split('.');
-                 const target = new Date(y, m-1, d); target.setHours(12,0,0,0);
-                 const start = new Date(r.start); start.setHours(0,0,0,0);
-                 const end = new Date(r.end); end.setHours(23,59,59,999);
-                 return rName.includes(q) && target >= start && target <= end;
-             })) return true;
-             return ((s.role && s.role.toLowerCase().includes(q)) || (s.Designation && s.Designation.toLowerCase().includes(q)));
-        });
-        return staff ? staff.name : "";
-    };
-
-    const seniorName = getOfficialName("Senior Assistant");
-    const chiefName = getOfficialName("Chief Superintendent");
+    const seniorName = window.getOfficialForDate("Senior Asst. Superintendent", date, staffData);
+    const chiefName = window.getOfficialForDate("Chief Superintendent", date, staffData);
 
     const yPos = finalY + 30;
     
