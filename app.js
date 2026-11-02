@@ -21088,28 +21088,41 @@ window.renderBatchArchiveList = async function() {
 
 window.generateBatchArchive = async function() {
     const rawChecked = Array.from(document.querySelectorAll('.archive-session-cb:checked')).map(cb => cb.value);
-        // Snapshot rates and scribe list at the moment of archiving
     const archivedRates = JSON.parse(localStorage.getItem('examRemunerationConfig') || '{}');
     const scribeAllotment = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+    const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
+    const scribeRegNos = new Set(scribeListRaw.map(s => (s.regNo || s.RegisterNo || s.candidateRegNo || '').toString().trim().toLowerCase()));
+    Object.values(scribeAllotment).forEach(allotMap => {
+        if (allotMap && typeof allotMap === 'object') {
+            Object.keys(allotMap).forEach(r => {
+                if (r && r.trim()) scribeRegNos.add(r.trim().toLowerCase());
+            });
+        }
+    });
+
+    const archivedRegularOfficials = JSON.parse(localStorage.getItem('calicut_university_proforma_officials') || localStorage.getItem('examProformaOfficials') || '{}');
+    const archivedSdeOfficials = JSON.parse(localStorage.getItem('calicut_university_sde_officials') || localStorage.getItem('examSdeOfficials') || '{}');
+    const archivedStaff = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+
     if (rawChecked.length === 0) return await UiModal.alert("Select at least one option to archive.");
 
     const btn = document.querySelector('#batch-archive-modal button.bg-indigo-600');
-    const origText = btn.innerHTML;
-    btn.innerHTML = 'Bundling Data... Please wait';
-    btn.disabled = true;
+    const origText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.innerHTML = 'Bundling Data & Proforma... Please wait';
+        btn.disabled = true;
+    }
     await new Promise(r => setTimeout(r, 100));
 
-       // --- STEP 1: RESOLVE GROUPS AND ALLOWED EXAMS ---
+    // --- STEP 1: RESOLVE GROUPS AND ALLOWED EXAMS ---
     const finalSessionSet = new Set();
     const allowedExamNames = new Set();
     
-    // Ensure we have student data for resolution
     let sourceStudentData = allStudentData;
     if (!sourceStudentData || sourceStudentData.length === 0) {
         sourceStudentData = await loadExamDataIDB().catch(() => []) || [];
     }
 
-    // Dynamically rebuild known sessions to prevent empty archive bugs
     const allSessions = new Set(sourceStudentData.map(s => {
         if (!s.Date || !s.Time) return null;
         return `${String(s.Date).trim()} | ${String(s.Time).trim()}`;
@@ -21122,7 +21135,6 @@ window.generateBatchArchive = async function() {
             allowedExamNames.add(targetName);
             known.forEach(sk => {
                 const [d, t] = sk.split(' | ');
-                // Check if this session ACTUALLY contains this exam name
                 const hasExam = sourceStudentData.some(s => 
                     String(s.Date || "").trim() === d.trim() && 
                     String(s.Time || "").trim() === t.trim() &&
@@ -21139,7 +21151,6 @@ window.generateBatchArchive = async function() {
     let allArchiveData = [];
     const collegeName = localStorage.getItem('examCollegeName') || 'ExamFlow Project';
     
-    // --- FIX: Dynamic Title Generation ---
     let archiveExamName = "";
     if (allowedExamNames.size > 0) {
         archiveExamName = Array.from(allowedExamNames).sort().join(" & ");
@@ -21155,25 +21166,25 @@ window.generateBatchArchive = async function() {
         archiveExamName = sessionNamesSet.size > 0 ? Array.from(sessionNamesSet).join(" & ") : "University Examinations";
     }
 
-    // FIX: Removed 'let' because sourceStudentData is already declared above
     sourceStudentData = allStudentData;
-
     if (!sourceStudentData || sourceStudentData.length === 0) {
-        sourceStudentData = await loadExamDataIDB() || [];
+        sourceStudentData = await loadExamDataIDB().catch(() => []) || [];
     }
     
-    checked.forEach(sessionKey => {
+    for (const sessionKey of checked) {
+        if (typeof ensureSessionInLocalStorage === 'function') {
+            try { await ensureSessionInLocalStorage(sessionKey); } catch (e) {}
+        }
+
         const [datePart, timePart] = sessionKey.split(' | ');
         const targetDate = (datePart || "").trim();
         const targetTime = (timePart || "").trim();
         
-        // 1. Initial filter by Session Time
         let students = sourceStudentData.filter(s => 
             (s.Date || "").trim() === targetDate && 
             (s.Time || "").trim() === targetTime
         );
 
-        // 2. NEW: Strict filter by Exam Name (if grouped)
         if (allowedExamNames.size > 0) {
             students = students.filter(s => {
                 const sName = s["Exam Name"] || s.examName || "Untagged Exam";
@@ -21185,26 +21196,21 @@ window.generateBatchArchive = async function() {
         const qpMap = JSON.parse(localStorage.getItem('examQPCodes') || '{}')[sessionKey] || {};
         const absentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}')[sessionKey] || {};
         const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}')[sessionKey] || {};
-        // Fixed: examRoomConfig is stored as an Object/Map, not an Array
         const roomConfig = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
         
         const studentMap = {};
         if (Array.isArray(rooms)) {
             rooms.forEach(roomObj => {
                 const roomName = roomObj.roomName;
-                // Location lookup directly from the config map
                 const roomInfo = roomConfig[roomName] || {};
                 const roomDisplay = (roomInfo.location && roomInfo.location.trim()) ? roomName + ' (' + roomInfo.location + ')' : roomName;
 
-
-
-        
                 if (roomObj.students && Array.isArray(roomObj.students)) {
                     roomObj.students.forEach((s, idx) => {
                         const regNo = (typeof s === 'object') ? getRegNo(s) : s;
                         studentMap[regNo] = { 
                             room: roomDisplay, 
-                            seat: s.seat || (idx + 1), // Use sticky seat
+                            seat: s.seat || (idx + 1),
                             invigilator: invigilators[roomName] || 'Not Assigned',
                             stream: roomObj.stream || 'Regular'
                         };
@@ -21213,43 +21219,41 @@ window.generateBatchArchive = async function() {
             });
         }
 
-
         students.forEach(s => {
             const regNo = getRegNo(s);
+            const normReg = regNo.toLowerCase();
             allArchiveData.push({
                 sessionKey: sessionKey,
                 regNo: regNo,
-                name: s.Name,
-                course: s.Course,
-                date: s.Date,
-                time: s.Time,
+                name: s.Name || '',
+                course: s.Course || '',
+                date: s.Date || targetDate,
+                time: s.Time || targetTime,
                 room: studentMap[regNo]?.room || 'Unassigned',
                 seat: studentMap[regNo]?.seat || '-',
                 invigilator: studentMap[regNo]?.invigilator || '-',
                 qpCode: qpMap[window.getQpKey(s.Course, s.Stream)] || 'N/A',
                 stream: studentMap[regNo]?.stream || s.Stream || 'Regular',
-                isScribe: typeof scribeRegNos !== 'undefined' ? scribeRegNos.has(regNo) : false,
-                status: absentees[regNo] ? 'ABSENT' : 'PRESENT'
+                isScribe: s.Scribe === 'Yes' || s.isScribe || scribeRegNos.has(normReg),
+                status: absentees[regNo] ? 'ABSENT' : 'PRESENT',
+                examName: (s['Exam Name'] || s.examName || archiveExamName || 'Calicut University Examination').trim()
             });
         });
-    });
+    }
 
-    // 🛡️ SORTING: Ensure students are listed from Seat 1 to 30 for every room
+    // Sort students by Room, then by Seat number
     allArchiveData.sort((a, b) => {
-        // First sort by Room Name
         if (a.room !== b.room) return a.room.localeCompare(b.room);
-        // Then sort by Seat Number (numeric)
         const sA = parseInt(a.seat) || 0;
         const sB = parseInt(b.seat) || 0;
         return sA - sB;
     });
 
-    // Pre-compute session summaries
-
+    // Session summaries for legacy bill
     const sessionSummary = {};
     allArchiveData.forEach(row => {
         let streamName = row.stream || 'Regular';
-        let uniqueKey = row.sessionKey + '_' + streamName; // Separate Regular and EDE on same date/time
+        let uniqueKey = row.sessionKey + '_' + streamName;
         
         if (!sessionSummary[uniqueKey]) {
             sessionSummary[uniqueKey] = { 
@@ -21266,27 +21270,52 @@ window.generateBatchArchive = async function() {
         }
     });
 
+    function safeJson(obj) {
+        return JSON.stringify(obj)
+            .split(String.fromCharCode(96)).join('\\' + String.fromCharCode(96))
+            .split('$').join('\\$')
+            .split('<').join('\\u003c');
+    }
 
     const htmlBlob = `<!DOCTYPE html>
-
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Exam Archive Database</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
-        @media print { .no-print { display: none !important; } }
-        body { font-family: 'Inter', sans-serif; background: #f9fafb; padding: 20px; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9fafb; padding: 20px; color: #111827; }
+        .proforma-table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-top: 10px; margin-bottom: 12px; }
+        .proforma-table th, .proforma-table td { border: 1px solid #000; padding: 4px 6px; }
+        .proforma-table th { background-color: #f3f3f3; font-weight: bold; text-align: center; }
+        .sde-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 10px; margin-bottom: 12px; }
+        .sde-table th, .sde-table td { border: 1px solid #000; padding: 4px 6px; }
+        .sde-table th { background-color: #f3f3f3; font-weight: bold; text-align: center; }
+        .header-main { text-align: center; line-height: 1.35; margin-bottom: 16px; }
+        .sign-block { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 40px; font-weight: bold; page-break-inside: avoid; }
+        .page-break { page-break-before: always; margin-top: 30px; padding-top: 20px; border-top: 1px dashed #ccc; }
+        .blank-entry { color: #999; font-style: italic; }
+        @media print {
+            body { background: white !important; padding: 0 !important; }
+            .no-print { display: none !important; }
+            #batch-archive-main-container { display: none !important; }
+            #billSelectModal { display: none !important; }
+            #proformaModal { position: static !important; display: block !important; background: transparent !important; padding: 0 !important; }
+            #pv-document-container { padding: 0 !important; background: transparent !important; }
+            #pv-document-render { box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; }
+            .page-break { page-break-before: always !important; border-top: none !important; margin-top: 0 !important; padding-top: 0 !important; }
+        }
         @media (max-width: 640px) {
-            table thead { display: none; }
-            table tr { display: block; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; padding: 8px; background: white; }
-            table td { display: flex; justify-content: space-between; padding: 4px 6px; font-size: 12px; border: none; border-bottom: 1px solid #f3f4f6; text-align: right; }
-            table td::before { content: attr(data-label); font-weight: 700; color: #6b7280; margin-right: 8px; white-space: nowrap; flex-shrink: 0; text-align: left; }
+            table.archive-list thead { display: none; }
+            table.archive-list tr { display: block; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; padding: 8px; background: white; }
+            table.archive-list td { display: flex; justify-content: space-between; padding: 4px 6px; font-size: 12px; border: none; border-bottom: 1px solid #f3f4f6; text-align: right; }
+            table.archive-list td::before { content: attr(data-label); font-weight: 700; color: #6b7280; margin-right: 8px; white-space: nowrap; flex-shrink: 0; text-align: left; }
         }
     </style>
 </head>
 <body class="p-4 sm:p-6">
-    <div class="max-w-[90rem] mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-lg border border-gray-200">
+    <div id="batch-archive-main-container" class="max-w-[90rem] mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-lg border border-gray-200">
         <div class="flex flex-col sm:flex-row justify-between items-start border-b pb-6 mb-6 gap-4">
             <div>
                 <h1 class="text-3xl font-black text-indigo-900 uppercase">${collegeName}</h1>
@@ -21297,7 +21326,10 @@ window.generateBatchArchive = async function() {
 
             <div class="flex gap-2">
                 <button onclick="downloadCSV()" class="no-print bg-green-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-green-800 transition flex items-center gap-2">CSV</button>
-                <button onclick="showBillModal()" class="text-xs bg-green-600 text-white px-3 py-2 rounded-lg font-bold hover:bg-green-700 transition shadow">💰 Generate Bill</button>
+                <button onclick="openBillSelectModal()" class="no-print bg-green-600 text-white px-4 py-2.5 rounded-lg font-bold hover:bg-green-700 transition shadow flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    💰 Generate Bill
+                </button>
                 <button onclick="window.print()" class="no-print bg-gray-800 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-black transition flex items-center gap-2">Print</button>
             </div>
         </div>
@@ -21322,7 +21354,7 @@ window.generateBatchArchive = async function() {
         </div>
 
         <div class="mb-6 flex gap-4 no-print flex-col md:flex-row bg-gray-50 p-4 rounded-xl border border-gray-200">
-            <input type="text" id="searchInput" placeholder="Search Reg No, Name, Course, Hall, QP..." autocomplete="off"
+            <input type="text" id="searchInput" placeholder="Search Reg No, Name, Course, Hall, QP, Stream..." autocomplete="off"
                 class="flex-1 p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm transition">
             <select id="sessionFilter" class="w-full md:w-64 p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm font-bold text-indigo-900 bg-white">
                 <option value="">All Sessions</option>
@@ -21331,7 +21363,7 @@ window.generateBatchArchive = async function() {
         </div>
 
         <div class="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
-            <table class="w-full text-left border-collapse text-sm">
+            <table class="archive-list w-full text-left border-collapse text-sm">
                 <thead>
                     <tr class="bg-gray-100 text-gray-700 text-[10px] uppercase tracking-wider font-bold border-b">
                         <th class="p-3">Session</th>
@@ -21351,8 +21383,113 @@ window.generateBatchArchive = async function() {
         </div>
     </div>
 
+    <!-- BILL SELECTOR MODAL -->
+    <div id="billSelectModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-gray-200">
+            <div class="flex justify-between items-center pb-4 border-b">
+                <div>
+                    <h3 class="text-xl font-black text-gray-900">Choose Bill Format</h3>
+                    <p class="text-xs text-gray-500 mt-0.5">Select remuneration & proforma format to generate</p>
+                </div>
+                <button onclick="closeBillSelectModal()" class="text-gray-400 hover:text-gray-700 font-bold text-2xl leading-none">&times;</button>
+            </div>
+            <div class="space-y-3 mt-5">
+                <button onclick="openProformaViewer('regular')" class="w-full text-left p-4 rounded-xl border-2 border-purple-200 hover:border-purple-600 hover:bg-purple-50/50 transition flex items-center gap-4 group">
+                    <div class="p-3 bg-purple-100 text-purple-700 rounded-xl group-hover:bg-purple-700 group-hover:text-white transition text-2xl shrink-0">🏛️</div>
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-gray-900">Calicut University Proforma (Regular Stream)</span>
+                            <span class="text-[10px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-full">Proforma I & II</span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Official Regular stream package: Proforma I (Parts A-F), Annexure I Acquittance, Proforma II Contingency (@ ₹4/- per candidate), Consolidated Statement, Receipts & Certificates. With Excel (.xlsx) export and print preview.</p>
+                    </div>
+                </button>
+                <button onclick="openProformaViewer('sde')" class="w-full text-left p-4 rounded-xl border-2 border-emerald-200 hover:border-emerald-600 hover:bg-emerald-50/50 transition flex items-center gap-4 group">
+                    <div class="p-3 bg-emerald-100 text-emerald-700 rounded-xl group-hover:bg-emerald-700 group-hover:text-white transition text-2xl shrink-0">📚</div>
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-gray-900">Calicut University Proforma (SDE / Distance Stream)</span>
+                            <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">SDE / EDE</span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Official Distance Education package: Statement of Expenditure, Annexure I Acquittance, Annexure II Contingency (@ ₹2/session), Annexure IV Declaration & Amanuensis Acquittance. With Excel (.xlsx) export and print preview.</p>
+                    </div>
+                </button>
+                <button onclick="openProformaViewer('standard')" class="w-full text-left p-4 rounded-xl border-2 border-indigo-200 hover:border-indigo-600 hover:bg-indigo-50/50 transition flex items-center gap-4 group">
+                    <div class="p-3 bg-indigo-100 text-indigo-700 rounded-xl group-hover:bg-indigo-700 group-hover:text-white transition text-2xl shrink-0">🧾</div>
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-gray-900">Standard Consolidated Bill</span>
+                            <span class="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-full">Legacy</span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Compact session-wise multi-stream center remuneration summary with supervisory breakdown.</p>
+                    </div>
+                </button>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeBillSelectModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-bold transition">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PROFORMA VIEWER MODAL -->
+    <div id="proformaModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 overflow-y-auto p-2 sm:p-4">
+        <div class="max-w-[95rem] mx-auto bg-white rounded-2xl shadow-2xl border border-gray-300 flex flex-col min-h-[90vh]">
+            <!-- Top Toolbar -->
+            <div class="no-print bg-slate-900 text-white p-4 rounded-t-2xl flex flex-wrap items-center justify-between gap-3 border-b border-slate-700">
+                <div class="flex items-center gap-3">
+                    <button onclick="closeProformaViewer()" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition text-slate-300 hover:text-white" title="Back to Archive">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                    </button>
+                    <div>
+                        <h2 id="pv-title" class="text-base sm:text-lg font-black tracking-tight">Calicut University Proforma Package</h2>
+                        <p id="pv-subtitle" class="text-xs text-slate-400">Regular Stream Examinations</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="toggleOfficialsDrawer()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-xs font-bold text-slate-200 flex items-center gap-1.5 transition">
+                        👤 Edit Officials & Details
+                    </button>
+                    <button onclick="downloadProformaExcel()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 shadow transition">
+                        📥 Download Excel (.xlsx)
+                    </button>
+                    <button onclick="printProformaCurrentTab()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 shadow transition">
+                        🖨️ Print Document
+                    </button>
+                    <button onclick="closeProformaViewer()" class="p-2 bg-red-600 hover:bg-red-700 rounded-lg text-xs font-bold text-white transition" title="Close Viewer">
+                        ✕
+                    </button>
+                </div>
+            </div>
+
+            <!-- Officials Drawer (collapsible) -->
+            <div id="pv-officials-drawer" class="no-print hidden bg-slate-100 p-4 border-b border-gray-300">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-xs font-bold uppercase tracking-wider text-gray-700">Configure Officials & Header Metadata</span>
+                    <div class="flex items-center gap-2">
+                        <button onclick="autoFillOfficialsFromStaff()" class="px-3 py-1 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded shadow-sm transition">
+                            ⚡ Auto-Detect from Staff
+                        </button>
+                        <button onclick="recalculateProforma()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow transition">
+                            🔄 Recalculate & Apply
+                        </button>
+                    </div>
+                </div>
+                <div id="pv-officials-fields" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 text-xs"></div>
+            </div>
+
+            <!-- Sub-tabs Bar -->
+            <div class="no-print bg-slate-200/80 p-2 border-b border-gray-300 flex items-center gap-1 overflow-x-auto" id="pv-subtabs-bar"></div>
+
+            <!-- Document Render Container -->
+            <div id="pv-document-container" class="p-4 sm:p-8 bg-slate-100 overflow-x-auto flex-1">
+                <div id="pv-document-render" class="bg-white shadow-xl mx-auto rounded p-4 max-w-[900px]"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN ARCHIVE & BILLING SCRIPT -->
     <script>
-        const data = ${JSON.stringify(allArchiveData).replace(/`/g, '\\`').replace(/\$/g, '\\$')};
+        const data = ${safeJson(allArchiveData)};
         const tbody = document.getElementById('tableBody');
         const searchInput = document.getElementById('searchInput');
         const sessionFilter = document.getElementById('sessionFilter');
@@ -21419,90 +21556,2160 @@ window.generateBatchArchive = async function() {
         searchInput.addEventListener('input', render);
         sessionFilter.addEventListener('change', render);
         render();
-    <\/script>
 
-<script>
-    // Embedded archived data (self-contained, no Firebase needed)
-    const ARCHIVED_COLLEGE = ${JSON.stringify(collegeName).replace(/</g, '\\u003c')};
-    const ARCHIVED_EXAM = ${JSON.stringify(archiveExamName).replace(/</g, '\\u003c')};
-    const ARCHIVED_RATES = ${JSON.stringify(archivedRates).replace(/`/g, '\\`').replace(/\$/g, '\\$')};
-    const SESSION_SUMMARY = ${JSON.stringify(Object.values(sessionSummary)).replace(/`/g, '\\`').replace(/\$/g, '\\$')};
+        // ==========================================
+        // PROFORMA & BILLING ENGINE
+        // ==========================================
+        const ARCHIVED_COLLEGE = ${safeJson(collegeName)};
+        const ARCHIVED_EXAM = ${safeJson(archiveExamName)};
+        const ARCHIVED_RATES = ${safeJson(archivedRates)};
+        const ARCHIVED_REG_OFFICIALS = ${safeJson(archivedRegularOfficials)};
+        const ARCHIVED_SDE_OFFICIALS = ${safeJson(archivedSdeOfficials)};
+        const ARCHIVED_STAFF = ${safeJson(archivedStaff)};
+        const SESSION_SUMMARY = ${safeJson(Object.values(sessionSummary))};
 
+        // --- Proforma Runtime State ---
+        let currentProformaMode = 'regular';
+        let currentSubTab = 'all';
+        let currentRegularData = null;
+        let currentSdeData = null;
 
-    function showBillModal() {
-        const streamKeys = Object.keys(ARCHIVED_RATES);
-        
-        function numToWords(n) {
-            if (isNaN(n) || n === 0) return 'Zero';
-            const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
-            const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-            if ((n = n.toString()).length > 9) return 'Overflow';
-            const n_array = ('000000000' + n).slice(-9).match(/^(\\d{2})(\\d{2})(\\d{2})(\\d{1})(\\d{2})$/);
-            if (!n_array) return 'Zero';
-            let str = '';
-            str += (n_array[1] != 0) ? (a[Number(n_array[1])] || b[n_array[1][0]] + ' ' + a[n_array[1][1]]) + 'Crore ' : '';
-            str += (n_array[2] != 0) ? (a[Number(n_array[2])] || b[n_array[2][0]] + ' ' + a[n_array[2][1]]) + 'Lakh ' : '';
-            str += (n_array[3] != 0) ? (a[Number(n_array[3])] || b[n_array[3][0]] + ' ' + a[n_array[3][1]]) + 'Thousand ' : '';
-            str += (n_array[4] != 0) ? (a[Number(n_array[4])] || b[n_array[4][0]] + ' ' + a[n_array[4][1]]) + 'Hundred ' : '';
-            str += (n_array[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n_array[5])] || b[n_array[5][0]] + ' ' + a[n_array[5][1]]) : '';
-            return str.trim() || 'Zero';
+        let activeRegularOfficials = Object.assign({
+            collegeName: ARCHIVED_COLLEGE,
+            period: ARCHIVED_EXAM,
+            chiefSupdt: '',
+            seniorSupdt: '',
+            officeSupdt: '',
+            headAccountant: '',
+            dataEntryOperator: '',
+            clerk: '',
+            peon: '',
+            sweeper: '',
+            principal: '',
+            place: 'College Centre',
+            date: new Date().toLocaleDateString('en-GB'),
+            advanceReceived: 0,
+            advanceDetails: '',
+            certSeniorSupdtNo: '',
+            certHeadAcctNo: ''
+        }, ARCHIVED_REG_OFFICIALS);
+
+        let activeSdeOfficials = Object.assign({
+            collegeName: ARCHIVED_COLLEGE,
+            paymentInFavourOf: 'The Principal, ' + ARCHIVED_COLLEGE,
+            examName: ARCHIVED_EXAM,
+            period: '',
+            chiefSupdt: '',
+            seniorSupdt: '',
+            clerk: '',
+            peon: '',
+            sweeper: '',
+            principal: '',
+            place: 'College Centre',
+            date: new Date().toLocaleDateString('en-GB'),
+            advanceReceived: 0
+        }, ARCHIVED_SDE_OFFICIALS);
+
+        function numberToIndianWords(num) {
+            if (num === null || num === undefined || isNaN(num)) return 'Zero';
+            num = Math.floor(Math.abs(Number(num)));
+            if (num === 0) return 'Zero';
+
+            const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+                'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+            const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+            function twoDigits(n) {
+                if (n < 20) return ones[n];
+                const t = Math.floor(n / 10);
+                const o = n % 10;
+                return tens[t] + (o ? ' ' + ones[o] : '');
+            }
+
+            function threeDigits(n) {
+                const h = Math.floor(n / 100);
+                const rem = n % 100;
+                let str = '';
+                if (h > 0) str += ones[h] + ' Hundred';
+                if (rem > 0) {
+                    str += (str ? ' and ' : '') + twoDigits(rem);
+                }
+                return str;
+            }
+
+            let words = '';
+            const crore = Math.floor(num / 10000000);
+            let rem = num % 10000000;
+            const lakh = Math.floor(rem / 100000);
+            rem = rem % 100000;
+            const thousand = Math.floor(rem / 1000);
+            rem = rem % 1000;
+
+            if (crore > 0) words += twoDigits(crore) + ' Crore ';
+            if (lakh > 0) words += twoDigits(lakh) + ' Lakh ';
+            if (thousand > 0) words += twoDigits(thousand) + ' Thousand ';
+            if (rem > 0) {
+                if (words && rem < 100) words += 'and ';
+                words += threeDigits(rem);
+            }
+            return words.trim() || 'Zero';
         }
 
+        function splitTitleAndName(fullName) {
+            if (!fullName) return { title: '', name: '' };
+            const clean = fullName.trim();
+            const prefixes = ['Dr.', 'Dr', 'Prof.', 'Prof', 'Sri.', 'Sri', 'Smt.', 'Smt', 'Ms.', 'Ms', 'Mr.', 'Mr'];
+            for (const p of prefixes) {
+                if (clean.toLowerCase().startsWith(p.toLowerCase() + ' ') || clean.toLowerCase().startsWith(p.toLowerCase() + '.')) {
+                    const normTitle = p.endsWith('.') ? p : p + '.';
+                    const rest = clean.substring(p.length).replace(/^[.\s]+/, '').trim();
+                    return { title: normTitle, name: rest };
+                }
+            }
+            return { title: '', name: clean };
+        }
 
-        let html = '<!DOCTYPE html><html><head><title>Remuneration Bill</title>'
-                 + '<style>'
-                 + 'body{background:#e5e7eb;font-family:sans-serif;margin:0;padding:20px;display:flex;flex-direction:column;align-items:center;}'
-                 + '.no-print{width:100%;max-width:850px;background:white;padding:16px;display:flex;justify-content:flex-end;gap:16px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;box-sizing:border-box;}'
-                 + '.bill-page{width:100%;max-width:850px;background:white;padding:40px;margin-bottom:24px;box-shadow:0 4px 6px rgba(0,0,0,0.1);box-sizing:border-box;min-height:297mm;}'
-                 + '@media print { body{padding:0;background:white;display:block;} .no-print{display:none!important;} .bill-page{box-shadow:none;margin:0;padding:0;page-break-after:always;} }'
-                 + '</style></head><body>';
+        function parseDateStr(str) {
+            if (!str) return new Date();
+            const parts = str.trim().split(/[.\-\/]/);
+            if (parts.length === 3) {
+                let d = parts[0], m = parts[1], y = parts[2];
+                if (d.length === 4) [y, m, d] = [d, m, y];
+                return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
+            }
+            return new Date(str);
+        }
 
-        html += '<div class="no-print">'
-             + '<button onclick="window.print()" style="background:#1f2937;color:white;padding:10px 20px;border:none;border-radius:6px;font-weight:bold;cursor:pointer;font-size:14px;">📄 Print Bill</button>'
-             + '<button onclick="window.close()" style="background:#dc2626;color:white;padding:10px 20px;border:none;border-radius:6px;font-weight:bold;cursor:pointer;font-size:14px;">❌ Close Tab</button>'
-             + '</div>';
-        
-        streamKeys.forEach(function(stream) {
-            const rates = ARCHIVED_RATES[stream];
-            if (!rates) return;
-            
-            const streamSessions = SESSION_SUMMARY.filter(function(s) { 
-                return (s.stream || "Regular") === stream; 
-            }).sort(function(a, b) {
-                const d1 = a.date.split('.').reverse().join('');
-                const d2 = b.date.split('.').reverse().join('');
-                return d1.localeCompare(d2) || a.time.localeCompare(b.time);
+        function formatDateSlash(d) {
+            if (!(d instanceof Date) || isNaN(d)) return '';
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            return \`\${day}/\${month}/\${d.getFullYear()}\`;
+        }
+
+        function formatDateDot(d) {
+            if (!(d instanceof Date) || isNaN(d)) return '';
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            return \`\${day}.\${month}.\${d.getFullYear()}\`;
+        }
+
+        function formatMonthYear(d) {
+            if (!(d instanceof Date) || isNaN(d)) return '';
+            return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+        }
+
+        function autoDetectOfficials() {
+            if (!Array.isArray(ARCHIVED_STAFF) || ARCHIVED_STAFF.length === 0) return;
+            const findStaff = (kw) => {
+                const found = ARCHIVED_STAFF.find(st => {
+                    const des = ((st.designation || '') + ' ' + (st.role || '')).toLowerCase();
+                    return des.includes(kw.toLowerCase());
+                });
+                return found ? found.name : '';
+            };
+
+            const cs = findStaff('Chief') || findStaff('Principal');
+            const sas = findStaff('Senior Assistant') || findStaff('Senior Supdt');
+            const os = findStaff('Office Supdt') || findStaff('Superintendent');
+            const acct = findStaff('Accountant');
+            const deo = findStaff('Data Entry') || findStaff('DEO');
+            const pr = findStaff('Principal') || cs;
+
+            if (currentProformaMode === 'regular') {
+                if (!activeRegularOfficials.chiefSupdt && cs) activeRegularOfficials.chiefSupdt = cs;
+                if (!activeRegularOfficials.seniorSupdt && sas) activeRegularOfficials.seniorSupdt = sas;
+                if (!activeRegularOfficials.officeSupdt && os) activeRegularOfficials.officeSupdt = os;
+                if (!activeRegularOfficials.headAccountant && acct) activeRegularOfficials.headAccountant = acct;
+                if (!activeRegularOfficials.dataEntryOperator && deo) activeRegularOfficials.dataEntryOperator = deo;
+                if (!activeRegularOfficials.principal && pr) activeRegularOfficials.principal = pr;
+            } else {
+                if (!activeSdeOfficials.chiefSupdt && cs) activeSdeOfficials.chiefSupdt = cs;
+                if (!activeSdeOfficials.seniorSupdt && sas) activeSdeOfficials.seniorSupdt = sas;
+                if (!activeSdeOfficials.principal && pr) activeSdeOfficials.principal = pr;
+            }
+        }
+
+        if (!activeRegularOfficials.chiefSupdt || !activeSdeOfficials.chiefSupdt) {
+            autoDetectOfficials();
+        }
+
+        function openBillSelectModal() {
+            document.getElementById('billSelectModal').classList.remove('hidden');
+        }
+
+        function closeBillSelectModal() {
+            document.getElementById('billSelectModal').classList.add('hidden');
+        }
+
+        function openProformaViewer(mode) {
+            closeBillSelectModal();
+            if (mode === 'standard') {
+                showBillModal();
+                return;
+            }
+            currentProformaMode = mode;
+            currentSubTab = 'all';
+            document.getElementById('proformaModal').classList.remove('hidden');
+            recalculateProforma();
+        }
+
+        function closeProformaViewer() {
+            document.getElementById('proformaModal').classList.add('hidden');
+        }
+
+        function toggleOfficialsDrawer() {
+            const drawer = document.getElementById('pv-officials-drawer');
+            drawer.classList.toggle('hidden');
+        }
+
+        function autoFillOfficialsFromStaff() {
+            autoDetectOfficials();
+            populateOfficialsFields();
+            recalculateProforma();
+        }
+
+        function populateOfficialsFields() {
+            const container = document.getElementById('pv-officials-fields');
+            if (currentProformaMode === 'regular') {
+                container.innerHTML = \`
+                    <div><label class="font-bold text-gray-700">College Name</label><input type="text" id="of-college" value="\${activeRegularOfficials.collegeName||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Period / Exam</label><input type="text" id="of-period" value="\${activeRegularOfficials.period||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Chief Superintendent</label><input type="text" id="of-chief" value="\${activeRegularOfficials.chiefSupdt||''}" class="w-full p-2 border rounded mt-1 font-bold text-indigo-900"></div>
+                    <div><label class="font-bold text-gray-700">Senior Assistant Supdt</label><input type="text" id="of-sas" value="\${activeRegularOfficials.seniorSupdt||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Office Superintendent</label><input type="text" id="of-os" value="\${activeRegularOfficials.officeSupdt||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Head Accountant</label><input type="text" id="of-acct" value="\${activeRegularOfficials.headAccountant||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Data Entry Operator</label><input type="text" id="of-deo" value="\${activeRegularOfficials.dataEntryOperator||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Clerk</label><input type="text" id="of-clerk" value="\${activeRegularOfficials.clerk||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Peon</label><input type="text" id="of-peon" value="\${activeRegularOfficials.peon||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Sweeper</label><input type="text" id="of-sweeper" value="\${activeRegularOfficials.sweeper||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Principal</label><input type="text" id="of-principal" value="\${activeRegularOfficials.principal||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Advance Received (₹)</label><input type="number" id="of-advance" value="\${activeRegularOfficials.advanceReceived||0}" class="w-full p-2 border rounded mt-1 font-mono"></div>
+                \`;
+            } else {
+                container.innerHTML = \`
+                    <div><label class="font-bold text-gray-700">College Centre Name</label><input type="text" id="of-college" value="\${activeSdeOfficials.collegeName||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Name of Examination</label><input type="text" id="of-exam" value="\${activeSdeOfficials.examName||''}" class="w-full p-2 border rounded mt-1 font-bold text-emerald-900"></div>
+                    <div><label class="font-bold text-gray-700">Period of Exam</label><input type="text" id="of-period" value="\${activeSdeOfficials.period||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Payment in Favour of</label><input type="text" id="of-favour" value="\${activeSdeOfficials.paymentInFavourOf||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Chief Superintendent</label><input type="text" id="of-chief" value="\${activeSdeOfficials.chiefSupdt||''}" class="w-full p-2 border rounded mt-1 font-bold text-emerald-900"></div>
+                    <div><label class="font-bold text-gray-700">Senior Assistant Supdt</label><input type="text" id="of-sas" value="\${activeSdeOfficials.seniorSupdt||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Clerk</label><input type="text" id="of-clerk" value="\${activeSdeOfficials.clerk||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Peon</label><input type="text" id="of-peon" value="\${activeSdeOfficials.peon||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Sweeper</label><input type="text" id="of-sweeper" value="\${activeSdeOfficials.sweeper||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Principal</label><input type="text" id="of-principal" value="\${activeSdeOfficials.principal||''}" class="w-full p-2 border rounded mt-1"></div>
+                    <div><label class="font-bold text-gray-700">Advance Received (₹)</label><input type="number" id="of-advance" value="\${activeSdeOfficials.advanceReceived||0}" class="w-full p-2 border rounded mt-1 font-mono"></div>
+                \`;
+            }
+        }
+
+        function readOfficialsInputs() {
+            if (currentProformaMode === 'regular') {
+                const col = document.getElementById('of-college'); if (col) activeRegularOfficials.collegeName = col.value;
+                const per = document.getElementById('of-period'); if (per) activeRegularOfficials.period = per.value;
+                const cs = document.getElementById('of-chief'); if (cs) activeRegularOfficials.chiefSupdt = cs.value;
+                const sas = document.getElementById('of-sas'); if (sas) activeRegularOfficials.seniorSupdt = sas.value;
+                const os = document.getElementById('of-os'); if (os) activeRegularOfficials.officeSupdt = os.value;
+                const ac = document.getElementById('of-acct'); if (ac) activeRegularOfficials.headAccountant = ac.value;
+                const deo = document.getElementById('of-deo'); if (deo) activeRegularOfficials.dataEntryOperator = deo.value;
+                const cl = document.getElementById('of-clerk'); if (cl) activeRegularOfficials.clerk = cl.value;
+                const pe = document.getElementById('of-peon'); if (pe) activeRegularOfficials.peon = pe.value;
+                const sw = document.getElementById('of-sweeper'); if (sw) activeRegularOfficials.sweeper = sw.value;
+                const pr = document.getElementById('of-principal'); if (pr) activeRegularOfficials.principal = pr.value;
+                const adv = document.getElementById('of-advance'); if (adv) activeRegularOfficials.advanceReceived = Number(adv.value) || 0;
+            } else {
+                const col = document.getElementById('of-college'); if (col) activeSdeOfficials.collegeName = col.value;
+                const ex = document.getElementById('of-exam'); if (ex) activeSdeOfficials.examName = ex.value;
+                const per = document.getElementById('of-period'); if (per) activeSdeOfficials.period = per.value;
+                const fav = document.getElementById('of-favour'); if (fav) activeSdeOfficials.paymentInFavourOf = fav.value;
+                const cs = document.getElementById('of-chief'); if (cs) activeSdeOfficials.chiefSupdt = cs.value;
+                const sas = document.getElementById('of-sas'); if (sas) activeSdeOfficials.seniorSupdt = sas.value;
+                const cl = document.getElementById('of-clerk'); if (cl) activeSdeOfficials.clerk = cl.value;
+                const pe = document.getElementById('of-peon'); if (pe) activeSdeOfficials.peon = pe.value;
+                const sw = document.getElementById('of-sweeper'); if (sw) activeSdeOfficials.sweeper = sw.value;
+                const pr = document.getElementById('of-principal'); if (pr) activeSdeOfficials.principal = pr.value;
+                const adv = document.getElementById('of-advance'); if (adv) activeSdeOfficials.advanceReceived = Number(adv.value) || 0;
+            }
+        }
+
+        function populateSubTabsBar() {
+            const bar = document.getElementById('pv-subtabs-bar');
+            let tabs = [];
+            if (currentProformaMode === 'regular') {
+                tabs = [
+                    { id: 'all', label: '📑 Complete Package' },
+                    { id: 'partA', label: '📊 Part A (Daily Abstract)' },
+                    { id: 'partBC', label: '👔 Part B & C (Supervisory & DEO)' },
+                    { id: 'partDEF', label: '✍️ Part D, E, F (Scribe & Total)' },
+                    { id: 'acquittance', label: '📋 Annexure I (Acquittance)' },
+                    { id: 'proformaII', label: '🏷️ Proforma II (Contingency)' },
+                    { id: 'consolidated', label: '📑 Consolidated Statement' },
+                    { id: 'receipt', label: '🧾 Annexure II (Receipt)' },
+                    { id: 'certificates', label: '📜 Certificates (1 & 2)' }
+                ];
+            } else {
+                tabs = [
+                    { id: 'all', label: '📑 Complete Package' },
+                    { id: 'proforma', label: '📊 Proforma I (Consolidated)' },
+                    { id: 'aquittance', label: '📋 Annexure I (Aquittance)' },
+                    { id: 'annexureII', label: '🧾 Annexure II (Receipt)' },
+                    { id: 'annexureIV', label: '📜 Annexure IV (Declaration)' },
+                    { id: 'amanuensis', label: '✍️ Amanuensis (Scribes)' }
+                ];
+            }
+
+            bar.innerHTML = tabs.map(t => \`
+                <button onclick="switchProformaSubTab('\${t.id}')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap \${currentSubTab === t.id ? (currentProformaMode === 'regular' ? 'bg-purple-700 text-white shadow' : 'bg-emerald-700 text-white shadow') : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'}">
+                    \${t.label}
+                </button>
+            \`).join('');
+        }
+
+        function switchProformaSubTab(tabId) {
+            currentSubTab = tabId;
+            populateSubTabsBar();
+            renderProformaDocument();
+        }
+
+        function recalculateProforma() {
+            readOfficialsInputs();
+            populateOfficialsFields();
+            populateSubTabsBar();
+
+            const titleEl = document.getElementById('pv-title');
+            const subTitleEl = document.getElementById('pv-subtitle');
+
+            if (currentProformaMode === 'regular') {
+                titleEl.innerText = "Calicut University Proforma Package (Regular Stream)";
+                subTitleEl.innerText = "Proforma I (Parts A-F), Annexure I Acquittance, Proforma II Contingency, Consolidated Statement";
+                currentRegularData = aggregateRegularData(activeRegularOfficials, getRegularRates());
+            } else {
+                titleEl.innerText = "Calicut University Proforma Package (SDE / Distance Stream)";
+                subTitleEl.innerText = "Statement of Expenditure, Annexure I Acquittance, Annexure II Contingency, Annexure IV Declaration";
+                currentSdeData = aggregateSdeData(activeSdeOfficials, getSdeRates());
+            }
+
+            renderProformaDocument();
+        }
+
+        function getRegularRates() {
+            const reg = (ARCHIVED_RATES && ARCHIVED_RATES['Regular']) || {};
+            return {
+                chiefSupdt: Number(reg.chief_supdt) > 0 ? Number(reg.chief_supdt) : 123,
+                seniorSupdt: Number(reg.senior_supdt) > 0 ? Number(reg.senior_supdt) : 105,
+                officeSupdt: Number(reg.office_supdt) > 0 ? Number(reg.office_supdt) : 90,
+                invigilator: Number(reg.invigilator) > 0 ? Number(reg.invigilator) : 90,
+                dataEntryOperator: Number(reg.data_entry_operator) > 0 ? Number(reg.data_entry_operator) : 410,
+                headAccountant: Number(reg.accountant) > 0 ? Number(reg.accountant) : 105,
+                clerkFull: Number(reg.clerk_full_slab) > 0 ? Number(reg.clerk_full_slab) : 75,
+                clerkSlab1: Number(reg.clerk_slab_1) > 0 ? Number(reg.clerk_slab_1) : 38,
+                clerkSlab2: Number(reg.clerk_slab_2) > 0 ? Number(reg.clerk_slab_2) : 56,
+                peonFull: Number(reg.peon_full_slab) > 0 ? Number(reg.peon_full_slab) : 45,
+                peonSlab1: Number(reg.peon_slab_1) > 0 ? Number(reg.peon_slab_1) : 23,
+                peonSlab2: Number(reg.peon_slab_2) > 0 ? Number(reg.peon_slab_2) : 34,
+                sweeperRate: Number(reg.sweeper_rate) > 0 ? Number(reg.sweeper_rate) : 38,
+                sweeperMin: Number(reg.sweeper_min) > 0 ? Number(reg.sweeper_min) : 38,
+                contingencyPerCandidate: Number(reg.contingent_charge) > 0 ? Number(reg.contingent_charge) : 4.0,
+                scribeRate: Number(reg.scribe_rate) > 0 ? Number(reg.scribe_rate) : 150
+            };
+        }
+
+        function getSdeRates() {
+            let sde = (ARCHIVED_RATES && (ARCHIVED_RATES['EDE'] || ARCHIVED_RATES['SDE'] || ARCHIVED_RATES['Distance'])) || {};
+            if (!sde || Object.keys(sde).length === 0) {
+                for (const k of Object.keys(ARCHIVED_RATES || {})) {
+                    if (ARCHIVED_RATES[k] && ARCHIVED_RATES[k].is_sde_mode) {
+                        sde = ARCHIVED_RATES[k];
+                        break;
+                    }
+                }
+            }
+            return {
+                invigilator: Number(sde.invigilator) > 0 ? Number(sde.invigilator) : 350,
+                chiefSingle: Number(sde.chief_supdt_single) > 0 ? Number(sde.chief_supdt_single) : 500,
+                chiefDouble: Number(sde.chief_supdt_double) > 0 ? Number(sde.chief_supdt_double) : 800,
+                seniorSingle: Number(sde.senior_supdt_single) > 0 ? Number(sde.senior_supdt_single) : 400,
+                seniorDouble: Number(sde.senior_supdt_double) > 0 ? Number(sde.senior_supdt_double) : 700,
+                clerkSingle: Number(sde.clerk_single) > 0 ? Number(sde.clerk_single) : 300,
+                clerkDouble: Number(sde.clerk_double) > 0 ? Number(sde.clerk_double) : 500,
+                peonSingle: Number(sde.peon_single) > 0 ? Number(sde.peon_single) : 250,
+                peonDouble: Number(sde.peon_double) > 0 ? Number(sde.peon_double) : 400,
+                sweeperSingle: Number(sde.sweeper_single) > 0 ? Number(sde.sweeper_single) : 225,
+                sweeperDouble: Number(sde.sweeper_double) > 0 ? Number(sde.sweeper_double) : 350,
+                scribeRate: Number(sde.scribe_rate || sde.amanuensis_rate) > 0 ? Number(sde.scribe_rate || sde.amanuensis_rate) : 150,
+                contingencyPerSession: Number(sde.contingent_charge || sde.contingency_rate) > 0 ? Number(sde.contingent_charge || sde.contingency_rate) : 2.00
+            };
+        }
+
+        function aggregateRegularData(officials, rates) {
+            const regStudents = data.filter(s => (s.stream || 'Regular').toLowerCase() === 'regular');
+            if (regStudents.length === 0) return null;
+
+            const dateMap = {};
+            const examRegistrations = {};
+            const datesList = [];
+
+            regStudents.forEach(s => {
+                const rawDate = (s.date || '').trim();
+                const rawTime = (s.time || '').trim().toUpperCase();
+                const regNo = (s.regNo || s.name || '').trim();
+                const examName = (s.examName || ARCHIVED_EXAM || 'Calicut University Examination').trim();
+                if (!rawDate) return;
+
+                const dObj = parseDateStr(rawDate);
+                const dateKey = formatDateDot(dObj);
+
+                if (!dateMap[dateKey]) {
+                    dateMap[dateKey] = {
+                        dateObj: dObj,
+                        dateStr: dateKey,
+                        dateDisplay: dateKey,
+                        fnStudents: 0,
+                        anStudents: 0,
+                        fnScribes: 0,
+                        anScribes: 0,
+                        totalStudents: 0,
+                        sessions: new Set(),
+                        exams: new Set(),
+                        rooms: new Set(),
+                        invigMap: {}
+                    };
+                    datesList.push(dateMap[dateKey]);
+                }
+
+                if (!examRegistrations[examName]) examRegistrations[examName] = new Set();
+                if (regNo) examRegistrations[examName].add(regNo);
+                dateMap[dateKey].exams.add(examName);
+
+                const isFN = rawTime.includes('AM') || (rawTime.split(/[:.]/)[0] && parseInt(rawTime.split(/[:.]/)[0], 10) < 12 && !rawTime.includes('PM'));
+                const sessKey = s.sessionKey || \`\${dateKey} | \${rawTime}\`;
+                dateMap[dateKey].sessions.add(sessKey);
+
+                if (s.room && s.room !== 'Unassigned') {
+                    const roomKey = sessKey + '__' + s.room;
+                    dateMap[dateKey].rooms.add(roomKey);
+                    if (s.invigilator && s.invigilator !== '-' && s.invigilator !== 'Not Assigned') {
+                        dateMap[dateKey].invigMap[roomKey] = s.invigilator;
+                    }
+                }
+
+                if (s.status !== 'ABSENT') {
+                    if (isFN) {
+                        if (s.isScribe) dateMap[dateKey].fnScribes++;
+                        else dateMap[dateKey].fnStudents++;
+                    } else {
+                        if (s.isScribe) dateMap[dateKey].anScribes++;
+                        else dateMap[dateKey].anStudents++;
+                    }
+                }
             });
 
-            if (streamSessions.length === 0) return;
+            datesList.sort((a, b) => a.dateObj - b.dateObj);
+            const minDate = datesList[0] ? datesList[0].dateObj : new Date();
+            const maxDate = datesList[datesList.length - 1] ? datesList[datesList.length - 1].dateObj : new Date();
+            const defaultPeriod = \`\${formatMonthYear(minDate)} to \${formatMonthYear(maxDate)}\`;
+            if (!officials.period) officials.period = defaultPeriod;
 
-            let invigilation = 0, clerical = 0, sweeping = 0, peon = 0, supervision = 0;
-            let chiefTotal = 0, seniorTotal = 0, officeTotal = 0;
-            let bodyRows = "";
+            const staffDutyCounts = {};
+            datesList.forEach(dItem => {
+                Object.values(dItem.invigMap).forEach(teacherName => {
+                    if (teacherName && teacherName.trim()) {
+                        const norm = teacherName.trim();
+                        staffDutyCounts[norm] = (staffDutyCounts[norm] || 0) + 1;
+                    }
+                });
+            });
 
-            if (rates.is_sde_mode) {
-                const sessionsByDate = {};
-                streamSessions.forEach(function(s) {
-                    if (!sessionsByDate[s.date]) sessionsByDate[s.date] = [];
-                    sessionsByDate[s.date].push(s);
+            const partARows = [];
+            let sumFN = 0, sumAN = 0, sumScribe = 0, sumTotal = 0;
+            let sumInvigCount = 0, sumInvigAmt = 0;
+            let sumClerkAmt = 0, sumPeonAmt = 0, sumSweeperAmt = 0;
+            let sumFNSessions = 0, sumANSessions = 0;
+
+            datesList.forEach((dItem, idx) => {
+                const fn = dItem.fnStudents;
+                const an = dItem.anStudents;
+                const scribe = dItem.fnScribes + dItem.anScribes;
+                const total = fn + an + scribe;
+
+                let dateInvigCount = dItem.rooms.size;
+                if (dateInvigCount === 0) {
+                    const fnHalls = fn > 0 ? Math.ceil(fn / 25) : 0;
+                    const anHalls = an > 0 ? Math.ceil(an / 25) : 0;
+                    dateInvigCount = fnHalls + anHalls + scribe;
+                }
+
+                const invigAmt = dateInvigCount * rates.invigilator;
+
+                const rem = total % 100;
+                let clerkSlab = rates.clerkSlab1;
+                if (rem > 60) clerkSlab = rates.clerkFull;
+                else if (rem > 30) clerkSlab = rates.clerkSlab2;
+                else if (rem === 0) clerkSlab = 0;
+
+                let peonSlab = rates.peonSlab1;
+                if (rem > 60) peonSlab = rates.peonFull;
+                else if (rem > 30) peonSlab = rates.peonSlab2;
+                else if (rem === 0) peonSlab = 0;
+
+                const clerkAmt = (rates.clerkFull * Math.floor(total / 100)) + (total > 0 ? clerkSlab : 0);
+                const peonAmt = (rates.peonFull * Math.floor(total / 100)) + (total > 0 ? peonSlab : 0);
+                const sweeperAmt = total > 0 ? Math.max(rates.sweeperRate, Math.ceil(total / 100) * rates.sweeperMin) : 0;
+
+                const hasFN = (fn + dItem.fnScribes) > 0 ? 1 : 0;
+                const hasAN = (an + dItem.anScribes) > 0 ? 1 : 0;
+
+                sumFN += fn;
+                sumAN += an;
+                sumScribe += scribe;
+                sumTotal += total;
+                sumInvigCount += dateInvigCount;
+                sumInvigAmt += invigAmt;
+                sumClerkAmt += clerkAmt;
+                sumPeonAmt += peonAmt;
+                sumSweeperAmt += sweeperAmt;
+                sumFNSessions += hasFN;
+                sumANSessions += hasAN;
+
+                partARows.push({
+                    slNo: idx + 1,
+                    date: dItem.dateDisplay,
+                    rawDate: dItem.dateObj,
+                    fn: fn > 0 ? fn : '',
+                    an: an > 0 ? an : '',
+                    scribe: scribe > 0 ? scribe : '',
+                    total: total,
+                    invigCount: dateInvigCount,
+                    invigAmt: invigAmt,
+                    clerkCount: total > 0 ? 1 : 0,
+                    clerkAmt: clerkAmt,
+                    peonCount: total > 0 ? 1 : 0,
+                    peonAmt: peonAmt,
+                    sweeperCount: total > 0 ? 1 : 0,
+                    sweeperAmt: sweeperAmt,
+                    isFN: hasFN,
+                    isAN: hasAN
+                });
+            });
+
+            const partATotalAmt = sumInvigAmt + sumClerkAmt + sumPeonAmt + sumSweeperAmt;
+            const totalSessions = sumFNSessions + sumANSessions;
+            const csAmt = totalSessions * rates.chiefSupdt;
+            const sasAmt = totalSessions * rates.seniorSupdt;
+            const osAmt = totalSessions * rates.officeSupdt;
+            const partBTotalAmt = csAmt + sasAmt + osAmt;
+
+            const partCAmt = rates.dataEntryOperator;
+            const scribeDuties = sumScribe;
+            const partDAmt = scribeDuties * rates.scribeRate;
+            const partEAmt = rates.headAccountant;
+            const grandTotalProformaI = partATotalAmt + partBTotalAmt + partCAmt + partDAmt + partEAmt;
+
+            const proformaIIRows = [];
+            let totalContingencyCandidates = 0;
+            let totalContingencyAmt = 0;
+            Object.keys(examRegistrations).sort().forEach((eName, idx) => {
+                const count = examRegistrations[eName].size;
+                const amt = count * rates.contingencyPerCandidate;
+                totalContingencyCandidates += count;
+                totalContingencyAmt += amt;
+                proformaIIRows.push({
+                    slNo: idx + 1,
+                    examName: eName,
+                    count: count,
+                    rate: rates.contingencyPerCandidate,
+                    amount: amt
+                });
+            });
+
+            const consolidatedTotal = grandTotalProformaI + totalContingencyAmt;
+            const advanceReceived = Number(officials.advanceReceived) || 0;
+            const balanceClaim = consolidatedTotal - advanceReceived;
+
+            const uniqueScribes = new Set(regStudents.filter(s => s.isScribe).map(s => s.regNo.toLowerCase()));
+            const uniqueScribesCount = uniqueScribes.size || (sumScribe > 0 ? Math.ceil(sumScribe / 2) : 0);
+
+            const staffKeys = Object.keys(staffDutyCounts).sort();
+            const hasInvigilationAttendance = staffKeys.length > 0;
+            const invigilatorRows = [];
+            if (hasInvigilationAttendance) {
+                staffKeys.forEach((name, i) => {
+                    const duties = staffDutyCounts[name];
+                    const parsed = splitTitleAndName(name);
+                    invigilatorRows.push({
+                        slNo: 9 + i,
+                        title: parsed.title,
+                        name: parsed.name,
+                        designation: 'Invigilator',
+                        duties: duties,
+                        rate: rates.invigilator,
+                        amount: duties * rates.invigilator
+                    });
+                });
+            }
+
+            const annexureITotal = hasInvigilationAttendance
+                ? (partBTotalAmt + partCAmt + partEAmt + sumClerkAmt + sumPeonAmt + sumSweeperAmt + sumInvigAmt)
+                : 0;
+
+            return {
+                officials: officials,
+                rates: rates,
+                hasInvigilationAttendance: hasInvigilationAttendance,
+                startDateStr: formatDateSlash(minDate),
+                endDateStr: formatDateSlash(maxDate),
+                period: officials.period,
+                partARows: partARows,
+                sumFN: sumFN, sumAN: sumAN, sumScribe: sumScribe, sumTotal: sumTotal,
+                sumInvigCount: sumInvigCount, sumInvigAmt: sumInvigAmt,
+                sumClerkAmt: sumClerkAmt, sumPeonAmt: sumPeonAmt, sumSweeperAmt: sumSweeperAmt,
+                sumFNSessions: sumFNSessions, sumANSessions: sumANSessions,
+                partATotalAmt: partATotalAmt,
+                partATotalWords: numberToIndianWords(partATotalAmt),
+                totalSessions: totalSessions,
+                csAmt: csAmt, sasAmt: sasAmt, osAmt: osAmt,
+                partBTotalAmt: partBTotalAmt,
+                partBTotalWords: numberToIndianWords(partBTotalAmt),
+                partCAmt: partCAmt,
+                partCWords: numberToIndianWords(partCAmt),
+                uniqueScribesCount: uniqueScribesCount,
+                scribeDuties: scribeDuties,
+                scribeRate: rates.scribeRate,
+                partDAmt: partDAmt,
+                partDWords: numberToIndianWords(partDAmt),
+                partEAmt: partEAmt,
+                partEWords: numberToIndianWords(partEAmt),
+                grandTotalProformaI: grandTotalProformaI,
+                grandTotalProformaIWords: numberToIndianWords(grandTotalProformaI),
+                invigilatorRows: invigilatorRows,
+                annexureITotal: annexureITotal,
+                annexureITotalWords: numberToIndianWords(annexureITotal),
+                proformaIIRows: proformaIIRows,
+                totalContingencyCandidates: totalContingencyCandidates,
+                totalContingencyAmt: totalContingencyAmt,
+                totalContingencyWords: numberToIndianWords(totalContingencyAmt),
+                consolidatedTotal: consolidatedTotal,
+                consolidatedTotalWords: numberToIndianWords(consolidatedTotal),
+                advanceReceived: advanceReceived,
+                balanceClaim: balanceClaim,
+                balanceClaimWords: numberToIndianWords(balanceClaim)
+            };
+        }
+
+        function aggregateSdeData(officials, rates) {
+            const sdeStudents = data.filter(s => {
+                const str = (s.stream || '').toLowerCase();
+                return str === 'ede' || str === 'sde' || str === 'distance';
+            });
+            if (sdeStudents.length === 0) return null;
+
+            const dateMap = {};
+            const examNamesSet = new Set();
+            const datesList = [];
+            const scribeRows = [];
+            const scribeSet = new Set();
+
+            sdeStudents.forEach(s => {
+                const rawDate = (s.date || '').trim();
+                const rawTime = (s.time || '').trim().toUpperCase();
+                const regNo = (s.regNo || s.name || '').trim();
+                const examName = (s.examName || ARCHIVED_EXAM || 'Calicut University SDE Examination').trim();
+                if (!rawDate) return;
+
+                examNamesSet.add(examName);
+                const dObj = parseDateStr(rawDate);
+                const dateKey = formatDateDot(dObj);
+
+                if (!dateMap[dateKey]) {
+                    dateMap[dateKey] = {
+                        dateObj: dObj,
+                        dateStr: dateKey,
+                        dateDisplay: dateKey,
+                        fnCandidates: 0,
+                        anCandidates: 0,
+                        fnScribes: 0,
+                        anScribes: 0,
+                        fnRooms: new Set(),
+                        anRooms: new Set(),
+                        fnInvigMap: {},
+                        anInvigMap: {}
+                    };
+                    datesList.push(dateMap[dateKey]);
+                }
+
+                const isFN = rawTime.includes('AM') || (rawTime.split(/[:.]/)[0] && parseInt(rawTime.split(/[:.]/)[0], 10) < 12 && !rawTime.includes('PM'));
+                const sessKey = s.sessionKey || \`\${dateKey} | \${rawTime}\`;
+
+                if (s.room && s.room !== 'Unassigned') {
+                    const rKey = sessKey + '__' + s.room;
+                    if (isFN) {
+                        dateMap[dateKey].fnRooms.add(rKey);
+                        if (s.invigilator && s.invigilator !== '-' && s.invigilator !== 'Not Assigned') {
+                            dateMap[dateKey].fnInvigMap[rKey] = s.invigilator;
+                        }
+                    } else {
+                        dateMap[dateKey].anRooms.add(rKey);
+                        if (s.invigilator && s.invigilator !== '-' && s.invigilator !== 'Not Assigned') {
+                            dateMap[dateKey].anInvigMap[rKey] = s.invigilator;
+                        }
+                    }
+                }
+
+                if (s.status !== 'ABSENT') {
+                    if (isFN) {
+                        if (s.isScribe) dateMap[dateKey].fnScribes++;
+                        else dateMap[dateKey].fnCandidates++;
+                    } else {
+                        if (s.isScribe) dateMap[dateKey].anScribes++;
+                        else dateMap[dateKey].anCandidates++;
+                    }
+                }
+
+                if (s.isScribe) {
+                    const scKey = \`\${regNo}_\${dateKey}\`;
+                    if (!scribeSet.has(scKey)) {
+                        scribeSet.add(scKey);
+                        scribeRows.push({
+                            slNo: scribeRows.length + 1,
+                            candidateName: s.name,
+                            regNo: regNo,
+                            scribeName: 'Appointed Amanuensis',
+                            rate: rates.scribeRate
+                        });
+                    }
+                }
+            });
+
+            datesList.sort((a, b) => a.dateObj - b.dateObj);
+            const minDate = datesList[0] ? datesList[0].dateObj : new Date();
+            const maxDate = datesList[datesList.length - 1] ? datesList[datesList.length - 1].dateObj : new Date();
+            const defaultPeriod = \`\${formatMonthYear(minDate)} to \${formatMonthYear(maxDate)}\`;
+            if (!officials.period) officials.period = defaultPeriod;
+
+            const examTitle = Array.from(examNamesSet).join(', ') || officials.examName || 'Undergraduate / Postgraduate Examination';
+            if (!officials.examName) officials.examName = examTitle;
+
+            const staffDutyCounts = {};
+            datesList.forEach(d => {
+                Object.values(d.fnInvigMap).concat(Object.values(d.anInvigMap)).forEach(teach => {
+                    if (teach && teach.trim()) {
+                        const norm = teach.trim();
+                        staffDutyCounts[norm] = (staffDutyCounts[norm] || 0) + 1;
+                    }
+                });
+            });
+
+            let totalExamDays = datesList.length;
+            let singleDayCount = 0;
+            let doubleDayCount = 0;
+            let totalCandidates = 0;
+            let sumTotalInvigDuties = 0;
+            let sumTotalInvigAmt = 0;
+            let sumClerkAmt = 0;
+            let sumPeonAmt = 0;
+            let sumSweeperAmt = 0;
+            const dateRows = [];
+
+            datesList.forEach(dItem => {
+                const fnCands = dItem.fnCandidates + dItem.fnScribes;
+                const anCands = dItem.anCandidates + dItem.anScribes;
+                const isDouble = fnCands > 0 && anCands > 0;
+                if (isDouble) doubleDayCount++;
+                else singleDayCount++;
+
+                let fnInvig = dItem.fnRooms.size;
+                if (fnInvig === 0 && fnCands > 0) fnInvig = Math.ceil(fnCands / 30);
+                let anInvig = dItem.anRooms.size;
+                if (anInvig === 0 && anCands > 0) anInvig = Math.ceil(anCands / 30);
+
+                const fnInvigAmt = fnInvig * rates.invigilator;
+                const anInvigAmt = anInvig * rates.invigilator;
+                const invigTotalAmt = fnInvigAmt + anInvigAmt;
+
+                const clerkAmt = isDouble ? rates.clerkDouble : rates.clerkSingle;
+                const peonAmt = isDouble ? rates.peonDouble : rates.peonSingle;
+                const sweeperAmt = isDouble ? rates.sweeperDouble : rates.sweeperSingle;
+
+                totalCandidates += (fnCands + anCands);
+                sumTotalInvigDuties += (fnInvig + anInvig);
+                sumTotalInvigAmt += invigTotalAmt;
+                sumClerkAmt += clerkAmt;
+                sumPeonAmt += peonAmt;
+                sumSweeperAmt += sweeperAmt;
+
+                dateRows.push({
+                    dateDisplay: dItem.dateDisplay,
+                    fnCandidates: fnCands,
+                    anCandidates: anCands,
+                    fnInvigCount: fnInvig,
+                    anInvigCount: anInvig,
+                    fnInvigAmt: fnInvigAmt,
+                    anInvigAmt: anInvigAmt,
+                    invigTotalAmt: invigTotalAmt,
+                    clerkAmt: clerkAmt,
+                    peonAmt: peonAmt,
+                    sweeperAmt: sweeperAmt,
+                    isDouble: isDouble
+                });
+            });
+
+            const chiefAmt = (doubleDayCount * rates.chiefDouble) + (singleDayCount * rates.chiefSingle);
+            const seniorAmt = (doubleDayCount * rates.seniorDouble) + (singleDayCount * rates.seniorSingle);
+            const totalScribeDuties = scribeRows.length;
+            const amanuensisAmt = totalScribeDuties * rates.scribeRate;
+            const contingencyAmt = totalCandidates * rates.contingencyPerSession;
+            const grandTotal = chiefAmt + seniorAmt + sumTotalInvigAmt + sumClerkAmt + sumPeonAmt + sumSweeperAmt + amanuensisAmt + contingencyAmt;
+
+            const invigKeys = Object.keys(staffDutyCounts).sort();
+            const hasInvigilationAttendance = invigKeys.length > 0;
+            const invigilatorRows = [];
+            if (hasInvigilationAttendance) {
+                invigKeys.forEach((name, i) => {
+                    const duties = staffDutyCounts[name];
+                    const parsed = splitTitleAndName(name);
+                    invigilatorRows.push({
+                        slNo: 6 + i,
+                        title: parsed.title,
+                        name: parsed.name,
+                        designation: 'Invigilator',
+                        duties: duties,
+                        rate: rates.invigilator,
+                        amount: duties * rates.invigilator
+                    });
+                });
+            }
+
+            const aquittanceTotal = hasInvigilationAttendance
+                ? (chiefAmt + seniorAmt + sumClerkAmt + sumPeonAmt + sumSweeperAmt + sumTotalInvigAmt)
+                : 0;
+
+            return {
+                officials: officials,
+                rates: rates,
+                hasInvigilationAttendance: hasInvigilationAttendance,
+                examName: officials.examName,
+                period: officials.period,
+                dateRows: dateRows,
+                totalExamDays: totalExamDays,
+                singleDayCount: singleDayCount,
+                doubleDayCount: doubleDayCount,
+                totalCandidates: totalCandidates,
+                sumTotalInvigDuties: sumTotalInvigDuties,
+                sumTotalInvigAmt: sumTotalInvigAmt,
+                sumClerkAmt: sumClerkAmt,
+                sumPeonAmt: sumPeonAmt,
+                sumSweeperAmt: sumSweeperAmt,
+                chiefAmt: chiefAmt,
+                seniorAmt: seniorAmt,
+                totalScribeDuties: totalScribeDuties,
+                amanuensisAmt: amanuensisAmt,
+                contingencyAmt: contingencyAmt,
+                grandTotal: grandTotal,
+                grandTotalWords: numberToIndianWords(grandTotal),
+                contingencyWords: numberToIndianWords(contingencyAmt),
+                scribeRows: scribeRows,
+                invigilatorRows: invigilatorRows,
+                aquittanceTotal: aquittanceTotal,
+                aquittanceTotalWords: numberToIndianWords(aquittanceTotal)
+            };
+        }
+
+        function renderProformaDocument() {
+            const container = document.getElementById('pv-document-render');
+            if (currentProformaMode === 'regular') {
+                if (!currentRegularData) {
+                    container.innerHTML = \`<div class="p-8 text-center text-gray-500 font-bold">No Regular stream students found in selected sessions.</div>\`;
+                    return;
+                }
+                container.innerHTML = renderRegularHTML(currentRegularData, currentSubTab);
+            } else {
+                if (!currentSdeData) {
+                    container.innerHTML = \`<div class="p-8 text-center text-gray-500 font-bold">No SDE / Distance stream students found in selected sessions.</div>\`;
+                    return;
+                }
+                container.innerHTML = renderSdeHTML(currentSdeData, currentSubTab);
+            }
+        }
+
+        function renderRegularHTML(data, tab) {
+            const disp = (v, def = "................................") => (v && String(v).trim()) ? String(v).trim() : \`<span class="blank-entry">\${def}</span>\`;
+
+            const renderPartA = () => \`
+                <div>
+                    <div class="header-main">
+                        <div class="font-bold text-lg">PROFORMA - 1</div>
+                        <div class="font-bold text-base">Theory Examinations - Remuneration - Human Resources</div>
+                        <div class="text-sm mt-1">Statement for the conduct of Calicut University Examinations held at</div>
+                        <div class="font-bold text-base uppercase">\${disp(data.officials.collegeName, '[College Name]')}</div>
+                        <div class="text-sm font-semibold">From \${data.period}</div>
+                        <div class="font-bold text-left mt-2">Part - A</div>
+                    </div>
+                    <table class="proforma-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="3" style="width: 4%;">Sl.<br>No</th>
+                                <th rowspan="3" style="width: 12%;">Date</th>
+                                <th colspan="4" style="width: 24%;">No. of Candidates</th>
+                                <th colspan="2" style="width: 16%;">Invigilator</th>
+                                <th colspan="2" style="width: 15%;">Clerk</th>
+                                <th colspan="2" style="width: 15%;">Peon</th>
+                                <th colspan="2" style="width: 14%;">Sweeper</th>
+                            </tr>
+                            <tr>
+                                <th rowspan="2" style="width: 6%;">FN</th>
+                                <th rowspan="2" style="width: 6%;">AN</th>
+                                <th rowspan="2" style="width: 6%;">Scribe</th>
+                                <th rowspan="2" style="width: 6%;">Total</th>
+                                <th style="width: 5%;">No.</th>
+                                <th style="width: 11%;">Amount</th>
+                                <th style="width: 4%;">No.</th>
+                                <th style="width: 11%;">Amount</th>
+                                <th style="width: 4%;">No.</th>
+                                <th style="width: 11%;">Amount</th>
+                                <th style="width: 4%;">No.</th>
+                                <th style="width: 10%;">Amount</th>
+                            </tr>
+                            <tr style="font-size: 8pt; background: #fafafa;">
+                                <th>7</th><th>8</th><th>9</th><th>10</th><th>11</th><th>12</th><th>13</th><th>14</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            \${data.partARows.map(r => \`
+                                <tr>
+                                    <td class="text-center">\${r.slNo}</td>
+                                    <td class="text-center">\${r.date}</td>
+                                    <td class="text-center font-mono">\${r.fn || ''}</td>
+                                    <td class="text-center font-mono">\${r.an || ''}</td>
+                                    <td class="text-center font-mono">\${r.scribe || ''}</td>
+                                    <td class="text-center font-mono font-bold">\${r.total}</td>
+                                    <td class="text-center font-mono">\${r.invigCount}</td>
+                                    <td class="text-right font-mono">₹\${r.invigAmt}</td>
+                                    <td class="text-center font-mono">\${r.clerkCount}</td>
+                                    <td class="text-right font-mono">₹\${r.clerkAmt}</td>
+                                    <td class="text-center font-mono">\${r.peonCount}</td>
+                                    <td class="text-right font-mono">₹\${r.peonAmt}</td>
+                                    <td class="text-center font-mono">\${r.sweeperCount}</td>
+                                    <td class="text-right font-mono">₹\${r.sweeperAmt}</td>
+                                </tr>
+                            \`).join('')}
+                            <tr class="font-bold" style="background-color: #f7f7f7;">
+                                <td colspan="2" class="text-center">Total</td>
+                                <td class="text-center font-mono">\${data.sumFN || ''}</td>
+                                <td class="text-center font-mono">\${data.sumAN || ''}</td>
+                                <td class="text-center font-mono">\${data.sumScribe || ''}</td>
+                                <td class="text-center font-mono">\${data.sumTotal}</td>
+                                <td class="text-center font-mono">\${data.sumInvigCount}</td>
+                                <td class="text-right font-mono">₹\${data.sumInvigAmt.toLocaleString('en-IN')}</td>
+                                <td class="text-center font-mono">-</td>
+                                <td class="text-right font-mono">₹\${data.sumClerkAmt.toLocaleString('en-IN')}</td>
+                                <td class="text-center font-mono">-</td>
+                                <td class="text-right font-mono">₹\${data.sumPeonAmt.toLocaleString('en-IN')}</td>
+                                <td class="text-center font-mono">-</td>
+                                <td class="text-right font-mono">₹\${data.sumSweeperAmt.toLocaleString('en-IN')}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="mt-4 p-2 border border-black font-bold flex justify-between">
+                        <span>Total Amount (Column 8 + 10 + 12 + 14) =</span>
+                        <span class="text-base font-mono">₹\${data.partATotalAmt.toLocaleString('en-IN')}/-</span>
+                    </div>
+                    <div class="text-sm italic font-bold mt-1 text-right">
+                        (Rupees \${data.partATotalWords} only)
+                    </div>
+                </div>
+            \`;
+
+            const renderPartBC = () => \`
+                <div>
+                    <div class="header-main">
+                        <div class="font-bold text-lg">PROFORMA - 1 (Continued)</div>
+                        <div class="font-bold text-left text-base mt-2">PART B: Supervisory Staff</div>
+                    </div>
+                    <div class="mb-3 p-2 bg-gray-50 border border-black text-sm flex justify-around font-semibold">
+                        <span><strong>Total No. of Sessions:</strong></span>
+                        <span>FN = <strong>\${data.sumFNSessions}</strong></span>
+                        <span>AN = <strong>\${data.sumANSessions}</strong></span>
+                        <span>Total Sessions = <strong>\${data.totalSessions}</strong></span>
+                    </div>
+                    <table class="proforma-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 8%;">Sl.No.</th>
+                                <th style="width: 42%;">Designation</th>
+                                <th style="width: 18%;">Total Sessions</th>
+                                <th style="width: 16%;">Rate per Session</th>
+                                <th style="width: 16%;">Total (Rs.)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="text-center">1</td>
+                                <td>Chief Superintendent (\${disp(data.officials.chiefSupdt)})</td>
+                                <td class="text-center font-mono">\${data.totalSessions}</td>
+                                <td class="text-right font-mono">₹\${data.rates.chiefSupdt}</td>
+                                <td class="text-right font-mono font-bold">₹\${data.csAmt.toLocaleString('en-IN')}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">2</td>
+                                <td>Senior Assistant Superintendent (\${disp(data.officials.seniorSupdt)})</td>
+                                <td class="text-center font-mono">\${data.totalSessions}</td>
+                                <td class="text-right font-mono">₹\${data.rates.seniorSupdt}</td>
+                                <td class="text-right font-mono font-bold">₹\${data.sasAmt.toLocaleString('en-IN')}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">3</td>
+                                <td>Office Superintendent (\${disp(data.officials.officeSupdt)})</td>
+                                <td class="text-center font-mono">\${data.totalSessions}</td>
+                                <td class="text-right font-mono">₹\${data.rates.officeSupdt}</td>
+                                <td class="text-right font-mono font-bold">₹\${data.osAmt.toLocaleString('en-IN')}</td>
+                            </tr>
+                            <tr class="font-bold" style="background: #f7f7f7;">
+                                <td colspan="2" class="text-center">Total Part B</td>
+                                <td class="text-center font-mono">\${data.totalSessions}</td>
+                                <td></td>
+                                <td class="text-right font-mono text-base">₹\${data.partBTotalAmt.toLocaleString('en-IN')}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="text-sm italic font-bold text-right mb-6">
+                        (Rupees \${data.partBTotalWords} only)
+                    </div>
+
+                    <div class="font-bold text-left text-base mt-6">PART C: Data Entry Operator</div>
+                    <table class="proforma-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 35%;">Designation</th>
+                                <th style="width: 45%;">Name / Details</th>
+                                <th style="width: 20%;">Amount (Rs.)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Data Entry Operator</td>
+                                <td>\${disp(data.officials.dataEntryOperator, '[Enter DEO Name]')} (Rate @ ₹\${data.rates.dataEntryOperator}/- for odd & even sem)</td>
+                                <td class="text-right font-mono font-bold">₹\${data.partCAmt}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="text-sm italic font-bold text-right">
+                        (Rupees \${data.partCWords} only)
+                    </div>
+                </div>
+            \`;
+
+            const renderPartDEF = () => \`
+                <div>
+                    <div class="header-main">
+                        <div class="font-bold text-lg">PROFORMA - 1 (Continued)</div>
+                    </div>
+                    <div class="font-bold text-left text-base">PART D: Amanuensis / Scribe Charges</div>
+                    <table class="proforma-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 25%;">Designation</th>
+                                <th style="width: 25%;">Candidates Permitted</th>
+                                <th style="width: 15%;">Rate</th>
+                                <th style="width: 15%;">Duties Performed</th>
+                                <th style="width: 20%;">Total Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Amanuensis</td>
+                                <td class="text-center font-mono">\${data.uniqueScribesCount}</td>
+                                <td class="text-right font-mono">₹\${data.scribeRate}</td>
+                                <td class="text-center font-mono">\${data.scribeDuties}</td>
+                                <td class="text-right font-mono font-bold">₹\${data.partDAmt.toLocaleString('en-IN')}*</td>
+                            </tr>
+                            <tr class="font-bold" style="background: #f7f7f7;">
+                                <td colspan="4" class="text-center">Total Part D</td>
+                                <td class="text-right font-mono">₹\${data.partDAmt.toLocaleString('en-IN')}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="text-xs text-gray-700 italic mt-1">
+                        * U. O. No. 2433/2022/PB dtd. 28.11.2022 (Scribe orders attached).
+                    </div>
+                    <div class="text-sm italic font-bold text-right">
+                        (Rupees \${data.partDWords} only)
+                    </div>
+
+                    <div class="font-bold text-left text-base mt-6">PART E: Accountant</div>
+                    <table class="proforma-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 25%;">Designation</th>
+                                <th style="width: 55%;">Name / Remarks</th>
+                                <th style="width: 20%;">Amount (Rs.)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Accountant</td>
+                                <td>\${disp(data.officials.headAccountant, '[Enter Accountant Name]')} (Rate @ ₹\${data.rates.headAccountant}/- for odd & even sem)</td>
+                                <td class="text-right font-mono font-bold">₹\${data.partEAmt}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="text-sm italic font-bold text-right">
+                        (Rupees \${data.partEWords} only)
+                    </div>
+
+                    <div class="mt-8 border-t-2 border-black pt-4">
+                        <div class="font-bold text-center text-base mb-3">PART - F: PROFORMA I - GRAND TOTAL</div>
+                        <div style="max-width: 480px; margin: 0 auto;">
+                            <table class="proforma-table">
+                                <tbody>
+                                    <tr><td><strong>Part A</strong> (Human Resources Daily Statement)</td><td class="text-center">=</td><td class="text-right font-mono">₹\${data.partATotalAmt.toLocaleString('en-IN')}</td></tr>
+                                    <tr><td><strong>Part B</strong> (Supervisory Staff)</td><td class="text-center">=</td><td class="text-right font-mono">₹\${data.partBTotalAmt.toLocaleString('en-IN')}</td></tr>
+                                    <tr><td><strong>Part C</strong> (Data Entry Operator)</td><td class="text-center">=</td><td class="text-right font-mono">₹\${data.partCAmt.toLocaleString('en-IN')}</td></tr>
+                                    <tr><td><strong>Part D</strong> (Amanuensis / Scribes)</td><td class="text-center">=</td><td class="text-right font-mono">₹\${data.partDAmt.toLocaleString('en-IN')}</td></tr>
+                                    <tr><td><strong>Part E</strong> (Accountant)</td><td class="text-center">=</td><td class="text-right font-mono">₹\${data.partEAmt.toLocaleString('en-IN')}</td></tr>
+                                    <tr style="background: #f3f3f3; font-weight: bold; font-size: 11pt;">
+                                        <td>TOTAL PROFORMA - I</td><td class="text-center">=</td><td class="text-right font-mono">₹\${data.grandTotalProformaI.toLocaleString('en-IN')}/-</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <div class="text-sm italic font-bold text-center mt-2">
+                                (Rupees \${data.grandTotalProformaIWords} only)
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sign-block">
+                        <div>( Office Seal )</div>
+                        <div class="text-center">
+                            <div>\${disp(data.officials.chiefSupdt)}</div>
+                            <div>Chief Superintendent</div>
+                        </div>
+                    </div>
+                </div>
+            \`;
+
+            const renderAcquittance = () => {
+                if (!data.hasInvigilationAttendance) {
+                    return \`
+                        <div style="text-align: center; padding: 40px 20px;">
+                            <div class="font-bold text-lg text-gray-800 uppercase">ANNEXURE - I (Acquittance Roll)</div>
+                            <div class="text-sm text-amber-800 mt-2 bg-amber-50 border border-amber-200 rounded p-3 max-w-md mx-auto">
+                                ⚠️ Annexure I is omitted because individual invigilator assignments are not recorded in this session bundle.
+                            </div>
+                        </div>
+                    \`;
+                }
+                return \`
+                    <div>
+                        <div class="header-main">
+                            <div class="font-bold text-lg">ANNEXURE - I</div>
+                            <div class="font-bold text-base">Theory Examinations - Remuneration - Human Resources</div>
+                            <div class="font-bold text-sm">Acquittance Roll for the conduct of Calicut University Examinations</div>
+                            <div class="text-sm font-semibold">From \${data.period} at \${disp(data.officials.collegeName)} Centre</div>
+                        </div>
+                        <table class="proforma-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 6%;">Sl.No</th>
+                                    <th style="width: 36%;">Name of Official / Invigilator</th>
+                                    <th style="width: 22%;">Designation</th>
+                                    <th style="width: 10%;">Duties</th>
+                                    <th style="width: 12%;">Amount (Rs.)</th>
+                                    <th style="width: 14%;">Signature</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="text-center">1</td>
+                                    <td>\${disp(data.officials.chiefSupdt)}</td>
+                                    <td>Chief Superintendent</td>
+                                    <td class="text-center font-mono">\${data.totalSessions} sess</td>
+                                    <td class="text-right font-mono font-bold">₹\${data.csAmt.toLocaleString('en-IN')}</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-center">2</td>
+                                    <td>\${disp(data.officials.seniorSupdt)}</td>
+                                    <td>Senior Assistant Supdt.</td>
+                                    <td class="text-center font-mono">\${data.totalSessions} sess</td>
+                                    <td class="text-right font-mono font-bold">₹\${data.sasAmt.toLocaleString('en-IN')}</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-center">3</td>
+                                    <td>\${disp(data.officials.officeSupdt)}</td>
+                                    <td>Office Superintendent</td>
+                                    <td class="text-center font-mono">\${data.totalSessions} sess</td>
+                                    <td class="text-right font-mono font-bold">₹\${data.osAmt.toLocaleString('en-IN')}</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-center">4</td>
+                                    <td>\${disp(data.officials.headAccountant)}</td>
+                                    <td>Head Accountant</td>
+                                    <td class="text-center font-mono">-</td>
+                                    <td class="text-right font-mono font-bold">₹\${data.partEAmt}</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-center">5</td>
+                                    <td>\${disp(data.officials.dataEntryOperator)}</td>
+                                    <td>Data Entry Operator</td>
+                                    <td class="text-center font-mono">-</td>
+                                    <td class="text-right font-mono font-bold">₹\${data.partCAmt}</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-center">6</td>
+                                    <td>\${disp(data.officials.clerk)}</td>
+                                    <td>Clerk</td>
+                                    <td class="text-center font-mono">-</td>
+                                    <td class="text-right font-mono font-bold">₹\${data.sumClerkAmt.toLocaleString('en-IN')}</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-center">7</td>
+                                    <td>\${disp(data.officials.peon)}</td>
+                                    <td>Office Attendant / Peon</td>
+                                    <td class="text-center font-mono">-</td>
+                                    <td class="text-right font-mono font-bold">₹\${data.sumPeonAmt.toLocaleString('en-IN')}</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-center">8</td>
+                                    <td>\${disp(data.officials.sweeper)}</td>
+                                    <td>Sweeper</td>
+                                    <td class="text-center font-mono">-</td>
+                                    <td class="text-right font-mono font-bold">₹\${data.sumSweeperAmt.toLocaleString('en-IN')}</td>
+                                    <td></td>
+                                </tr>
+                                \${data.invigilatorRows.map(inv => \`
+                                    <tr>
+                                        <td class="text-center">\${inv.slNo}</td>
+                                        <td>\${inv.title ? inv.title + ' ' : ''}\${inv.name}</td>
+                                        <td>Invigilator</td>
+                                        <td class="text-center font-mono">\${inv.duties}</td>
+                                        <td class="text-right font-mono">₹\${inv.amount.toLocaleString('en-IN')}</td>
+                                        <td></td>
+                                    </tr>
+                                \`).join('')}
+                                <tr class="font-bold" style="background: #f7f7f7;">
+                                    <td colspan="4" class="text-center">TOTAL ACQUITTANCE CLAIM</td>
+                                    <td class="text-right font-mono">₹\${data.annexureITotal.toLocaleString('en-IN')}/-</td>
+                                    <td></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div class="text-sm italic font-bold text-right mb-6">
+                            (Rupees \${data.annexureITotalWords} only)
+                        </div>
+                        <div class="sign-block">
+                            <div>( Office Seal )</div>
+                            <div class="text-center">
+                                <div>\${disp(data.officials.chiefSupdt)}</div>
+                                <div>Chief Superintendent</div>
+                            </div>
+                        </div>
+                    </div>
+                \`;
+            };
+
+            const renderProformaII = () => \`
+                <div>
+                    <div class="header-main">
+                        <div class="font-bold text-lg">PROFORMA - II</div>
+                        <div class="font-bold text-base">Theory Examinations - Contingent Charges</div>
+                        <div class="text-sm mt-1">Statement for the conduct of Calicut University Examinations</div>
+                        <div class="text-sm font-semibold">From \${data.period} at \${disp(data.officials.collegeName)} Centre</div>
+                    </div>
+                    <table class="proforma-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 8%;">Sl.No.</th>
+                                <th style="width: 52%;">Name of Examination</th>
+                                <th style="width: 15%;">Candidates Registered</th>
+                                <th style="width: 10%;">Rate</th>
+                                <th style="width: 15%;">Total Amount (Rs.)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            \${data.proformaIIRows.map(ex => \`
+                                <tr>
+                                    <td class="text-center">\${ex.slNo}</td>
+                                    <td>\${ex.examName}</td>
+                                    <td class="text-center font-mono font-bold">\${ex.count}</td>
+                                    <td class="text-center">@ ₹\${data.rates.contingencyPerCandidate}/-</td>
+                                    <td class="text-right font-mono font-bold">₹\${ex.amount.toLocaleString('en-IN')}</td>
+                                </tr>
+                            \`).join('')}
+                            <tr class="font-bold" style="background: #f7f7f7;">
+                                <td colspan="2" class="text-center">Total</td>
+                                <td class="text-center font-mono">\${data.totalContingencyCandidates}</td>
+                                <td></td>
+                                <td class="text-right font-mono">₹\${data.totalContingencyAmt.toLocaleString('en-IN')}/-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="mt-4 p-2 border border-black font-bold flex justify-between">
+                        <span>Total Contingent Charges Claimed =</span>
+                        <span class="text-base font-mono">₹\${data.totalContingencyAmt.toLocaleString('en-IN')}/-</span>
+                    </div>
+                    <div class="text-sm italic font-bold mt-1 text-right">
+                        (Rupees \${data.totalContingencyWords} only)
+                    </div>
+                    <div class="sign-block">
+                        <div>( Office Seal )</div>
+                        <div class="text-center">
+                            <div>\${disp(data.officials.chiefSupdt)}</div>
+                            <div>Chief Superintendent</div>
+                        </div>
+                    </div>
+                </div>
+            \`;
+
+            const renderConsolidated = () => \`
+                <div>
+                    <div class="header-main">
+                        <div class="font-bold text-lg">CONSOLIDATED STATEMENT</div>
+                        <div class="text-sm mt-1">For the conduct of Calicut University Examinations</div>
+                        <div class="text-sm font-semibold">From \${data.period} at \${disp(data.officials.collegeName)} Centre</div>
+                    </div>
+                    <table class="proforma-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 10%;">Sl.No</th>
+                                <th style="width: 65%;">Particulars</th>
+                                <th style="width: 25%;">Amount in Rs.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="text-center">1</td>
+                                <td>Theory Examinations - Remuneration - Human Resources (Proforma I)</td>
+                                <td class="text-right font-mono font-bold">₹\${data.grandTotalProformaI.toLocaleString('en-IN')}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">2</td>
+                                <td>Theory Examinations - Contingent Charges (Proforma II)</td>
+                                <td class="text-right font-mono font-bold">₹\${data.totalContingencyAmt.toLocaleString('en-IN')}</td>
+                            </tr>
+                            <tr class="font-bold" style="background: #f7f7f7;">
+                                <td colspan="2" class="text-center">Total Expenditure</td>
+                                <td class="text-right font-mono text-base">₹\${data.consolidatedTotal.toLocaleString('en-IN')}/-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="text-sm italic font-bold text-center mt-2 mb-6">
+                        (Rupees \${data.consolidatedTotalWords} only)
+                    </div>
+                    <div style="max-width: 500px; margin: 20px auto; border: 1px solid #000; padding: 12px;">
+                        <div class="flex justify-between py-1">
+                            <span class="font-bold">Total Expenditure</span>
+                            <span>=</span>
+                            <span class="font-bold font-mono">₹\${data.consolidatedTotal.toLocaleString('en-IN')}/-</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-t border-gray-300">
+                            <span class="font-bold">Advance Received</span>
+                            <span>=</span>
+                            <span class="font-mono">₹\${Number(data.advanceReceived).toFixed(2)} \${data.officials.advanceDetails || ''}</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-t-2 border-black font-bold text-base">
+                            <span>Balance Amount Claimed</span>
+                            <span>=</span>
+                            <span class="font-mono">₹\${data.balanceClaim.toLocaleString('en-IN')}/-</span>
+                        </div>
+                    </div>
+                    <div class="text-sm italic font-bold text-center">
+                        (Rupees \${data.balanceClaimWords} only)
+                    </div>
+                    <div class="sign-block">
+                        <div>( Office Seal )</div>
+                        <div class="text-center">
+                            <div>\${disp(data.officials.chiefSupdt)}</div>
+                            <div>Chief Superintendent</div>
+                        </div>
+                    </div>
+                </div>
+            \`;
+
+            const renderReceipt = () => \`
+                <div style="padding-top: 30px;">
+                    <div class="header-main">
+                        <div class="font-bold text-lg">ANNEXURE - II</div>
+                        <div class="font-bold text-xl mt-2 tracking-wide">RECEIPT</div>
+                    </div>
+                    <div class="mt-8 text-justify leading-relaxed text-base" style="text-indent: 40px;">
+                        Received from the Finance Officer, University of Calicut an amount of <strong>Rs. \${data.totalContingencyAmt.toLocaleString('en-IN')}/-</strong>
+                        (Rupees <em>\${data.totalContingencyWords}</em> only) being the contingent charges @ Rs. 4/- per candidate for the conduct of
+                        <strong>\${data.period}</strong> theory examinations during the period from <strong>\${data.startDateStr}</strong> to <strong>\${data.endDateStr}</strong>.
+                    </div>
+                    <div class="sign-block" style="margin-top: 80px;">
+                        <div>( Office Seal )</div>
+                        <div class="text-center">
+                            <div>\${disp(data.officials.chiefSupdt)}</div>
+                            <div>Chief Superintendent</div>
+                        </div>
+                    </div>
+                </div>
+            \`;
+
+            const renderCertificates = () => \`
+                <div>
+                    <div class="flex justify-between text-sm mb-6">
+                        <div>No. <strong>\${data.officials.certSeniorSupdtNo || '............................'}</strong></div>
+                        <div class="text-right">
+                            <div class="font-bold uppercase">\${disp(data.officials.collegeName)}</div>
+                            <div>Dated: \${data.officials.date || '............................'}</div>
+                        </div>
+                    </div>
+                    <div class="text-center font-bold text-base my-4">CERTIFICATE - 1</div>
+                    <div class="text-justify leading-relaxed text-sm my-6 p-4 border border-gray-400 bg-gray-50">
+                        Certified that the Post of <strong>Senior Superintendent</strong> for whom remuneration is claimed for University Examinations is existing in this college.
+                    </div>
+                    <div class="flex justify-end mt-12 mb-16">
+                        <div class="text-center">
+                            <div class="font-bold">\${disp(data.officials.principal || data.officials.chiefSupdt)}</div>
+                            <div>Principal</div>
+                        </div>
+                    </div>
+                    <hr class="border-t border-dashed border-gray-500 my-10">
+                    <div class="flex justify-between text-sm mb-6">
+                        <div>No. <strong>\${data.officials.certHeadAcctNo || '............................'}</strong></div>
+                        <div class="text-right">
+                            <div class="font-bold uppercase">\${disp(data.officials.collegeName)}</div>
+                            <div>Dated: \${data.officials.date || '............................'}</div>
+                        </div>
+                    </div>
+                    <div class="text-center font-bold text-base my-4">CERTIFICATE - 2</div>
+                    <div class="text-justify leading-relaxed text-sm my-6 p-4 border border-gray-400 bg-gray-50">
+                        Certified that the Post of <strong>Head Accountant</strong> for whom remuneration is claimed for University Examinations is existing in this college.
+                    </div>
+                    <div class="flex justify-end mt-12">
+                        <div class="text-center">
+                            <div class="font-bold">\${disp(data.officials.principal || data.officials.chiefSupdt)}</div>
+                            <div>Principal</div>
+                        </div>
+                    </div>
+                </div>
+            \`;
+
+            if (tab === 'partA') return renderPartA();
+            if (tab === 'partBC') return renderPartBC();
+            if (tab === 'partDEF') return renderPartDEF();
+            if (tab === 'acquittance') return renderAcquittance();
+            if (tab === 'proformaII') return renderProformaII();
+            if (tab === 'consolidated') return renderConsolidated();
+            if (tab === 'receipt') return renderReceipt();
+            if (tab === 'certificates') return renderCertificates();
+
+            return \`
+                \${renderPartA()}
+                <div class="page-break"></div>
+                \${renderPartBC()}
+                <div class="page-break"></div>
+                \${renderPartDEF()}
+                <div class="page-break"></div>
+                \${renderAcquittance()}
+                <div class="page-break"></div>
+                \${renderProformaII()}
+                <div class="page-break"></div>
+                \${renderConsolidated()}
+                <div class="page-break"></div>
+                \${renderReceipt()}
+                <div class="page-break"></div>
+                \${renderCertificates()}
+            \`;
+        }
+
+        function renderSdeHTML(data, tab) {
+            const disp = (v, def = "................................") => (v && String(v).trim()) ? String(v).trim() : \`<span class="blank-entry">\${def}</span>\`;
+
+            const renderProforma = () => \`
+                <div>
+                    <div class="header-main">
+                        <div class="font-bold text-lg">PROFORMA - I</div>
+                        <div class="font-bold text-base">Consolidated statement of expenditure for the conduct of \${data.examName} {SDE}</div>
+                        <div class="text-sm font-semibold uppercase">\${disp(data.officials.collegeName)} Centre</div>
+                        <div class="text-xs text-gray-600">Period: \${data.period}</div>
+                    </div>
+                    <table class="sde-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" style="width: 13%;">Date of Exam</th>
+                                <th rowspan="2" style="width: 6%;">Sess</th>
+                                <th rowspan="2" style="width: 9%;">No. of Cands</th>
+                                <th colspan="3" style="width: 27%;">Invigilator</th>
+                                <th colspan="2" style="width: 15%;">Clerk</th>
+                                <th colspan="2" style="width: 15%;">Peon</th>
+                                <th colspan="2" style="width: 15%;">Sweeper</th>
+                            </tr>
+                            <tr>
+                                <th style="width: 7%;">Nos</th>
+                                <th style="width: 10%;">@ ₹\${data.rates.invigilator}</th>
+                                <th style="width: 10%;">Total</th>
+                                <th style="width: 6%;">Nos</th>
+                                <th style="width: 9%;">Amt</th>
+                                <th style="width: 6%;">Nos</th>
+                                <th style="width: 9%;">Amt</th>
+                                <th style="width: 6%;">Nos</th>
+                                <th style="width: 9%;">Amt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            \${data.dateRows.map(r => \`
+                                <tr>
+                                    <td rowspan="2" class="text-center font-mono text-xs">\${r.dateDisplay}</td>
+                                    <td class="text-center font-bold">FN</td>
+                                    <td class="text-center font-mono">\${r.fnCandidates > 0 ? r.fnCandidates : '-'}</td>
+                                    <td class="text-center font-mono">\${r.fnInvigCount > 0 ? r.fnInvigCount : '-'}</td>
+                                    <td class="text-right font-mono">\${r.fnInvigAmt > 0 ? '₹' + r.fnInvigAmt : '-'}</td>
+                                    <td rowspan="2" class="text-right font-mono font-bold">₹\${r.invigTotalAmt.toLocaleString('en-IN')}</td>
+                                    <td rowspan="2" class="text-center">1</td>
+                                    <td rowspan="2" class="text-right font-mono">₹\${r.clerkAmt}</td>
+                                    <td rowspan="2" class="text-center">1</td>
+                                    <td rowspan="2" class="text-right font-mono">₹\${r.peonAmt}</td>
+                                    <td rowspan="2" class="text-center">1</td>
+                                    <td rowspan="2" class="text-right font-mono">₹\${r.sweeperAmt}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-center font-bold">AN</td>
+                                    <td class="text-center font-mono">\${r.anCandidates > 0 ? r.anCandidates : '-'}</td>
+                                    <td class="text-center font-mono">\${r.anInvigCount > 0 ? r.anInvigCount : '-'}</td>
+                                    <td class="text-right font-mono">\${r.anInvigAmt > 0 ? '₹' + r.anInvigAmt : '-'}</td>
+                                </tr>
+                            \`).join('')}
+                            <tr class="font-bold" style="background: #f7f7f7;">
+                                <td colspan="2" class="text-center">Total</td>
+                                <td class="text-center font-mono">\${data.totalCandidates}</td>
+                                <td class="text-center font-mono">\${data.sumTotalInvigDuties}</td>
+                                <td></td>
+                                <td class="text-right font-mono">₹\${data.sumTotalInvigAmt.toLocaleString('en-IN')}</td>
+                                <td class="text-center">\${data.totalExamDays}</td>
+                                <td class="text-right font-mono">₹\${data.sumClerkAmt.toLocaleString('en-IN')}</td>
+                                <td class="text-center">\${data.totalExamDays}</td>
+                                <td class="text-right font-mono">₹\${data.sumPeonAmt.toLocaleString('en-IN')}</td>
+                                <td class="text-center">\${data.totalExamDays}</td>
+                                <td class="text-right font-mono">₹\${data.sumSweeperAmt.toLocaleString('en-IN')}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div style="max-width: 650px; margin: 20px auto; border: 1px solid #000; padding: 14px; font-size: 10pt;">
+                        <div class="flex justify-between py-1">
+                            <span>1. Remuneration to Chief Superintendent (\${data.doubleDayCount} double @ ₹\${data.rates.chiefDouble}, \${data.singleDayCount} single @ ₹\${data.rates.chiefSingle})</span>
+                            <span class="font-mono font-bold">= ₹\${data.chiefAmt.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-t border-gray-200">
+                            <span>2. Remuneration to Senior Assistant Superintendent (\${data.doubleDayCount} double @ ₹\${data.rates.seniorDouble}, \${data.singleDayCount} single @ ₹\${data.rates.seniorSingle})</span>
+                            <span class="font-mono font-bold">= ₹\${data.seniorAmt.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-t border-gray-200">
+                            <span>3. Remuneration to Invigilators (\${data.sumTotalInvigDuties} duties @ ₹\${data.rates.invigilator})</span>
+                            <span class="font-mono font-bold">= ₹\${data.sumTotalInvigAmt.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-t border-gray-200">
+                            <span>4. Remuneration to Clerks</span>
+                            <span class="font-mono font-bold">= ₹\${data.sumClerkAmt.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-t border-gray-200">
+                            <span>5. Remuneration to Peon</span>
+                            <span class="font-mono font-bold">= ₹\${data.sumPeonAmt.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-t border-gray-200">
+                            <span>6. Remuneration to Sweepers</span>
+                            <span class="font-mono font-bold">= ₹\${data.sumSweeperAmt.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-t border-gray-200">
+                            <span>7. Remuneration to Amanuensis / Scribe (\${data.totalScribeDuties} duties @ ₹\${data.rates.scribeRate})</span>
+                            <span class="font-mono font-bold">= ₹\${data.amanuensisAmt.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-t border-gray-200">
+                            <span>8. Contingent charges (@ ₹\${data.rates.contingencyPerSession.toFixed(2)} per student per session, \${data.totalCandidates} cands)</span>
+                            <span class="font-mono font-bold">= ₹\${data.contingencyAmt.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div class="flex justify-between py-1.5 border-t-2 border-black font-bold text-base mt-1">
+                            <span>TOTAL CLAIM</span>
+                            <span class="font-mono">= ₹\${data.grandTotal.toLocaleString('en-IN')}/-</span>
+                        </div>
+                    </div>
+                    <div class="text-sm italic font-bold text-center mb-4">
+                        (Rupees \${data.grandTotalWords} only)
+                    </div>
+                    <div class="text-xs text-gray-700 mt-2">
+                        <div><strong>Please make payment in favour of:</strong> \${disp(data.officials.paymentInFavourOf, '[Enter Payment Beneficiary]')}</div>
+                    </div>
+                    <div class="sign-block" style="margin-top: 50px;">
+                        <div>
+                            <div>( Office Seal )</div>
+                            <div class="text-xs text-gray-500 font-normal mt-1">* Strike out whichever is not applicable</div>
+                        </div>
+                        <div class="text-center">
+                            <div>\${disp(data.officials.chiefSupdt)}</div>
+                            <div>CHIEF SUPERINTENDENT</div>
+                        </div>
+                    </div>
+                </div>
+            \`;
+
+            const renderAquittance = () => {
+                if (!data.hasInvigilationAttendance) {
+                    return \`
+                        <div style="text-align: center; padding: 40px 20px;">
+                            <div class="font-bold text-lg text-gray-800 uppercase">Annexure-I (AQUITTANCE)</div>
+                            <div class="text-sm text-emerald-800 mt-2 bg-emerald-50 border border-emerald-200 rounded p-3 max-w-md mx-auto">
+                                ⚠️ Aquittance Roll is omitted because individual invigilator assignments are not recorded in this session bundle.
+                            </div>
+                        </div>
+                    \`;
+                }
+                return \`
+                    <div>
+                        <div class="header-main">
+                            <div class="font-bold text-lg">Annexure-I</div>
+                            <div class="font-bold text-xl tracking-wide">AQUITTANCE</div>
+                            <div class="text-sm font-semibold mt-1 uppercase">Name of the Examination Centre: \${disp(data.officials.collegeName)}</div>
+                            <div class="text-sm font-bold">Name of the Examination: \${data.examName} {SDE}</div>
+                            <div class="text-xs text-gray-600 mt-1">Dates of Examinations: \${data.dateRows.map(r => r.dateDisplay).join(', ')}</div>
+                        </div>
+                        <table class="sde-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 6%;">Sl.No</th>
+                                    <th style="width: 32%;">Name & Designation</th>
+                                    <th style="width: 22%;">Nature of Duty</th>
+                                    <th style="width: 12%;">No. of Sessions</th>
+                                    <th style="width: 14%;">Amount (Rs.)</th>
+                                    <th style="width: 14%;">Signature</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="text-center">1</td>
+                                    <td>\${disp(data.officials.chiefSupdt)}</td>
+                                    <td>Chief Superintendent</td>
+                                    <td class="text-center font-mono">\${data.totalExamDays} days</td>
+                                    <td class="text-right font-mono font-bold">₹\${data.chiefAmt.toLocaleString('en-IN')}</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-center">2</td>
+                                    <td>\${disp(data.officials.seniorSupdt)}</td>
+                                    <td>Senior Assistant Superintendent</td>
+                                    <td class="text-center font-mono">\${data.totalExamDays} days</td>
+                                    <td class="text-right font-mono font-bold">₹\${data.seniorAmt.toLocaleString('en-IN')}</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-center">3</td>
+                                    <td>\${disp(data.officials.clerk)}</td>
+                                    <td>Clerk</td>
+                                    <td class="text-center font-mono">\${data.totalExamDays} days</td>
+                                    <td class="text-right font-mono font-bold">₹\${data.sumClerkAmt.toLocaleString('en-IN')}</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-center">4</td>
+                                    <td>\${disp(data.officials.peon)}</td>
+                                    <td>Peon</td>
+                                    <td class="text-center font-mono">\${data.totalExamDays} days</td>
+                                    <td class="text-right font-mono font-bold">₹\${data.sumPeonAmt.toLocaleString('en-IN')}</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-center">5</td>
+                                    <td>\${disp(data.officials.sweeper)}</td>
+                                    <td>Sweeper</td>
+                                    <td class="text-center font-mono">\${data.totalExamDays} days</td>
+                                    <td class="text-right font-mono font-bold">₹\${data.sumSweeperAmt.toLocaleString('en-IN')}</td>
+                                    <td></td>
+                                </tr>
+                                \${data.invigilatorRows.map(inv => \`
+                                    <tr>
+                                        <td class="text-center">\${inv.slNo}</td>
+                                        <td>\${inv.title ? inv.title + ' ' : ''}\${inv.name}</td>
+                                        <td>Invigilator</td>
+                                        <td class="text-center font-mono">\${inv.duties}</td>
+                                        <td class="text-right font-mono">₹\${inv.amount.toLocaleString('en-IN')}</td>
+                                        <td></td>
+                                    </tr>
+                                \`).join('')}
+                                <tr class="font-bold" style="background: #f7f7f7;">
+                                    <td colspan="4" class="text-center">TOTAL</td>
+                                    <td class="text-right font-mono">₹\${data.aquittanceTotal.toLocaleString('en-IN')}/-</td>
+                                    <td></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div class="mt-4 p-3 border border-black bg-gray-50 text-xs leading-relaxed text-justify">
+                            Paid an amount of <strong>Rs. \${data.aquittanceTotal.toLocaleString('en-IN')}/-</strong>
+                            (Rupees <em>\${data.aquittanceTotalWords}</em> only) towards the remuneration for attending duties of Calicut University
+                            <strong>\${data.examName} {SDE}</strong> conducted on \${data.dateRows.map(r => r.dateDisplay).join(', ')}.
+                        </div>
+                        <div class="sign-block" style="margin-top: 50px;">
+                            <div>( Office Seal )</div>
+                            <div class="text-center">
+                                <div>\${disp(data.officials.principal || data.officials.chiefSupdt)}</div>
+                                <div>Principal / Chief Superintendent</div>
+                            </div>
+                        </div>
+                    </div>
+                \`;
+            };
+
+            const renderAnnexureII = () => \`
+                <div style="padding-top: 30px;">
+                    <div class="header-main">
+                        <div class="font-bold text-lg">ANNEXURE II</div>
+                        <div class="font-bold text-xl mt-1 tracking-wide">RECEIPT</div>
+                    </div>
+                    <div class="mt-8 text-justify leading-relaxed text-base" style="text-indent: 40px;">
+                        Received from Finance Officer, Calicut University an amount of <strong>Rs. \${data.contingencyAmt.toLocaleString('en-IN')}/-</strong>
+                        (Rupees <em>\${data.contingencyWords}</em> only) being the contingent charges @ <strong>Rs. \${data.rates.contingencyPerSession.toFixed(2)}/-</strong>
+                        per candidates per session for the conduct of <strong>\${data.examName} {SDE}</strong>.
+                    </div>
+                    <div style="max-width: 450px; margin: 30px auto; border: 1px solid #000; padding: 12px; font-size: 11pt;">
+                        <div class="flex justify-between py-1">
+                            <span class="font-bold">Total No. of Candidates:</span>
+                            <span class="font-mono">\${data.totalCandidates}</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-t border-gray-300">
+                            <span class="font-bold">Total Exam Days / Sessions:</span>
+                            <span class="font-mono">\${data.totalExamDays}</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-t-2 border-black font-bold text-base">
+                            <span>Total Amount:</span>
+                            <span class="font-mono">Rs. \${data.contingencyAmt.toLocaleString('en-IN')}/-</span>
+                        </div>
+                    </div>
+                    <div class="text-sm italic font-bold text-center">
+                        (Rupees \${data.contingencyWords} only)
+                    </div>
+                    <div class="sign-block" style="margin-top: 80px;">
+                        <div>( Office Seal )</div>
+                        <div class="text-center">
+                            <div>\${disp(data.officials.principal || data.officials.chiefSupdt)}</div>
+                            <div>Principal / Chief Superintendent</div>
+                        </div>
+                    </div>
+                </div>
+            \`;
+
+            const renderAnnexureIV = () => \`
+                <div style="padding-top: 40px;">
+                    <div class="header-main">
+                        <div class="font-bold text-lg">ANNEXURE IV</div>
+                        <div class="font-bold text-xl mt-1 tracking-wide">DECLARATION</div>
+                    </div>
+                    <div class="mt-10 text-justify leading-relaxed text-base" style="text-indent: 40px;">
+                        This is to certify that, this institution is a centre of <strong>\${data.examName} Examination {SDE}</strong>
+                        conducted on <strong>\${data.dateRows.map(r => r.dateDisplay).join(', ')}</strong>, and the claims towards such examinations only is forwarded herewith.
+                    </div>
+                    <div class="sign-block" style="margin-top: 100px;">
+                        <div>( Office Seal )</div>
+                        <div class="text-center">
+                            <div>\${disp(data.officials.principal || data.officials.chiefSupdt)}</div>
+                            <div>PRINCIPAL / CHIEF SUPERINTENDENT</div>
+                        </div>
+                    </div>
+                </div>
+            \`;
+
+            const renderAmanuensis = () => \`
+                <div style="padding-top: 30px;">
+                    <div class="header-main">
+                        <div class="font-bold text-lg">ACQUITTANCE OF AMANUENSIS</div>
+                        <div class="font-bold text-base mt-1">\${data.examName} {SDE}</div>
+                        <div class="text-sm font-semibold uppercase">\${disp(data.officials.collegeName)} Centre</div>
+                    </div>
+                    <table class="sde-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 8%;">Sl.No</th>
+                                <th style="width: 25%;">Name of Candidate</th>
+                                <th style="width: 18%;">Register No.</th>
+                                <th style="width: 22%;">Name of Amanuensis</th>
+                                <th style="width: 9%;">Days</th>
+                                <th style="width: 9%;">Rate</th>
+                                <th style="width: 9%;">Total (Rs.)</th>
+                                <th style="width: 15%;">Signature</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            \${data.scribeRows.length > 0 ? data.scribeRows.map(sc => \`
+                                <tr>
+                                    <td class="text-center">\${sc.slNo}</td>
+                                    <td>\${sc.candidateName}</td>
+                                    <td class="text-center font-mono">\${sc.regNo}</td>
+                                    <td>\${sc.scribeName}</td>
+                                    <td class="text-center font-mono">1</td>
+                                    <td class="text-right font-mono">₹\${sc.rate}</td>
+                                    <td class="text-right font-mono font-bold">₹\${sc.rate}</td>
+                                    <td></td>
+                                </tr>
+                            \`).join('') : \`
+                                <tr>
+                                    <td colspan="8" class="text-center py-4 text-gray-500 italic">No candidates required Amanuensis/Scribe for this examination.</td>
+                                </tr>
+                            \`}
+                            <tr class="font-bold" style="background: #f7f7f7;">
+                                <td colspan="6" class="text-center">Total</td>
+                                <td class="text-right font-mono font-bold">₹\${data.amanuensisAmt.toLocaleString('en-IN')}</td>
+                                <td></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="sign-block" style="margin-top: 80px;">
+                        <div>( Office Seal )</div>
+                        <div class="text-center">
+                            <div>\${disp(data.officials.principal || data.officials.chiefSupdt)}</div>
+                            <div>Chief Superintendent / Principal</div>
+                        </div>
+                    </div>
+                </div>
+            \`;
+
+            if (tab === 'proforma') return renderProforma();
+            if (tab === 'aquittance') return renderAquittance();
+            if (tab === 'annexureII') return renderAnnexureII();
+            if (tab === 'annexureIV') return renderAnnexureIV();
+            if (tab === 'amanuensis') return renderAmanuensis();
+
+            return \`
+                \${renderProforma()}
+                <div class="page-break"></div>
+                \${renderAquittance()}
+                <div class="page-break"></div>
+                \${renderAnnexureII()}
+                <div class="page-break"></div>
+                \${renderAnnexureIV()}
+                <div class="page-break"></div>
+                \${renderAmanuensis()}
+            \`;
+        }
+
+        function printProformaCurrentTab() {
+            window.print();
+        }
+
+        function downloadProformaExcel() {
+            if (typeof XLSX === 'undefined') {
+                alert("SheetJS library is not available offline. Please open this file with an internet connection to export Excel, or use the Print button to save as PDF.");
+                return;
+            }
+
+            if (currentProformaMode === 'regular') {
+                if (!currentRegularData) return alert("No Regular data available to export.");
+                const wb = buildRegularWorkbook(currentRegularData);
+                if (wb) {
+                    const safe = (currentRegularData.period || 'Regular').replace(/[^a-zA-Z0-9_-]/g, '_');
+                    XLSX.writeFile(wb, \`Calicut_University_Proforma_Regular_\${safe}.xlsx\`);
+                }
+            } else {
+                if (!currentSdeData) return alert("No SDE data available to export.");
+                const wb = buildSdeWorkbook(currentSdeData);
+                if (wb) {
+                    const safe = (currentSdeData.examName || 'SDE').replace(/[^a-zA-Z0-9_-]/g, '_');
+                    XLSX.writeFile(wb, \`Calicut_University_Proforma_SDE_\${safe}.xlsx\`);
+                }
+            }
+        }
+
+        function buildRegularWorkbook(data) {
+            const wb = XLSX.utils.book_new();
+            const N = data.partARows.length;
+            const S = 10 + N;
+            const offName = (val) => (val && val.trim()) ? val.trim() : "";
+
+            const wsA_data = [
+                ["PROFORMA -1"],
+                ["Theory Examinations  - Remuneration  - Human Resources"],
+                [\`Statement  for the conduct of Calicut University Examinations held at \\n\${offName(data.officials.collegeName)}\\nFrom \${data.period}\`],
+                [],
+                ["Part - A"],
+                ["Sl.No", "Date", "No.of Candidates", "", "", "", "Invigilator", "", "Clerk", "", "Peon", "", "Sweeper", ""],
+                [],
+                ["", "", "FN", "AN", "Scribe", "Total", "No.", "Amount", "No.", "Amount", "No.", "Amount", "No.", "Amount"],
+                [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+            ];
+
+            data.partARows.forEach((r, idx) => {
+                const rNum = 10 + idx;
+                wsA_data.push([
+                    r.slNo,
+                    r.date,
+                    r.fn,
+                    r.an,
+                    r.scribe,
+                    { t: 'n', f: \`SUM(C\${rNum}:E\${rNum})\`, v: r.total },
+                    r.invigCount,
+                    { t: 'n', f: \`G\${rNum}*\${data.rates.invigilator}\`, v: r.invigAmt },
+                    r.clerkCount,
+                    r.clerkAmt,
+                    r.peonCount,
+                    r.peonAmt,
+                    r.sweeperCount,
+                    r.sweeperAmt
+                ]);
+            });
+
+            const sumRow = new Array(26).fill("");
+            sumRow[0] = "";
+            sumRow[1] = "Total";
+            sumRow[4] = { t: 'n', f: \`SUM(E10:E\${S - 1})\`, v: data.sumScribe };
+            sumRow[5] = { t: 'n', f: \`SUM(F10:F\${S - 1})\`, v: data.sumTotal };
+            sumRow[6] = { t: 'n', f: \`SUM(G10:G\${S - 1})\`, v: data.sumInvigCount };
+            sumRow[7] = { t: 'n', f: \`SUM(H10:H\${S - 1})\`, v: data.sumInvigAmt };
+            sumRow[9] = { t: 'n', f: \`SUM(J10:J\${S - 1})\`, v: data.sumClerkAmt };
+            sumRow[11] = { t: 'n', f: \`SUM(L10:L\${S - 1})\`, v: data.sumPeonAmt };
+            sumRow[13] = { t: 'n', f: \`SUM(N10:N\${S - 1})\`, v: data.sumSweeperAmt };
+            wsA_data.push(sumRow);
+
+            wsA_data.push([]);
+            const totAmtRow = new Array(14).fill("");
+            totAmtRow[1] = "Total Amount ( Column 8+10+12+14)       =";
+            totAmtRow[9] = { t: 'n', f: \`H\${S}+J\${S}+L\${S}+N\${S}\`, v: data.partATotalAmt };
+            totAmtRow[10] = "/-";
+            wsA_data.push(totAmtRow);
+
+            const wordsRow = new Array(14).fill("");
+            wordsRow[1] = \`(Rupees \${data.partATotalWords} only)\`;
+            wsA_data.push(wordsRow);
+
+            const wsA = XLSX.utils.aoa_to_sheet(wsA_data);
+            XLSX.utils.book_append_sheet(wb, wsA, "Part A");
+
+            const wsBC_data = [
+                [],
+                ["PART B"],
+                ["Total No. of Sessions:", "", "FN = ", data.sumFNSessions, "AN = ", data.sumANSessions, "Total = ", data.totalSessions],
+                [],
+                ["Sl.No.", "Designation", "Total Sessions", "Rate per Session", "Total (Rs.)"],
+                [1, "Chief Superintendent", data.totalSessions, data.rates.chiefSupdt, data.csAmt],
+                [2, "Senior Assistant Superintendent", data.totalSessions, data.rates.seniorSupdt, data.sasAmt],
+                [3, "Office Superintendent", data.totalSessions, data.rates.officeSupdt, data.osAmt],
+                ["Total", "", data.totalSessions, "", data.partBTotalAmt],
+                [\`(Rupees \${data.partBTotalWords} only)\`],
+                [],
+                ["PART C"],
+                ["Designation", "Name / Details", "Amount (Rs.)"],
+                ["Data Entry Operator", offName(data.officials.dataEntryOperator), data.partCAmt],
+                [\`(Rupees \${data.partCWords} only)\`]
+            ];
+            const wsBC = XLSX.utils.aoa_to_sheet(wsBC_data);
+            XLSX.utils.book_append_sheet(wb, wsBC, "Part B,C");
+
+            const wsDEF_data = [
+                [],
+                ["PART D"],
+                ["Designation", "Candidates Permitted", "Rate", "Duties Performed", "Total Amount"],
+                ["Amanuensis", data.uniqueScribesCount, data.scribeRate, data.scribeDuties, data.partDAmt],
+                [\`(Rupees \${data.partDWords} only)\`],
+                [],
+                ["PART E"],
+                ["Designation", "Name / Remarks", "Amount (Rs.)"],
+                ["Accountant", offName(data.officials.headAccountant), data.partEAmt],
+                [\`(Rupees \${data.partEWords} only)\`],
+                [],
+                ["PART - F : PROFORMA I - GRAND TOTAL"],
+                ["Part A (HR Daily Statement)", "=", data.partATotalAmt],
+                ["Part B (Supervisory Staff)", "=", data.partBTotalAmt],
+                ["Part C (Data Entry Operator)", "=", data.partCAmt],
+                ["Part D (Amanuensis / Scribes)", "=", data.partDAmt],
+                ["Part E (Accountant)", "=", data.partEAmt],
+                ["TOTAL PROFORMA - I", "=", data.grandTotalProformaI],
+                [\`(Rupees \${data.grandTotalProformaIWords} only)\`]
+            ];
+            const wsDEF = XLSX.utils.aoa_to_sheet(wsDEF_data);
+            XLSX.utils.book_append_sheet(wb, wsDEF, "Part D,E,F");
+
+            const wsII_data = [
+                ["PROFORMA - II"],
+                ["Theory Examinations - Contingent Charges"],
+                [\`From \${data.period} at \${offName(data.officials.collegeName)} Centre\`],
+                [],
+                ["Sl.No.", "Name of Examination", "Candidates Registered", "Rate", "Total Amount (Rs.)"]
+            ];
+            data.proformaIIRows.forEach(r => {
+                wsII_data.push([r.slNo, r.examName, r.count, \`@ ₹\${r.rate}/-\`, r.amount]);
+            });
+            wsII_data.push(["Total", "", data.totalContingencyCandidates, "", data.totalContingencyAmt]);
+            wsII_data.push([\`(Rupees \${data.totalContingencyWords} only)\`]);
+            const wsII = XLSX.utils.aoa_to_sheet(wsII_data);
+            XLSX.utils.book_append_sheet(wb, wsII, "Proforma II");
+
+            const wsCons_data = [
+                ["CONSOLIDATED STATEMENT"],
+                [\`For Calicut University Examinations From \${data.period}\`],
+                [\`Centre: \${offName(data.officials.collegeName)}\`],
+                [],
+                ["Sl.No", "Particulars", "Amount (Rs.)"],
+                [1, "Theory Examinations - Remuneration - Human Resources (Proforma I)", data.grandTotalProformaI],
+                [2, "Theory Examinations - Contingent Charges (Proforma II)", data.totalContingencyAmt],
+                ["Total Expenditure", "", data.consolidatedTotal],
+                [\`(Rupees \${data.consolidatedTotalWords} only)\`],
+                [],
+                ["Advance Received", "", data.advanceReceived],
+                ["Balance Amount Claimed", "", data.balanceClaim],
+                [\`(Rupees \${data.balanceClaimWords} only)\`]
+            ];
+            const wsCons = XLSX.utils.aoa_to_sheet(wsCons_data);
+            XLSX.utils.book_append_sheet(wb, wsCons, "Consolidated Statement");
+
+            return wb;
+        }
+
+        function buildSdeWorkbook(data) {
+            const wb = XLSX.utils.book_new();
+
+            const wsP_data = [
+                ["PROFORMA  I"],
+                [\`Consolidated statement of expenditure for the conduct of \${data.examName} {SDE}\`],
+                ["Date of Exam", "Sess", "No.of Candidates", "Invigilator Nos", "Invigilator Amt", "Invigilator Total", "Clerk Nos", "Clerk Amt", "Peon Nos", "Peon Amt", "Sweeper Nos", "Sweeper Amt"]
+            ];
+
+            data.dateRows.forEach(r => {
+                wsP_data.push([r.dateDisplay, "FN", r.fnCandidates > 0 ? r.fnCandidates : "-", r.fnInvigCount > 0 ? r.fnInvigCount : "-", r.fnInvigAmt > 0 ? r.fnInvigAmt : "-", r.invigTotalAmt, 1, r.clerkAmt, 1, r.peonAmt, 1, r.sweeperAmt]);
+                wsP_data.push(["", "AN", r.anCandidates > 0 ? r.anCandidates : "-", r.anInvigCount > 0 ? r.anInvigCount : "-", r.anInvigAmt > 0 ? r.anInvigAmt : "-", "", "", "", "", "", "", ""]);
+            });
+
+            wsP_data.push(["Total", "", data.totalCandidates, data.sumTotalInvigDuties, "", data.sumTotalInvigAmt, data.totalExamDays, data.sumClerkAmt, data.totalExamDays, data.sumPeonAmt, data.totalExamDays, data.sumSweeperAmt]);
+            wsP_data.push([]);
+            wsP_data.push(["1. Chief Superintendent", "", data.chiefAmt]);
+            wsP_data.push(["2. Senior Assistant Superintendent", "", data.seniorAmt]);
+            wsP_data.push(["3. Invigilators", "", data.sumTotalInvigAmt]);
+            wsP_data.push(["4. Clerks", "", data.sumClerkAmt]);
+            wsP_data.push(["5. Peon", "", data.sumPeonAmt]);
+            wsP_data.push(["6. Sweepers", "", data.sumSweeperAmt]);
+            wsP_data.push(["7. Amanuensis / Scribe", "", data.amanuensisAmt]);
+            wsP_data.push(["8. Contingent Charges", "", data.contingencyAmt]);
+            wsP_data.push(["TOTAL CLAIM", "", data.grandTotal]);
+            wsP_data.push([\`(Rupees \${data.grandTotalWords} only)\`]);
+
+            const wsP = XLSX.utils.aoa_to_sheet(wsP_data);
+            XLSX.utils.book_append_sheet(wb, wsP, "Proforma I");
+
+            if (data.hasInvigilationAttendance) {
+                const wsAq_data = [
+                    ["Annexure-I AQUITTANCE"],
+                    [\`Centre: \${data.officials.collegeName}\`],
+                    [\`Exam: \${data.examName} {SDE}\`],
+                    [],
+                    ["Sl.No", "Name & Designation", "Nature of Duty", "No. of Sessions", "Amount (Rs.)"]
+                ];
+                wsAq_data.push([1, data.officials.chiefSupdt || "Chief Supdt", "Chief Superintendent", \`\${data.totalExamDays} days\`, data.chiefAmt]);
+                wsAq_data.push([2, data.officials.seniorSupdt || "Senior Supdt", "Senior Assistant Supdt", \`\${data.totalExamDays} days\`, data.seniorAmt]);
+                wsAq_data.push([3, data.officials.clerk || "Clerk", "Clerk", \`\${data.totalExamDays} days\`, data.sumClerkAmt]);
+                wsAq_data.push([4, data.officials.peon || "Peon", "Peon", \`\${data.totalExamDays} days\`, data.sumPeonAmt]);
+                wsAq_data.push([5, data.officials.sweeper || "Sweeper", "Sweeper", \`\${data.totalExamDays} days\`, data.sumSweeperAmt]);
+                data.invigilatorRows.forEach(inv => {
+                    wsAq_data.push([inv.slNo, (inv.title ? inv.title + ' ' : '') + inv.name, "Invigilator", inv.duties, inv.amount]);
+                });
+                wsAq_data.push(["TOTAL", "", "", "", data.aquittanceTotal]);
+                const wsAq = XLSX.utils.aoa_to_sheet(wsAq_data);
+                XLSX.utils.book_append_sheet(wb, wsAq, "Annexure I");
+            }
+
+            return wb;
+        }
+
+        function showBillModal() {
+            const streamKeys = Object.keys(ARCHIVED_RATES);
+            
+            function numToWords(n) {
+                return numberToIndianWords(n);
+            }
+
+            let html = '<!DOCTYPE html><html><head><title>Remuneration Bill</title>'
+                     + '<style>'
+                     + 'body{background:#e5e7eb;font-family:sans-serif;margin:0;padding:20px;display:flex;flex-direction:column;align-items:center;}'
+                     + '.no-print{width:100%;max-width:850px;background:white;padding:16px;display:flex;justify-content:flex-end;gap:16px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;box-sizing:border-box;}'
+                     + '.bill-page{width:100%;max-width:850px;background:white;padding:40px;margin-bottom:24px;box-shadow:0 4px 6px rgba(0,0,0,0.1);box-sizing:border-box;min-height:297mm;}'
+                     + '@media print { body{padding:0;background:white;display:block;} .no-print{display:none!important;} .bill-page{box-shadow:none;margin:0;padding:0;page-break-after:always;} }'
+                     + '</style></head><body>';
+
+            html += '<div class="no-print">'
+                 + '<button onclick="window.print()" style="background:#1f2937;color:white;padding:10px 20px;border:none;border-radius:6px;font-weight:bold;cursor:pointer;font-size:14px;">📄 Print Bill</button>'
+                 + '<button onclick="window.close()" style="background:#dc2626;color:white;padding:10px 20px;border:none;border-radius:6px;font-weight:bold;cursor:pointer;font-size:14px;">❌ Close Tab</button>'
+                 + '</div>';
+            
+            streamKeys.forEach(function(stream) {
+                const rates = ARCHIVED_RATES[stream];
+                if (!rates) return;
+                
+                const streamSessions = SESSION_SUMMARY.filter(function(s) { 
+                    return (s.stream || "Regular") === stream; 
+                }).sort(function(a, b) {
+                    const d1 = a.date.split('.').reverse().join('');
+                    const d2 = b.date.split('.').reverse().join('');
+                    return d1.localeCompare(d2) || a.time.localeCompare(b.time);
                 });
 
-                Object.keys(sessionsByDate).sort().forEach(function(date) {
-                    const daily = sessionsByDate[date];
-                    const isDouble = daily.length > 1;
-                    
-                    daily.forEach(function(session) {
+                if (streamSessions.length === 0) return;
+
+                let invigilation = 0, clerical = 0, sweeping = 0, peon = 0, supervision = 0;
+                let chiefTotal = 0, seniorTotal = 0, officeTotal = 0;
+                let bodyRows = "";
+
+                if (rates.is_sde_mode) {
+                    const sessionsByDate = {};
+                    streamSessions.forEach(function(s) {
+                        if (!sessionsByDate[s.date]) sessionsByDate[s.date] = [];
+                        sessionsByDate[s.date].push(s);
+                    });
+
+                    Object.keys(sessionsByDate).sort().forEach(function(date) {
+                        const daily = sessionsByDate[date];
+                        const isDouble = daily.length > 1;
+                        
+                        daily.forEach(function(session) {
+                            const count = session.normalCount + session.scribeCount;
+                            
+                            const chiefRate = isDouble ? (rates.chief_supdt_double||0) : (rates.chief_supdt_single||0);
+                            const seniorRate = isDouble ? (rates.senior_supdt_double||0) : (rates.senior_supdt_single||0);
+                            const chiefCost = chiefRate / daily.length;
+                            const seniorCost = seniorRate / daily.length;
+                            
+                            chiefTotal += chiefCost;
+                            seniorTotal += seniorCost;
+                            const supTotal = chiefCost + seniorCost;
+
+                            let normalInvigs = 0;
+                            const invigRatio = rates.invigilator_ratio || 30;
+                            if (count > 0) {
+                                normalInvigs = Math.floor(count / invigRatio);
+                                if ((count % invigRatio) > (rates.invigilator_min_fraction||0)) normalInvigs++;
+                                if (normalInvigs === 0) normalInvigs = 1;
+                            }
+                            let scribeInvigs = session.scribeCount > 0 ? Math.ceil(session.scribeCount / (rates.scribe_invigilator_ratio || 1)) : 0;
+                            const invigCost = (normalInvigs + scribeInvigs) * (rates.invigilator || 0);
+
+                            const staffCount = Math.ceil(count / (rates.clerk_ratio || 500));
+                            const clerkCost = ((isDouble ? (rates.clerk_double||0) : (rates.clerk_single||0)) / daily.length) * staffCount;
+                            const peonCost = ((isDouble ? (rates.peon_double||0) : (rates.peon_single||0)) / daily.length) * staffCount;
+                            const sweeperCost = ((isDouble ? (rates.sweeper_double||0) : (rates.sweeper_single||0)) / daily.length) * staffCount;
+
+                            supervision += supTotal; invigilation += invigCost; clerical += clerkCost; peon += peonCost; sweeping += sweeperCost;
+
+                            const lineTotal = invigCost + clerkCost + peonCost + sweeperCost + supTotal;
+                            
+                            let studentDetail = count + (session.scribeCount > 0 ? ' <span style="font-size:10px;">(Incl '+session.scribeCount+' Scr)</span>' : '');
+                            let invigDetail = normalInvigs + (scribeInvigs > 0 ? ' + '+scribeInvigs : '');
+
+                            bodyRows += '<tr style="border-bottom:1px solid black;text-align:center;">'
+                                      + '<td style="padding:4px;border:1px solid black;text-align:left;">' + session.date + '<br><span style="font-size:10px;">' + session.time + '</span></td>'
+                                      + '<td style="padding:4px;border:1px solid black;font-weight:bold;">' + studentDetail + '</td>'
+                                      + '<td style="padding:4px;border:1px solid black;">' + invigDetail + '<br><span style="font-size:10px;">(₹' + invigCost + ')</span></td>'
+                                      + '<td style="padding:4px;border:1px solid black;">₹' + clerkCost + '</td>'
+                                      + '<td style="padding:4px;border:1px solid black;">₹' + peonCost + '</td>'
+                                      + '<td style="padding:4px;border:1px solid black;">₹' + sweeperCost + '</td>'
+                                      + '<td style="padding:4px;border:1px solid black;">₹' + chiefCost + '</td>'
+                                      + '<td style="padding:4px;border:1px solid black;">₹' + seniorCost + '</td>'
+                                      + '<td style="padding:4px;border:1px solid black;font-weight:bold;">₹' + lineTotal + '</td></tr>';
+                        });
+                    });
+
+                } else {
+                    streamSessions.forEach(function(session) {
                         const count = session.normalCount + session.scribeCount;
                         
-                        const chiefRate = isDouble ? (rates.chief_supdt_double||0) : (rates.chief_supdt_single||0);
-                        const seniorRate = isDouble ? (rates.senior_supdt_double||0) : (rates.senior_supdt_single||0);
-                        const chiefCost = chiefRate / daily.length;
-                        const seniorCost = seniorRate / daily.length;
-                        
-                        chiefTotal += chiefCost;
-                        seniorTotal += seniorCost;
-                        const supTotal = chiefCost + seniorCost;
-
                         let normalInvigs = 0;
                         const invigRatio = rates.invigilator_ratio || 30;
                         if (count > 0) {
@@ -21513,14 +23720,25 @@ window.generateBatchArchive = async function() {
                         let scribeInvigs = session.scribeCount > 0 ? Math.ceil(session.scribeCount / (rates.scribe_invigilator_ratio || 1)) : 0;
                         const invigCost = (normalInvigs + scribeInvigs) * (rates.invigilator || 0);
 
-                        const staffCount = Math.ceil(count / (rates.clerk_ratio || 500));
-                        const clerkCost = ((isDouble ? (rates.clerk_double||0) : (rates.clerk_single||0)) / daily.length) * staffCount;
-                        const peonCost = ((isDouble ? (rates.peon_double||0) : (rates.peon_single||0)) / daily.length) * staffCount;
-                        const sweeperCost = ((isDouble ? (rates.sweeper_double||0) : (rates.sweeper_single||0)) / daily.length) * staffCount;
+                        const clerkFullBatches = Math.floor(count / 100);
+                        const clerkRemainder = count % 100;
+                        let clerkCost = clerkFullBatches * (rates.clerk_full_slab||0);
+                        if (clerkRemainder > 0 && clerkRemainder <= 30) clerkCost += (rates.clerk_slab_1||0);
+                        else if (clerkRemainder > 30 && clerkRemainder <= 60) clerkCost += (rates.clerk_slab_2||0);
+                        else if (clerkRemainder > 60) clerkCost += (rates.clerk_full_slab||0);
 
-                        supervision += supTotal; invigilation += invigCost; clerical += clerkCost; peon += peonCost; sweeping += sweeperCost;
+                        let sweeperCost = Math.ceil(count / 100) * (rates.sweeper_rate||0);
+                        if (sweeperCost < (rates.sweeper_min||0)) sweeperCost = (rates.sweeper_min||0);
 
-                        const lineTotal = invigCost + clerkCost + peonCost + sweeperCost + supTotal;
+                        const chiefCost = rates.chief_supdt||0;
+                        const seniorCost = rates.senior_supdt||0;
+                        const officeCost = rates.office_supdt||0;
+                        const supTotal = chiefCost + seniorCost + officeCost;
+
+                        chiefTotal += chiefCost; seniorTotal += seniorCost; officeTotal += officeCost;
+                        supervision += supTotal; invigilation += invigCost; clerical += clerkCost; sweeping += sweeperCost;
+
+                        const lineTotal = invigCost + clerkCost + sweeperCost + supTotal;
                         
                         let studentDetail = count + (session.scribeCount > 0 ? ' <span style="font-size:10px;">(Incl '+session.scribeCount+' Scr)</span>' : '');
                         let invigDetail = normalInvigs + (scribeInvigs > 0 ? ' + '+scribeInvigs : '');
@@ -21528,179 +23746,112 @@ window.generateBatchArchive = async function() {
                         bodyRows += '<tr style="border-bottom:1px solid black;text-align:center;">'
                                   + '<td style="padding:4px;border:1px solid black;text-align:left;">' + session.date + '<br><span style="font-size:10px;">' + session.time + '</span></td>'
                                   + '<td style="padding:4px;border:1px solid black;font-weight:bold;">' + studentDetail + '</td>'
-                                  + '<td style="padding:4px;border:1px solid black;">' + invigDetail + '<br><span style="font-size:10px;">(\u20B9' + invigCost + ')</span></td>'
-                                  + '<td style="padding:4px;border:1px solid black;">\u20B9' + clerkCost + '</td>'
-                                  + '<td style="padding:4px;border:1px solid black;">\u20B9' + peonCost + '</td>'
-                                  + '<td style="padding:4px;border:1px solid black;">\u20B9' + sweeperCost + '</td>'
-                                  + '<td style="padding:4px;border:1px solid black;">\u20B9' + chiefCost + '</td>'
-                                  + '<td style="padding:4px;border:1px solid black;">\u20B9' + seniorCost + '</td>'
-                                  + '<td style="padding:4px;border:1px solid black;font-weight:bold;">\u20B9' + lineTotal + '</td></tr>';
+                                  + '<td style="padding:4px;border:1px solid black;">' + invigDetail + '<br><span style="font-size:10px;">(₹' + invigCost + ')</span></td>'
+                                  + '<td style="padding:4px;border:1px solid black;">₹' + clerkCost + '</td>'
+                                  + '<td style="padding:4px;border:1px solid black;">₹' + sweeperCost + '</td>'
+                                  + '<td style="padding:4px;border:1px solid black;">₹' + chiefCost + '</td>'
+                                  + '<td style="padding:4px;border:1px solid black;">₹' + seniorCost + '</td>'
+                                  + '<td style="padding:4px;border:1px solid black;">₹' + officeCost + '</td>'
+                                  + '<td style="padding:4px;border:1px solid black;font-weight:bold;">₹' + lineTotal + '</td></tr>';
                     });
-                });
+                }
+                const totalRegistered = streamSessions.reduce(function(sum, s) { return sum + s.normalCount + s.scribeCount; }, 0);
+                const contingency = totalRegistered * (rates.contingent_charge || 0);
+                const dataEntry = rates.data_entry_operator || 0;
+                const accountant = rates.accountant || 0;
+                
+                let grandTotal = supervision + invigilation + clerical + sweeping + peon + contingency + dataEntry;
+                if (isNaN(grandTotal)) grandTotal = 0;
 
+                const totalAmountStr = grandTotal.toFixed(2);
+                const parts = totalAmountStr.split('.');
+                let words = numToWords(Number(parts[0]));
+                if (Number(parts[1]) > 0) words += ' and ' + numToWords(Number(parts[1])) + ' Paise';
+
+                let supSummaryHTML = rates.is_sde_mode
+                    ? 'Chief Supdt: ₹'+chiefTotal+', Senior Supdt: ₹'+seniorTotal+', <strong>Total: ₹'+supervision+'</strong>'
+                    : 'CS: ₹'+chiefTotal+', SAS: ₹'+seniorTotal+', OS: ₹'+officeTotal+', <strong>Total: ₹'+supervision+'</strong>';
+
+                const peonHeader = rates.is_sde_mode ? '<th style="padding:4px;border:1px solid black;">Peon</th>' : '';
+                const osHeader = !rates.is_sde_mode ? '<th style="padding:4px;border:1px solid black;">OS</th>' : '';
+                const peonFooter = rates.is_sde_mode ? '<td style="padding:8px;border:1px solid black;">₹'+peon+'</td>' : '';
+                const osFooter = !rates.is_sde_mode ? '<td style="padding:8px;border:1px solid black;">₹'+officeTotal+'</td>' : '';
+                const colGroup = '<col style="width:16%;"><col style="width:12%;"><col style="width:10%;"><col style="width:8%;"><col style="width:8%;"><col style="width:8%;"><col style="width:10%;"><col style="width:10%;"><col style="width:12%;">';
+
+                html += '<div class="bill-page">'
+                     + '<div style="text-align:center;border-bottom:2px solid black;padding-bottom:16px;margin-bottom:16px;">'
+                     + '<h1 style="font-size:24px;font-weight:900;text-transform:uppercase;margin:0 0 8px 0;">' + ARCHIVED_COLLEGE + '</h1>'
+                     + '<h2 style="font-size:16px;font-weight:bold;margin:0 0 12px 0;">' + ARCHIVED_EXAM + '</h2>'
+                     + '<h2 style="font-size:20px;font-weight:bold;text-transform:uppercase;margin:0;">Exam Center Remuneration</h2>'
+                     + '<h3 style="font-size:18px;font-weight:600;margin:4px 0;">Archived Bill - ' + stream + ' Stream</h3>'
+                     + '</div>'
+                     + '<table style="width:100%;border-collapse:collapse;border:1px solid black;font-size:13px;margin-bottom:16px;table-layout:fixed;">'
+                     + '<colgroup>' + colGroup + '</colgroup>'
+                     + '<thead><tr style="background:white;color:black;">'
+                     + '<th style="padding:4px;border:1px solid black;text-align:left;">Session</th>'
+                     + '<th style="padding:4px;border:1px solid black;">Candidates</th>'
+                     + '<th style="padding:4px;border:1px solid black;">Invig</th>'
+                     + '<th style="padding:4px;border:1px solid black;">Clerk</th>'
+                     + peonHeader
+                     + '<th style="padding:4px;border:1px solid black;">Swpr</th>'
+                     + '<th style="padding:4px;border:1px solid black;">CS</th>'
+                     + '<th style="padding:4px;border:1px solid black;">SAS</th>'
+                     + osHeader
+                     + '<th style="padding:4px;border:1px solid black;">Total</th>'
+                     + '</tr></thead>'
+                     + '<tbody>' + bodyRows + '</tbody>'
+                     + '<tfoot><tr style="font-weight:bold;font-size:12px;text-align:center;background:white;">'
+                     + '<td colspan="2" style="padding:8px;border:1px solid black;text-align:right;">Subtotals:</td>'
+                     + '<td style="padding:8px;border:1px solid black;">₹' + invigilation + '</td>'
+                     + '<td style="padding:8px;border:1px solid black;">₹' + clerical + '</td>'
+                     + peonFooter
+                     + '<td style="padding:8px;border:1px solid black;">₹' + sweeping + '</td>'
+                     + '<td style="padding:8px;border:1px solid black;">₹' + chiefTotal + '</td>'
+                     + '<td style="padding:8px;border:1px solid black;">₹' + seniorTotal + '</td>'
+                     + osFooter
+                     + '<td style="padding:8px;border:1px solid black;font-size:14px;">₹' + (invigilation+clerical+sweeping+peon+supervision) + '</td>'
+                     + '</tr></tfoot>'
+                     + '</table>'
+                     + '<div style="display:flex;gap:32px;font-size:13px;border-top:2px solid black;padding-top:16px;margin-bottom:24px;">'
+                     + '<div style="flex:1;border:1px solid black;padding:12px;">'
+                     + '<div style="font-weight:bold;border-bottom:1px solid black;margin-bottom:8px;padding-bottom:4px;">1. Supervision Breakdown</div>'
+                     + '<div>' + supSummaryHTML + '</div>'
+                     + '</div>'
+                     + '<div style="flex:1;">'
+                     + '<div style="font-weight:bold;border-bottom:1px dotted black;margin-bottom:8px;padding-bottom:4px;display:flex;justify-content:space-between;"><span>2. Other Allowances</span></div>'
+                     + '<div style="display:flex;justify-content:space-between;border-bottom:1px dotted black;padding-bottom:4px;margin-bottom:4px;"><span>Contingency:</span> <strong>₹' + contingency.toFixed(2) + '</strong></div>'
+                     + '<div style="display:flex;justify-content:space-between;border-bottom:1px dotted black;padding-bottom:4px;margin-bottom:4px;"><span>Data Entry Operator:</span> <strong>₹' + dataEntry + '</strong></div>'
+                     + '<div style="display:flex;justify-content:space-between;border-bottom:1px dotted black;padding-bottom:4px;margin-bottom:4px;"><span>Accountant:</span> <strong>₹' + accountant + '</strong></div>'
+                     + '</div>'
+                     + '</div>'
+                     + '<div style="border:1px solid black;padding:12px;display:flex;flex-direction:column;align-items:flex-end;">'
+                     + '<div style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+                     + '<span style="font-size:18px;font-weight:bold;text-transform:uppercase;">Grand Total Claim</span>'
+                     + '<span style="font-size:24px;font-weight:bold;font-family:monospace;">₹' + grandTotal.toFixed(2) + '</span>'
+                     + '</div>'
+                     + '<div style="width:100%;text-align:right;border-top:1px solid black;padding-top:4px;">'
+                     + '<span style="font-size:13px;font-weight:bold;font-style:italic;">(Rupees ' + words + ' Only)</span>'
+                     + '</div>'
+                     + '</div>'
+                     + '<div style="margin-top:64px;display:flex;justify-content:flex-end;font-size:13px;font-weight:bold;">'
+                     + '<div style="border-top:1px solid black;width:33%;text-align:center;padding-top:8px;">Chief Superintendent</div>'
+                     + '</div>'
+                     + '</div>';
+            });
+            
+            html += '</body></html>';
+            
+            const newWin = window.open('', '_blank');
+            if (newWin) {
+                newWin.document.write(html);
+                newWin.document.close();
+                newWin.focus();
             } else {
-                streamSessions.forEach(function(session) {
-                    const count = session.normalCount + session.scribeCount;
-                    
-                    let normalInvigs = 0;
-                    const invigRatio = rates.invigilator_ratio || 30;
-                    if (count > 0) {
-                        normalInvigs = Math.floor(count / invigRatio);
-                        if ((count % invigRatio) > (rates.invigilator_min_fraction||0)) normalInvigs++;
-                        if (normalInvigs === 0) normalInvigs = 1;
-                    }
-                    let scribeInvigs = session.scribeCount > 0 ? Math.ceil(session.scribeCount / (rates.scribe_invigilator_ratio || 1)) : 0;
-                    const invigCost = (normalInvigs + scribeInvigs) * (rates.invigilator || 0);
-
-                    const clerkFullBatches = Math.floor(count / 100);
-                    const clerkRemainder = count % 100;
-                    let clerkCost = clerkFullBatches * (rates.clerk_full_slab||0);
-                    if (clerkRemainder > 0 && clerkRemainder <= 30) clerkCost += (rates.clerk_slab_1||0);
-                    else if (clerkRemainder > 30 && clerkRemainder <= 60) clerkCost += (rates.clerk_slab_2||0);
-                    else if (clerkRemainder > 60) clerkCost += (rates.clerk_full_slab||0);
-
-                    let sweeperCost = Math.ceil(count / 100) * (rates.sweeper_rate||0);
-                    if (sweeperCost < (rates.sweeper_min||0)) sweeperCost = (rates.sweeper_min||0);
-
-                    const chiefCost = rates.chief_supdt||0;
-                    const seniorCost = rates.senior_supdt||0;
-                    const officeCost = rates.office_supdt||0;
-                    const supTotal = chiefCost + seniorCost + officeCost;
-
-                    chiefTotal += chiefCost; seniorTotal += seniorCost; officeTotal += officeCost;
-                    supervision += supTotal; invigilation += invigCost; clerical += clerkCost; sweeping += sweeperCost;
-
-                    const lineTotal = invigCost + clerkCost + sweeperCost + supTotal;
-                    
-                    let studentDetail = count + (session.scribeCount > 0 ? ' <span style="font-size:10px;">(Incl '+session.scribeCount+' Scr)</span>' : '');
-                    let invigDetail = normalInvigs + (scribeInvigs > 0 ? ' + '+scribeInvigs : '');
-
-                    bodyRows += '<tr style="border-bottom:1px solid black;text-align:center;">'
-                              + '<td style="padding:4px;border:1px solid black;text-align:left;">' + session.date + '<br><span style="font-size:10px;">' + session.time + '</span></td>'
-                              + '<td style="padding:4px;border:1px solid black;font-weight:bold;">' + studentDetail + '</td>'
-                              + '<td style="padding:4px;border:1px solid black;">' + invigDetail + '<br><span style="font-size:10px;">(\u20B9' + invigCost + ')</span></td>'
-                              + '<td style="padding:4px;border:1px solid black;">\u20B9' + clerkCost + '</td>'
-                              + '<td style="padding:4px;border:1px solid black;">\u20B9' + sweeperCost + '</td>'
-                              + '<td style="padding:4px;border:1px solid black;">\u20B9' + chiefCost + '</td>'
-                              + '<td style="padding:4px;border:1px solid black;">\u20B9' + seniorCost + '</td>'
-                              + '<td style="padding:4px;border:1px solid black;">\u20B9' + officeCost + '</td>'
-                              + '<td style="padding:4px;border:1px solid black;font-weight:bold;">\u20B9' + lineTotal + '</td></tr>';
-                });
+                if (typeof UiModal !== 'undefined') UiModal.alert('Please allow popups to view the Bill.');
+                else window.alert('Please allow popups to view the Bill.');
             }
-            const totalRegistered = streamSessions.reduce(function(sum, s) { return sum + s.normalCount + s.scribeCount; }, 0);
-            const contingency = totalRegistered * (rates.contingent_charge || 0);
-            const dataEntry = rates.data_entry_operator || 0;
-            const accountant = rates.accountant || 0; // Fixed: Restored this line so it can be displayed later!
-            
-            let grandTotal = supervision + invigilation + clerical + sweeping + peon + contingency + dataEntry;
-            if (isNaN(grandTotal)) grandTotal = 0;
-
-            
-            const totalAmountStr = grandTotal.toFixed(2);
-            const parts = totalAmountStr.split('.');
-            let words = numToWords(Number(parts[0]));
-            if (Number(parts[1]) > 0) words += ' and ' + numToWords(Number(parts[1])) + ' Paise';
-
-
-
-            let supSummaryHTML = rates.is_sde_mode
-                ? 'Chief Supdt: \u20B9'+chiefTotal+', Senior Supdt: \u20B9'+seniorTotal+', <strong>Total: \u20B9'+supervision+'</strong>'
-                : 'CS: \u20B9'+chiefTotal+', SAS: \u20B9'+seniorTotal+', OS: \u20B9'+officeTotal+', <strong>Total: \u20B9'+supervision+'</strong>';
-
-            const peonHeader = rates.is_sde_mode ? '<th style="padding:4px;border:1px solid black;">Peon</th>' : '';
-            const osHeader = !rates.is_sde_mode ? '<th style="padding:4px;border:1px solid black;">OS</th>' : '';
-            const peonFooter = rates.is_sde_mode ? '<td style="padding:8px;border:1px solid black;">\u20B9'+peon+'</td>' : '';
-            const osFooter = !rates.is_sde_mode ? '<td style="padding:8px;border:1px solid black;">\u20B9'+officeTotal+'</td>' : '';
-            const colGroup = rates.is_sde_mode 
-                ? '<col style="width:16%;"><col style="width:12%;"><col style="width:10%;"><col style="width:8%;"><col style="width:8%;"><col style="width:8%;"><col style="width:10%;"><col style="width:10%;"><col style="width:12%;">'
-                : '<col style="width:16%;"><col style="width:12%;"><col style="width:10%;"><col style="width:8%;"><col style="width:8%;"><col style="width:10%;"><col style="width:10%;"><col style="width:10%;"><col style="width:12%;">';
-
-            html += '<div class="bill-page">'
-                 + '<div style="text-align:center;border-bottom:2px solid black;padding-bottom:16px;margin-bottom:16px;">'
-                 + '<h1 style="font-size:24px;font-weight:900;text-transform:uppercase;margin:0 0 8px 0;">' + ARCHIVED_COLLEGE + '</h1>'
-                 + '<h2 style="font-size:16px;font-weight:bold;margin:0 0 12px 0;">' + ARCHIVED_EXAM + '</h2>'
-                 + '<h2 style="font-size:20px;font-weight:bold;text-transform:uppercase;margin:0;">Exam Center Remuneration</h2>'
-                 + '<h3 style="font-size:18px;font-weight:600;margin:4px 0;">Archived Bill - ' + stream + ' Stream</h3>'
-                 + '</div>'
-                 
-                 + '<table style="width:100%;border-collapse:collapse;border:1px solid black;font-size:13px;margin-bottom:16px;table-layout:fixed;">'
-                 + '<colgroup>' + colGroup + '</colgroup>'
-                 + '<thead><tr style="background:white;color:black;">'
-                 + '<th style="padding:4px;border:1px solid black;text-align:left;">Session</th>'
-                 + '<th style="padding:4px;border:1px solid black;">Candidates</th>'
-                 + '<th style="padding:4px;border:1px solid black;">Invig</th>'
-                 + '<th style="padding:4px;border:1px solid black;">Clerk</th>'
-                 + peonHeader
-                 + '<th style="padding:4px;border:1px solid black;">Swpr</th>'
-                 + '<th style="padding:4px;border:1px solid black;">CS</th>'
-                 + '<th style="padding:4px;border:1px solid black;">SAS</th>'
-                 + osHeader
-                 + '<th style="padding:4px;border:1px solid black;">Total</th>'
-                 + '</tr></thead>'
-                 + '<tbody>' + bodyRows + '</tbody>'
-                 + '<tfoot><tr style="font-weight:bold;font-size:12px;text-align:center;background:white;">'
-                 + '<td colspan="2" style="padding:8px;border:1px solid black;text-align:right;">Subtotals:</td>'
-                 + '<td style="padding:8px;border:1px solid black;">\u20B9' + invigilation + '</td>'
-                 + '<td style="padding:8px;border:1px solid black;">\u20B9' + clerical + '</td>'
-                 + peonFooter
-                 + '<td style="padding:8px;border:1px solid black;">\u20B9' + sweeping + '</td>'
-                 + '<td style="padding:8px;border:1px solid black;">\u20B9' + chiefTotal + '</td>'
-                 + '<td style="padding:8px;border:1px solid black;">\u20B9' + seniorTotal + '</td>'
-                 + osFooter
-                 + '<td style="padding:8px;border:1px solid black;font-size:14px;">\u20B9' + (invigilation+clerical+sweeping+peon+supervision) + '</td>'
-                 + '</tr></tfoot>'
-                 + '</table>'
-                 
-                 + '<div style="display:flex;gap:32px;font-size:13px;border-top:2px solid black;padding-top:16px;margin-bottom:24px;">'
-                 + '<div style="flex:1;border:1px solid black;padding:12px;">'
-                 + '<div style="font-weight:bold;border-bottom:1px solid black;margin-bottom:8px;padding-bottom:4px;">1. Supervision Breakdown</div>'
-                 + '<div>' + supSummaryHTML + '</div>'
-                 + '</div>'
-                 + '<div style="flex:1;">'
-                 + '<div style="font-weight:bold;border-bottom:1px dotted black;margin-bottom:8px;padding-bottom:4px;display:flex;justify-content:space-between;"><span>2. Other Allowances</span></div>'
-                 + '<div style="display:flex;justify-content:space-between;border-bottom:1px dotted black;padding-bottom:4px;margin-bottom:4px;"><span>Contingency:</span> <strong>\u20B9' + contingency.toFixed(2) + '</strong></div>'
-                 + '<div style="display:flex;justify-content:space-between;border-bottom:1px dotted black;padding-bottom:4px;margin-bottom:4px;"><span>Data Entry Operator:</span> <strong>\u20B9' + dataEntry + '</strong></div>'
-                 + '<div style="display:flex;justify-content:space-between;border-bottom:1px dotted black;padding-bottom:4px;"><span>Accountant:</span> <strong>\u20B9' + accountant + '</strong></div>'
-                 + '</div>'
-                 + '</div>'
-
-                 + '<div style="border:1px solid black;padding:12px;display:flex;flex-direction:column;align-items:flex-end;">'
-                 + '<div style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
-                 + '<span style="font-size:18px;font-weight:bold;text-transform:uppercase;">Grand Total Claim</span>'
-                 + '<span style="font-size:24px;font-weight:bold;font-family:monospace;">\u20B9' + grandTotal.toFixed(2) + '</span>'
-                 + '</div>'
-                 + '<div style="width:100%;text-align:right;border-top:1px solid black;padding-top:4px;">'
-                 + '<span style="font-size:13px;font-weight:bold;font-style:italic;">(Rupees ' + words + ' Only)</span>'
-                 + '</div>'
-                 + '</div>'
-                 
-                 + '<div style="margin-top:64px;display:flex;justify-content:flex-end;font-size:13px;font-weight:bold;">'
-                 + '<div style="border-top:1px solid black;width:33%;text-align:center;padding-top:8px;">Chief Superintendent</div>'
-                 + '</div>'
-                 
-                 + '</div>';
-        });
-        
-        html += '</body></html>';
-        
-        const newWin = window.open('', '_blank');
-        if (newWin) {
-            newWin.document.write(html);
-            newWin.document.close();
-            newWin.focus();
-        } else {
-            if (typeof UiModal !== 'undefined') UiModal.alert('Please allow popups to view the Bill.');
-            else window.alert('Please allow popups to view the Bill.');
         }
-    }
-
-
-
-    
-<\/script>
-
-
-
+    </script>
 </body>
 </html>`;
 
@@ -21715,8 +23866,10 @@ window.generateBatchArchive = async function() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    btn.innerHTML = origText;
-    btn.disabled = false;
+    if (btn) {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+    }
     closeBatchArchiveModal();
 };
 
