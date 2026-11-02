@@ -10535,25 +10535,22 @@ async function syncToPrintManager() {
         // 4. Clean up previous reports
         if (typeof clearReport === 'function') clearReport();
 
-        // 4b. Update warning banners when entering Room Allotment or Reports
-        if (typeof window.updateAllotmentWarningBanners === 'function') {
-            if (viewToShow === viewRoomAllotment || viewToShow === viewReports) {
-                setTimeout(() => window.updateAllotmentWarningBanners(), 50);
+        // 4b. Update warning banners strictly for the tab being shown
+        if (viewToShow === viewRoomAllotment) {
+            if (typeof window.updateRoomAllotmentBanner === 'function') {
+                setTimeout(() => window.updateRoomAllotmentBanner(), 50);
             }
-        }
-
-        // 4c. Sync active session to Reports dropdown when opening Reports tab
-        if (viewToShow === viewReports) {
-            const activeSession = (typeof window !== 'undefined' && window.currentSessionKey) 
-                ? window.currentSessionKey 
-                : ((typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect) ? allotmentSessionSelect.value : null);
-            if (activeSession && typeof reportsSessionSelect !== 'undefined' && reportsSessionSelect) {
-                if ([...reportsSessionSelect.options].some(o => o.value === activeSession)) {
-                    reportsSessionSelect.value = activeSession;
-                    if (typeof window.ensureSessionInLocalStorage === 'function') {
-                        window.ensureSessionInLocalStorage(activeSession);
-                    }
+        } else if (viewToShow === viewReports) {
+            const rKey = (typeof reportsSessionSelect !== 'undefined' && reportsSessionSelect) ? reportsSessionSelect.value : '';
+            if (rKey && rKey !== 'all') {
+                if (typeof window.fetchHeavyDataOnDemand === 'function') {
+                    window.fetchHeavyDataOnDemand(rKey).then(() => {
+                        if (typeof window.updateReportsBanner === 'function') window.updateReportsBanner();
+                    });
                 }
+            }
+            if (typeof window.updateReportsBanner === 'function') {
+                setTimeout(() => window.updateReportsBanner(), 50);
             }
         }
 
@@ -11969,6 +11966,9 @@ window.real_populate_qp_code_session_dropdown = function () {
                     await window.ensureSessionInLocalStorage(reportsSessionSelect.value);
                 }
             }
+            if (typeof window.updateReportsBanner === 'function') {
+                window.updateReportsBanner();
+            }
         }
     });
 
@@ -11977,6 +11977,9 @@ window.real_populate_qp_code_session_dropdown = function () {
             reportsSessionDropdownContainer.classList.add('hidden');
             if (reportsSessionSelect) {
                 reportsSessionSelect.value = reportsSessionSelect.options[0]?.value || "all"; // Reset to All
+            }
+            if (typeof window.updateReportsBanner === 'function') {
+                window.updateReportsBanner();
             }
         }
     });
@@ -11992,8 +11995,8 @@ window.real_populate_qp_code_session_dropdown = function () {
                     await window.ensureSessionInLocalStorage(sk);
                 }
             }
-            if (typeof window.updateAllotmentWarningBanners === 'function') {
-                window.updateAllotmentWarningBanners();
+            if (typeof window.updateReportsBanner === 'function') {
+                window.updateReportsBanner();
             }
         });
     }
@@ -13274,8 +13277,8 @@ window.real_populate_qp_code_session_dropdown = function () {
             saveSection.classList.add('hidden');
         }
 
-        if (typeof window.updateAllotmentWarningBanners === 'function') {
-            window.updateAllotmentWarningBanners();
+        if (typeof window.updateRoomAllotmentBanner === 'function') {
+            window.updateRoomAllotmentBanner();
         }
     }
 
@@ -13485,28 +13488,38 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
     }
 
-    window.updateAllotmentWarningBanners = function() {
-        // 1. Room Allotment Tab (Selected Session)
+    window.updateRoomAllotmentBanner = function() {
         const allotmentBanner = document.getElementById('allotment-warning-banner');
-        if (allotmentBanner) {
-            const activeAllotSession = (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect && allotmentSessionSelect.value)
-                ? allotmentSessionSelect.value
-                : (typeof window.currentSessionKey !== 'undefined' ? window.currentSessionKey : '');
-            renderSingleSessionBanner(allotmentBanner, activeAllotSession, 'allotment');
+        if (!allotmentBanner) return;
+        const activeAllotSession = (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect && allotmentSessionSelect.value)
+            ? allotmentSessionSelect.value
+            : '';
+        if (!activeAllotSession) {
+            allotmentBanner.innerHTML = '';
+            allotmentBanner.classList.add('hidden');
+            return;
         }
+        renderSingleSessionBanner(allotmentBanner, activeAllotSession, 'allotment');
+    };
 
-        // 2. Reports Center Tab (Selected Session)
+    window.updateReportsBanner = function() {
         const reportsBanner = document.getElementById('reports-warning-banner');
-        if (reportsBanner) {
-            let activeReportSession = (typeof reportsSessionSelect !== 'undefined' && reportsSessionSelect && reportsSessionSelect.value)
-                ? reportsSessionSelect.value
-                : '';
-            // If empty, fallback to active session
-            if (!activeReportSession && typeof window.currentSessionKey !== 'undefined') {
-                activeReportSession = window.currentSessionKey;
-            }
-            renderSingleSessionBanner(reportsBanner, activeReportSession, 'reports');
+        if (!reportsBanner) return;
+        const isFilterAll = (typeof filterAllRadio !== 'undefined' && filterAllRadio && filterAllRadio.checked);
+        const activeReportSession = (typeof reportsSessionSelect !== 'undefined' && reportsSessionSelect && reportsSessionSelect.value)
+            ? reportsSessionSelect.value
+            : '';
+        if (isFilterAll || !activeReportSession || activeReportSession === 'all') {
+            reportsBanner.innerHTML = '';
+            reportsBanner.classList.add('hidden');
+            return;
         }
+        renderSingleSessionBanner(reportsBanner, activeReportSession, 'reports');
+    };
+
+    window.updateAllotmentWarningBanners = function() {
+        if (typeof window.updateRoomAllotmentBanner === 'function') window.updateRoomAllotmentBanner();
+        if (typeof window.updateReportsBanner === 'function') window.updateReportsBanner();
     };
 
     window.scrollToScribesInAllotment = function() {
@@ -14834,11 +14847,6 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         allotmentSessionSelect.value = savedSession;
         window.currentSessionKey = savedSession;
-        if (typeof reportsSessionSelect !== 'undefined' && reportsSessionSelect && savedSession) {
-            if ([...reportsSessionSelect.options].some(o => o.value === savedSession)) {
-                reportsSessionSelect.value = savedSession;
-            }
-        }
 
             const sessionKey = allotmentSessionSelect.value;
 
@@ -14858,8 +14866,8 @@ window.real_populate_qp_code_session_dropdown = function () {
                     console.error("loadScribeAllotment error:", e);
                 }).finally(() => {
                     renderInvigilationPanel();
-                    if (typeof window.updateAllotmentWarningBanners === 'function') {
-                        window.updateAllotmentWarningBanners();
+                    if (typeof window.updateRoomAllotmentBanner === 'function') {
+                        window.updateRoomAllotmentBanner();
                     }
                 });
             } else {
@@ -15525,8 +15533,8 @@ function renderScribeAllotmentList(sessionKey) {
     }
     // -------------------------------------------------------------------------------
 
-    if (typeof window.updateAllotmentWarningBanners === 'function') {
-        window.updateAllotmentWarningBanners();
+    if (typeof window.updateRoomAllotmentBanner === 'function') {
+        window.updateRoomAllotmentBanner();
     }
 
     const scribeAllotmentList = document.getElementById('scribe-allotment-list');
