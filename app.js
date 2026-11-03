@@ -14167,6 +14167,74 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
         }
         
+        // ⚡ GRACE CONSOLIDATION: Absorb final stray rooms (<= 3 students) into preceding room within grace (+3)
+        if (currentSessionAllotment.length >= 2) {
+            const streams = [...new Set(currentSessionAllotment.map(r => (r.stream || "Regular").toLowerCase()))];
+            
+            streams.forEach(stream => {
+                const streamRooms = currentSessionAllotment.filter(r => (r.stream || "Regular").toLowerCase() === stream);
+                if (streamRooms.length >= 2) {
+                    const lastRoom = streamRooms[streamRooms.length - 1];
+                    const prevRoom = streamRooms[streamRooms.length - 2];
+                    
+                    const strayCount = lastRoom.students.length;
+                    const prevCount = prevRoom.students.length;
+                    const prevCap = parseInt(prevRoom.capacity) || 30;
+                    const maxGraceCap = prevCap + 3; // Max nominal + 3 grace
+                    
+                    if (strayCount > 0 && strayCount <= 3 && (prevCount + strayCount) <= maxGraceCap) {
+                        console.log(`⚡ Grace Consolidation [${stream}]: Merging ${strayCount} students from ${lastRoom.roomName} into ${prevRoom.roomName} (${prevCount} -> ${prevCount + strayCount})`);
+                        
+                        const startSeat = prevRoom.students.length;
+                        lastRoom.students.forEach((s, idx) => {
+                            if (typeof s === 'object') {
+                                s.seat = startSeat + idx + 1;
+                            }
+                            prevRoom.students.push(s);
+                        });
+                        
+                        // Clean up any invigilator assignment for the absorbed room
+                        try {
+                            const allInvig = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
+                            if (allInvig[currentSessionKey] && allInvig[currentSessionKey][lastRoom.roomName]) {
+                                delete allInvig[currentSessionKey][lastRoom.roomName];
+                                localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allInvig));
+                            }
+                            if (window.currentInvigMapping && window.currentInvigMapping[lastRoom.roomName]) {
+                                delete window.currentInvigMapping[lastRoom.roomName];
+                            }
+                        } catch(e) {}
+                        
+                        // Clean up any scribe mapping for the absorbed room
+                        try {
+                            const allScribes = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+                            if (allScribes[currentSessionKey]) {
+                                for (const [reg, rm] of Object.entries(allScribes[currentSessionKey])) {
+                                    if (rm === lastRoom.roomName) {
+                                        delete allScribes[currentSessionKey][reg];
+                                    }
+                                }
+                                localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribes));
+                            }
+                            if (window.currentScribeAllotment) {
+                                for (const [reg, rm] of Object.entries(window.currentScribeAllotment)) {
+                                    if (rm === lastRoom.roomName) {
+                                        delete window.currentScribeAllotment[reg];
+                                    }
+                                }
+                            }
+                        } catch(e) {}
+
+                        // Remove the redundant stray room
+                        const removeIdx = currentSessionAllotment.indexOf(lastRoom);
+                        if (removeIdx !== -1) {
+                            currentSessionAllotment.splice(removeIdx, 1);
+                        }
+                    }
+                }
+            });
+        }
+
         hasUnsavedAllotment = true;
         saveRoomAllotment();
         updateAllotmentDisplay();
