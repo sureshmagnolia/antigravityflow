@@ -3841,9 +3841,34 @@ function generateRoomWisePDF() {
         const footer = page.querySelector('.invigilator-footer');
         if (footer) {
             // Check for space
-            if (currentY + 65 > pageHeight) {
+            if (currentY + 72 > pageHeight) {
                 doc.addPage();
                 currentY = 15;
+            }
+
+            // Attendance Summary (before Course Summary)
+            const attDiv = footer.querySelector('.attendance-summary');
+            if (attDiv) {
+                const assignedVal = attDiv.getAttribute('data-assigned') || '';
+                const boxHeightAtt = 7;
+                doc.setDrawColor(0);
+                doc.setLineWidth(0.2);
+                doc.rect(14, currentY, pageWidth - 28, boxHeightAtt);
+
+                doc.setFontSize(8.5);
+                doc.setFont("helvetica", "bold");
+                doc.text("Attendance Summary:", 16, currentY + 4.8);
+                
+                doc.setFont("helvetica", "normal");
+                doc.text("Students Assigned: ", 54, currentY + 4.8);
+                doc.setFont("helvetica", "bold");
+                doc.text(String(assignedVal), 78, currentY + 4.8);
+
+                doc.setFont("helvetica", "normal");
+                doc.text("Total Number of Students Present: ________", 90, currentY + 4.8);
+                doc.text("Total Number of Students Absent: ________", 146, currentY + 4.8);
+
+                currentY += boxHeightAtt + 3;
             }
 
             // A. Course Summary
@@ -7647,7 +7672,13 @@ let html = "";
                 const scribeFootnote = hasScribe ? '<div class="scribe-footnote" style="margin-top:5px;">* = Scribe Assistance</div>' : '';
 
                 const invigilatorFooterHtml = `
-                <div class="invigilator-footer" style="margin-top: 1rem; padding-top: 0; page-break-inside: avoid; font-size: 9pt;">
+                <div class="invigilator-footer" style="margin-top: 0.75rem; padding-top: 0; page-break-inside: avoid; font-size: 9pt;">
+                    <div class="attendance-summary" data-assigned="${sessionAdjustedTotal}" style="display: flex; justify-content: space-between; align-items: center; border: 1px solid #000; padding: 3px 8px; margin-bottom: 6px; font-size: 8.5pt; background: #fafafa;">
+                        <span style="font-weight: bold;">Attendance Summary:</span>
+                        <span>Students Assigned: <strong style="font-size: 9pt;">${sessionAdjustedTotal}</strong></span>
+                        <span>Total Number of Students Present: <span style="border-bottom: 1px solid #000; display: inline-block; width: 45px; vertical-align: bottom;"></span></span>
+                        <span>Total Number of Students Absent: <span style="border-bottom: 1px solid #000; display: inline-block; width: 45px; vertical-align: bottom;"></span></span>
+                    </div>
                     <div style="margin-bottom: 8px;">
                         <div style="font-weight: bold; margin-bottom: 2px;">Course Summary:</div>
                         <table style="width: 100%; border-collapse: collapse;">
