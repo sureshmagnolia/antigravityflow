@@ -249,6 +249,9 @@
       activeIntervals.forEach(clearInterval);
       activeIntervals = [];
 
+      const gateCfg = getGateConfig();
+      updateGateBadgeDisplay();
+
             const regInput = document.getElementById('reg-input');
             const regNo = regInput.value.trim().toUpperCase();
             const resultContainer = document.getElementById('result-container');
@@ -273,9 +276,6 @@
     statusEl.textContent = "Verifying sessions...";
     const sessions = indexCache.sessions || {};
     const now = window.getExamsNow ? window.getExamsNow() : new Date();
-
-    const gateCfg = getGateConfig();
-    updateGateBadgeDisplay();
 
     for (const [label, sInfo] of Object.entries(sessions)) {
         if (label.split(' | ')[0].trim() !== todayString) continue;
