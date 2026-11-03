@@ -1060,11 +1060,8 @@ window.UiModal = UiModal;
                     uniqueQPs.forEach(q => { qpChecklist += '<span style="margin-right:15px">' + q + ': ____</span>'; });
 
                     const cFoot = '<div style="margin-top:8px; font-size:9pt">' +
-                        '<div class="attendance-summary" style="display:flex; justify-content:space-between; align-items:center; border:1px solid #000; padding:3px 8px; margin-bottom:6px; font-size:8.5pt; background:#fafafa;">' +
-                            '<b>Attendance Summary:</b>' +
-                            '<span>Students Assigned: <strong style="font-size:9pt">' + gTot + '</strong></span>' +
-                            '<span>Total Number of Students Present: <span style="border-bottom:1px solid #000; display:inline-block; width:45px; vertical-align:bottom;"></span></span>' +
-                            '<span>Total Number of Students Absent: <span style="border-bottom:1px solid #000; display:inline-block; width:45px; vertical-align:bottom;"></span></span>' +
+                        '<div class="attendance-summary" style="border:1px solid #000; padding:4px 8px; margin-bottom:6px; font-size:8.5pt; background:#fafafa; white-space:nowrap;">' +
+                            '<b>Attendance Summary:</b> Students Assigned: <b>' + gTot + '</b>;&nbsp;&nbsp;Total Number of Students Present: <span style="border-bottom:1px solid #000; display:inline-block; width:45px; vertical-align:bottom;"></span>;&nbsp;&nbsp;Total Number of Students Absent: <span style="border-bottom:1px solid #000; display:inline-block; width:45px; vertical-align:bottom;"></span>' +
                         '</div>' +
                         '<b>Course Summary:</b>' +
                         '<table class="rt" style="margin-bottom:8px"><thead style="background:#f0f0f0"><tr><th>QP Code</th><th>Course</th><th>Count</th></tr></thead><tbody>' + summ + 
