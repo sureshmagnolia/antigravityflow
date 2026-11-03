@@ -54,6 +54,15 @@
         const CACHE_KEY_INDEX = "seating_index_cache";
         const CACHE_KEY_SESSIONS = "seating_sessions_data";
 
+        // ⚡ Preload cached index if available so gate display is instant on revisits
+        try {
+            const preCached = JSON.parse(localStorage.getItem(CACHE_KEY_INDEX));
+            if (preCached && preCached.data) {
+                indexCache = preCached.data;
+                if (indexCache.collegeName) collegeName = indexCache.collegeName;
+            }
+        } catch(e) {}
+
         function getGateLabel(mins) {
             if (mins >= 60 && mins % 60 === 0) {
                 return `${mins / 60}h (${mins}m)`;
@@ -108,13 +117,12 @@
 
         function updateGateBadgeDisplay() {
             const gateCfg = getGateConfig();
-            const gateBadge = document.getElementById('gate-mins-text');
             const gateContainer = document.getElementById('gate-info-badge');
-            if (gateBadge && gateContainer) {
+            if (gateContainer) {
                 if (gateCfg.isLocked) {
-                    gateContainer.innerHTML = `Seating info is <span class="font-bold text-amber-700">🔒 Locked by Admin</span>`;
+                    gateContainer.innerHTML = `Seating info is <span id="gate-mins-text" class="font-bold text-amber-700">🔒 Locked by Admin</span>`;
                 } else {
-                    gateContainer.innerHTML = `Seating info reveals <span class="font-bold text-indigo-600">${gateCfg.label}</span> before each exam.`;
+                    gateContainer.innerHTML = `Seating info reveals <span id="gate-mins-text" class="font-bold text-indigo-600">${gateCfg.label}</span> before each exam.`;
                 }
             }
         }
@@ -573,6 +581,7 @@ function parseSessionTime(dateStr, timeStr) {
           let captchaAnswer = 0;
 
           function showCaptcha() {
+              updateGateBadgeDisplay();
               const a = Math.floor(Math.random() * 9) + 1;
               const b = Math.floor(Math.random() * 9) + 1;
               captchaAnswer = a + b;
