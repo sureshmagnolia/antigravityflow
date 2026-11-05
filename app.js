@@ -33,6 +33,30 @@ if (typeof IDB_VERSION === 'undefined') {
     window.IDB_VERSION = 5;
 }
 
+// ⚡ TWO-TIER HASHING UTILITY (Instant Cache Shield)
+async function calculateDataHash(data) {
+    if (!data) return "";
+    try {
+        const str = typeof data === 'string' ? data : JSON.stringify(data);
+        if (window.crypto && window.crypto.subtle) {
+            const msgUint8 = new TextEncoder().encode(str);
+            const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgUint8);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 16);
+        }
+    } catch (e) {
+        console.warn("crypto.subtle hash fallback:", e);
+    }
+    const str = typeof data === 'string' ? data : JSON.stringify(data);
+    let hash = 5381;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) + hash) + str.charCodeAt(i);
+        hash = hash & hash;
+    }
+    return 'h_' + Math.abs(hash).toString(16);
+}
+window.calculateDataHash = calculateDataHash;
+
 function openExamDB() {
     return new Promise((resolve, reject) => {
         const req = indexedDB.open(IDB_NAME, IDB_VERSION);
@@ -2120,32 +2144,75 @@ window.recalcInvigSlots = async function () {
                 if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
             }
 
-                    // --- ☁️ STORAGE MODE (New Stabilization) ---
-            try {
-                const { storage, ref, getDownloadURL } = window.firebase;
-                updateSyncStatus("Checking Firebase Storage...", "neutral");
-                const storageRef = ref(storage, `colleges/${collegeId}/data/examBaseData.json`);
-                const url = await getDownloadURL(storageRef);
-                const response = await fetch(url);
-                const students = await response.json();
-                
-                if (students && students.length > 0) {
-                    allStudentData = students;
-                    await saveExamDataIDB(students, true); // ⚡ BUG FIX: TRUE prevents it from uselessly uploading back to the cloud
-                    updateSyncStatus("Synced (Storage)", "success");
+            // --- ☁️ STORAGE MODE (Tier 1: Master Hash Cache Shield) ---
+            if (!currentCollegeData && typeof window.firebase !== 'undefined') {
+                try {
+                    const { getDoc, doc } = window.firebase;
+                    const collegeSnap = await getDoc(doc(db, "colleges", collegeId));
+                    if (collegeSnap.exists()) currentCollegeData = collegeSnap.data();
+                } catch(e) {}
+            }
+
+            const localMasterHash = localStorage.getItem('localBaseDataHash');
+            const cloudMasterHash = currentCollegeData && currentCollegeData.baseDataHash;
+            const cloudLastUpload = (currentCollegeData && currentCollegeData.lastUploadEvent) || "";
+            const localLastUpload = localStorage.getItem('lastUploadEvent') || "";
+
+            // Check if local data matches cloud fingerprint
+            const hasLocalMatch = (
+                localStudents.length > 0 && 
+                (
+                    (cloudMasterHash && localMasterHash === cloudMasterHash) ||
+                    (!cloudMasterHash && cloudLastUpload && localLastUpload === cloudLastUpload)
+                )
+            );
+
+            if (hasLocalMatch) {
+                console.log(`⚡ [Tier 1 Cache Shield]: Local data matches cloud fingerprint (${cloudMasterHash || cloudLastUpload}). Bypassing Storage download!`);
+                updateSyncStatus("Synced (Instant)", "success");
+                if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+            } else {
+                try {
+                    const { storage, ref, getDownloadURL } = window.firebase;
+                    updateSyncStatus("Checking Firebase Storage...", "neutral");
+                    const storageRef = ref(storage, `colleges/${collegeId}/data/examBaseData.json`);
                     
-                    // Rebuild Metadata Registry for Dropdowns (Normalize to Dots)
-                    const sessions = new Set(students.map(s => {
-                        const d = (s.Date || "").trim().replace(/[-/]/g, '.');
-                        return `${d} | ${s.Time}`;
-                    }));
-                    localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
+                    // 🛡️ 6-second timeout controller so weak connections never hang indefinitely
+                    const controller = new AbortController();
+                    const fetchTimer = setTimeout(() => controller.abort(), 6000);
                     
-                // Removed early return and UI Bootstrap here to allow 
-                // the code to fall through to fetch Modular Sessions 
-                // (Room Allotment, Scribes, Invigilators) from the Cloud Listener
-                  }
-            } catch (e) { console.warn("⚠️ Storage empty, proceeding to Cloud Listener..."); }
+                    const url = await getDownloadURL(storageRef);
+                    const response = await fetch(url, { signal: controller.signal });
+                    clearTimeout(fetchTimer);
+                    
+                    const students = await response.json();
+                    
+                    if (students && students.length > 0) {
+                        allStudentData = students;
+                        await saveExamDataIDB(students, true);
+                        
+                        const newHash = await calculateDataHash(students);
+                        localStorage.setItem('localBaseDataHash', newHash);
+                        if (cloudLastUpload) localStorage.setItem('lastUploadEvent', cloudLastUpload);
+                        
+                        updateSyncStatus("Synced (Storage)", "success");
+                        
+                        // Rebuild Metadata Registry for Dropdowns (Normalize to Dots)
+                        const sessions = new Set(students.map(s => {
+                            const d = (s.Date || "").trim().replace(/[-/]/g, '.');
+                            return `${d} | ${s.Time}`;
+                        }));
+                        localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
+                    }
+                } catch (e) {
+                    if (e.name === 'AbortError') {
+                        console.warn("⚠️ Storage download timed out (low connectivity). Falling back to local IndexedDB.");
+                        updateSyncStatus("Offline / Cached Mode", "neutral");
+                    } else {
+                        console.warn("⚠️ Storage empty or fetch error, proceeding to Cloud Listener...", e);
+                    }
+                }
+            }
 
 
             
@@ -2194,6 +2261,7 @@ window.recalcInvigSlots = async function () {
                         const { getDoc } = window.firebase;
                         let missingStudentsPromises = [];
                         const localDB = await loadExamDataIDB() || [];
+                        const localSessionHashes = JSON.parse(localStorage.getItem('examLocalSessionHashes') || '{}');
 
                         sessionSnap.forEach(docSnap => {
                             const s = docSnap.data();
@@ -2225,14 +2293,23 @@ window.recalcInvigSlots = async function () {
                                 allInvigMapping[sessionKey] = s.invigilatorMapping;
                             }
                             
-                            // 2. Auto-fetch Heavy Students (SCR5 Hybrid Strategy)
+                            // 2. Auto-fetch Heavy Students (Tier 2 Session Hash Check)
                             if (s.meta && s.meta.studentCount > 0 && isTodayOrFuture) {
                                 const localCount = localDB.filter(stu => stu.Date === s.date && stu.Time === s.time).length;
-                                if (localCount !== s.meta.studentCount) {
+                                const cloudSHash = (s.meta && s.meta.sessionHash) || s.sessionHash;
+                                const localSHash = localSessionHashes[sessionKey];
+
+                                const needsFetch = cloudSHash 
+                                    ? (localSHash !== cloudSHash)
+                                    : (localCount !== s.meta.studentCount);
+
+                                if (needsFetch) {
+                                    console.log(`📡 [Tier 2 Fetch]: Session "${sessionKey}" updated in cloud (${cloudSHash || 'count diff'}). Fetching fresh records...`);
                                     const fetchPromise = getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', docSnap.id))
                                         .then(async studentDoc => {
                                             if (studentDoc.exists()) {
                                                 const data = studentDoc.data();
+                                                let fetchedStudents = [];
                                                 if (data.isChunked) {
                                                     let fullPayload = "";
                                                     for (let i = 0; i < data.totalChunks; i++) {
@@ -2240,14 +2317,29 @@ window.recalcInvigSlots = async function () {
                                                         if (chunkSnap.exists()) fullPayload += chunkSnap.data().payload;
                                                     }
                                                     const combined = JSON.parse(fullPayload);
-                                                    if (combined.students) allStudents.push(...combined.students);
-                                                } else if (data.students) { allStudents.push(...data.students); }
+                                                    if (combined.students) fetchedStudents = combined.students;
+                                                } else if (data.students) { 
+                                                    fetchedStudents = data.students; 
+                                                }
+                                                if (fetchedStudents.length > 0) {
+                                                    allStudents.push(...fetchedStudents);
+                                                    if (cloudSHash) {
+                                                        localSessionHashes[sessionKey] = cloudSHash;
+                                                    }
+                                                }
                                             }
                                         });
                                     missingStudentsPromises.push(fetchPromise);
+                                } else {
+                                    if (cloudSHash && !localSHash) {
+                                        localSessionHashes[sessionKey] = cloudSHash;
+                                    }
                                 }
                             }
                         });
+                        try {
+                            localStorage.setItem('examLocalSessionHashes', JSON.stringify(localSessionHashes));
+                        } catch(e) {}
 
                         const allKnownKeys = Array.from(sessionSnap.docs.map(d => {
                             const sd = d.data(); return `${sd.date} | ${sd.time}`;
@@ -2725,12 +2817,20 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
         const allInvigMapping = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
         const sessionInvigMap = allInvigMapping[sessionKey] || {};
 
+        // ⚡ Compute Tier 2 Session Hash
+        const sHash = await calculateDataHash(students);
+        try {
+            const localHashes = JSON.parse(localStorage.getItem('examLocalSessionHashes') || '{}');
+            localHashes[sessionKey] = sHash;
+            localStorage.setItem('examLocalSessionHashes', JSON.stringify(localHashes));
+        } catch(e) {}
 
     // 2. Construct Payload
         const sessionDoc = {
             id: sessionId,
             date: cleanDate,
             time: cleanTime,
+            sessionHash: sHash, // Tier 2 Session Hash
             // 🚫 FIXED COST LEAK: Actually removed students to prevent duplicate heavy bandwidth
             roomAllotment: sessionAllotment,
             qpCodes: sessionQPs,
@@ -2740,6 +2840,7 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
             replaced: (JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}')[sessionKey] || {}).replaced || [],
         meta: { 
                 studentCount: students.length,
+                sessionHash: sHash, // Tier 2 Session Hash
                 normalCount: students.filter(s => {
                     const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
                     const scribeRegNos = new Set(scribeListRaw.map(x => x.regNo));
@@ -3149,17 +3250,22 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                     const storageRef = ref(storage, `colleges/${cid}/data/examBaseData.json`);
                     
                     updateSyncStatus("Uploading Master File...", "neutral");
+                    // 🛡️ DUAL-WRITE: Always upload monolithic examBaseData.json for live SCR5 compatibility
                     await uploadString(storageRef, JSON.stringify(students), 'raw', {
                         contentType: 'application/json'
                     });
                     const ts = new Date().toISOString();
-                    // Track global upload event BEFORE setDoc to prevent optimistic onSnapshot loop
+                    const newHash = await calculateDataHash(students);
+                    
+                    // Track global upload event and Tier 1 Master Hash
+                    localStorage.setItem('localBaseDataHash', newHash);
                     localStorage.setItem('lastUploadEvent', ts);
                     await setDoc(doc(db, "colleges", cid), {
+                        baseDataHash: newHash,
                         lastUploadEvent: ts
                     }, { merge: true });
                     
-                    console.log("📁 Master Data synced to Firebase Storage.");
+                    console.log("📁 Master Data synced to Firebase Storage with hash:", newHash);
                 }
             }
 
