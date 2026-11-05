@@ -2133,8 +2133,8 @@ window.recalcInvigSlots = async function () {
                 const fetchHeavyData = async () => {
             console.log("☁️ Fetching Data (Hybrid Mode)...");
 
-            // --- 🏠 SCR5 PATTERN: LOAD LOCAL DATA IMMEDIATELY ---
-            const localStudents = await loadExamDataIDB() || [];
+            // --- 🏠 SCR5 PATTERN: LOAD LOCAL DATA IMMEDIATELY (with Auto-Healing) ---
+            const localStudents = (typeof autoHealOrphanedAllotmentSessions === 'function') ? await autoHealOrphanedAllotmentSessions() : (await loadExamDataIDB() || []);
             if (localStudents.length > 0) {
                 allStudentData = localStudents;
                 console.log(`🏠 Local Students found: ${allStudentData.length}. Initializing UI...`);
@@ -19828,7 +19828,104 @@ window.handlePythonExtraction = async function (jsonString) {
         });
     }
 
-    // --- V65: Initial Data Load on Startup (Clean Version) ---
+    // 🩹 AUTONOMOUS SELF-HEALING ENGINE (Vault-to-Roster Recovery)
+async function autoHealOrphanedAllotmentSessions() {
+    try {
+        let currentStudents = await loadExamDataIDB() || [];
+        const fullAllotments = (typeof window.getFullRoomAllotments === 'function')
+            ? await window.getFullRoomAllotments()
+            : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+
+        if (!fullAllotments || typeof fullAllotments !== 'object') return currentStudents;
+
+        const sessionKeys = Object.keys(fullAllotments);
+        if (sessionKeys.length === 0) return currentStudents;
+
+        const studentSessionKeys = new Set(currentStudents.map(s => `${(s.Date || '').trim()} | ${(s.Time || '').trim()}`));
+        let knownRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+        const knownSet = new Set(knownRegistry);
+
+        const existingStudentKeys = new Set(currentStudents.map(s => {
+            const d = (s.Date || '').trim();
+            const t = (s.Time || '').trim();
+            const r = (typeof getRegNo === 'function' ? getRegNo(s) : (s['Register Number'] || s.RegisterNo || '')).trim();
+            const c = (s.Course || '').trim();
+            return `${d}|${t}|${r}|${c}`.toUpperCase();
+        }));
+
+        let healedCount = 0;
+        let sessionsHealed = 0;
+        let knownSessionsAdded = 0;
+
+        for (const sessionKey of sessionKeys) {
+            const rooms = fullAllotments[sessionKey];
+            if (!Array.isArray(rooms) || rooms.length === 0) continue;
+
+            const totalSeated = rooms.reduce((acc, r) => acc + (r.students ? r.students.length : 0), 0);
+            if (totalSeated === 0) continue;
+
+            const parts = sessionKey.split('|').map(x => x.trim());
+            if (parts.length < 2) continue;
+            const datePart = parts[0];
+            const timePart = parts[1];
+
+            // If this session has 0 records in currentStudents, reconstruct from allotment rooms
+            if (!studentSessionKeys.has(sessionKey)) {
+                let sessionAdded = false;
+                rooms.forEach(r => {
+                    (r.students || []).forEach(s => {
+                        const reg = (typeof getRegNo === 'function' ? getRegNo(s) : (s['Register Number'] || s.RegisterNo || '')).trim();
+                        const course = (s.Course || '').trim();
+                        const dedupeKey = `${datePart}|${timePart}|${reg}|${course}`.toUpperCase();
+
+                        if (reg && !existingStudentKeys.has(dedupeKey)) {
+                            existingStudentKeys.add(dedupeKey);
+                            currentStudents.push({
+                                'Date': datePart,
+                                'Time': timePart,
+                                'Course': course,
+                                'Register Number': reg,
+                                'Name': s.Name || '',
+                                'Stream': s.Stream || r.stream || 'Regular',
+                                'Exam Name': s['Exam Name'] || s.examName || 'University Examination',
+                                'Source File': 'Auto-Healed from Allotment Vault'
+                            });
+                            healedCount++;
+                            sessionAdded = true;
+                        }
+                    });
+                });
+
+                if (sessionAdded) {
+                    sessionsHealed++;
+                    studentSessionKeys.add(sessionKey);
+                }
+            }
+
+            // Always ensure the session is registered in known sessions
+            if (!knownSet.has(sessionKey)) {
+                knownSet.add(sessionKey);
+                knownRegistry.push(sessionKey);
+            }
+        }
+
+        if (healedCount > 0 || knownSessionsAdded > 0) {
+            console.log(`🩹 [Self-Healing Engine]: Automatically recovered ${healedCount} students across ${sessionsHealed} missing sessions from Allotment Vault!`);
+            await saveExamDataIDB(currentStudents, true);
+            localStorage.setItem('examAllKnownSessions', JSON.stringify(knownRegistry));
+            allStudentData = currentStudents;
+            return currentStudents;
+        }
+
+        return currentStudents;
+    } catch (e) {
+        console.warn("Self-healing check warning:", e);
+        return await loadExamDataIDB() || [];
+    }
+}
+window.autoHealOrphanedAllotmentSessions = autoHealOrphanedAllotmentSessions;
+
+// --- V65: Initial Data Load on Startup (Clean Version) ---
 async function loadInitialData() { 
     // 🧹 EVICT STALE THAWED HISTORICAL RECORDS (Older than 7 days)
     try {
@@ -19859,8 +19956,8 @@ async function loadInitialData() {
             if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
             // ******************************************************************************
             if (typeof initRemunerationModule === 'function') initRemunerationModule();
-            // 2. Check for base student data persistence
-            const savedData = await loadExamDataIDB();
+            // 2. Check for base student data persistence (with Auto-Healing)
+            const savedData = (typeof autoHealOrphanedAllotmentSessions === 'function') ? await autoHealOrphanedAllotmentSessions() : (await loadExamDataIDB());
 
     // 2. Check for base student data persistence in IndexedDB
     if (savedData && savedData.length > 0) {
@@ -26189,6 +26286,7 @@ if (displayLoc) {
                     // Check for student data key (IndexedDB)
                     if (key === 'examBaseData') {
                         try {
+                            if (typeof autoHealOrphanedAllotmentSessions === 'function') await autoHealOrphanedAllotmentSessions();
                             const idbData = await loadExamDataIDB();
                             if (idbData && idbData.length > 0) {
                                 backup[key] = idbData;

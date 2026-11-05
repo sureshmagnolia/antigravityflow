@@ -20,7 +20,7 @@ const DATA_KEYS = [
       'invigDepartments', 'invigRoles', 'invigGlobalTarget',
       'invigGuestTarget', 'invigVacationTarget', 'invigVacationConfig',
       'invigDesignations', 'invigGoogleScriptUrl',
-      'examHistoricalMeta', 'lastUpdated'
+      'examHistoricalMeta', 'examAllKnownSessions', 'lastUpdated'
   ];
 window.DATA_KEYS = DATA_KEYS; // Expose to app.js
 
@@ -577,6 +577,15 @@ async function syncData(source = "AUTO") {
         for (const k of targetKeys) {
             if (k === 'examBaseData') {
                 localData[k] = await loadExamDataIDB();
+            } else if (k === 'examRoomAllotment') {
+                try {
+                    const vaulted = (typeof window.getAllAllotmentsIDB === 'function') ? await window.getAllAllotmentsIDB() : {};
+                    const local = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                    localData[k] = { ...vaulted, ...local };
+                } catch(e) {
+                    const v = localStorage.getItem(k);
+                    if(v) { try { localData[k] = JSON.parse(v); } catch(err) { localData[k] = v; } }
+                }
             } else {
                 const v = localStorage.getItem(k);
                 if(v) { try { localData[k] = JSON.parse(v); } catch(e) { localData[k] = v; } }
@@ -1108,6 +1117,13 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
                     }
 
                     // CONFIG DATA (Staff, Rooms, Settings):
+                    if (key === 'examRoomAllotment' && typeof val === 'object' && val !== null) {
+                        for (const sk of Object.keys(val)) {
+                            if (Array.isArray(val[sk]) && typeof window.saveRoomAllotmentIDB === 'function') {
+                                await window.saveRoomAllotmentIDB(sk, val[sk]);
+                            }
+                        }
+                    }
                     // Even in Merge mode, we treat Cloud as the "Truth" for these small files
                     const stringVal = (typeof val === 'object') ? JSON.stringify(val) : val;
                     localStorage.setItem(key, stringVal);
@@ -1169,6 +1185,9 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
         localStorage.removeItem('examBaseData'); // Clean ghost legacy key
         // 🛡️ [REMOVED]: pendingDriveRestoreSync is no longer needed because cloud is now updated BEFORE refresh.
 
+        if (typeof window.autoHealOrphanedAllotmentSessions === 'function') {
+            await window.autoHealOrphanedAllotmentSessions();
+        }
         window.isDriveRestoringData = false;
         await UiModal.alert("Restore Successful", "✅ Restored & Synced successfully! Reloading to apply changes.");
         location.reload();
