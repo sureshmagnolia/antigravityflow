@@ -239,6 +239,28 @@ window.deleteRoomAllotmentIDB = function(sessionKey) {
     });
 };
 
+window.clearAllRoomAllotmentsIDB = function() {
+    return new Promise((resolve) => {
+        openExamDB().then(db => {
+            try {
+                if (!db.objectStoreNames.contains('allotmentVault')) {
+                    db.close();
+                    resolve(false);
+                    return;
+                }
+                const tx = db.transaction('allotmentVault', 'readwrite');
+                tx.objectStore('allotmentVault').clear();
+                tx.oncomplete = () => { db.close(); resolve(true); };
+                tx.onerror = () => { db.close(); resolve(false); };
+            } catch(e) {
+                console.warn("clearAllRoomAllotmentsIDB error:", e);
+                try { db.close(); } catch(_) {}
+                resolve(false);
+            }
+        }).catch(() => resolve(false));
+    });
+};
+
 
 
 
@@ -2758,6 +2780,11 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
         }
         // ---------------------------------------------------------------
         
+        // Purge from IndexedDB Allotment Vault so auto-heal does not resurrect it
+        if (typeof window.deleteRoomAllotmentIDB === 'function') {
+            await window.deleteRoomAllotmentIDB(sessionKey);
+        }
+
         // Update the Master Registry to remove from all dropdowns
         let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
         known = known.filter(k => k !== sessionKey);
@@ -18042,6 +18069,9 @@ Are you sure?
                         });
                     });
                     localStorage.setItem('examRoomAllotment', JSON.stringify(roomAllots));
+                    if (typeof window.saveRoomAllotmentIDB === 'function') {
+                        await window.saveRoomAllotmentIDB(sessionVal, roomAllots[sessionVal]);
+                    }
                 }
 
                 // 3. Purge from Scribe Assignments
@@ -19589,8 +19619,9 @@ window.handlePythonExtraction = async function (jsonString) {
             keysToWipe.forEach(key => localStorage.removeItem(key));
             localStorage.setItem('examAllKnownSessions', '[]');
 
-            // Wipe the student database (IndexedDB)
+            // Wipe the student database (IndexedDB) and Allotment Vault
             if (typeof saveExamDataIDB === 'function') await saveExamDataIDB([]);
+            if (typeof window.clearAllRoomAllotmentsIDB === 'function') await window.clearAllRoomAllotmentsIDB();
 
             // --- B. CLOUD WIPE (Firebase) ---
             if (currentCollegeId) {
@@ -21320,11 +21351,19 @@ function updateSessionOpsLockUI() {
 
                 // 3. Delete Associated Data
                 await deleteKeyInStorage('examRoomAllotment');
+                if (typeof window.deleteRoomAllotmentIDB === 'function') {
+                    await window.deleteRoomAllotmentIDB(currentSession);
+                }
                 await deleteKeyInStorage('examScribeAllotment');
                 await deleteKeyInStorage('examAbsenteeList');
                 await deleteKeyInStorage('examInvigilatorMapping');
                 // 🛡️ [FIX]: Do not delete examInvigilationSlots from app.js
                 await deleteKeyInStorage('examQPCodes');
+
+                // Remove from Master Known Sessions Registry
+                let knownSess = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+                knownSess = knownSess.filter(k => k !== currentSession);
+                localStorage.setItem('examAllKnownSessions', JSON.stringify(knownSess));
 
                 await UiModal.alert(`✅ Deleted ${targets.length} records and cleaned up all session data.`);
 
@@ -29055,6 +29094,11 @@ window.executeBulkDelete = async function() {
                     const tx = db.transaction('scribeVault', 'readwrite');
                     tx.objectStore('scribeVault').delete(s);
                 } catch(e) { console.error("Bulk IDB cleanup failed", e); }
+
+                // Purge from IndexedDB Allotment Vault so auto-heal does not resurrect it
+                if (typeof window.deleteRoomAllotmentIDB === 'function') {
+                    await window.deleteRoomAllotmentIDB(s);
+                }
             }
         }
 
