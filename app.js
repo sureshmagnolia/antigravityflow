@@ -26299,9 +26299,23 @@ if (displayLoc) {
 
     // 1. FULL BACKUP (Download JSON) - Unified engine for Home Dashboard, Danger Zone, and Safety hooks
     window.downloadFullBackupJson = async function (triggerBtn = null) {
-        let originalHtml = "";
+        if (window.isDownloadingBackupJson) {
+            console.warn("Full backup download already in progress. Ignoring duplicate call.");
+            return false;
+        }
+        window.isDownloadingBackupJson = true;
+
+        let restoreHtml = "";
         if (triggerBtn) {
-            originalHtml = triggerBtn.innerHTML;
+            if (!triggerBtn.dataset.originalBackupHtml && !triggerBtn.innerHTML.includes('Preparing JSON')) {
+                triggerBtn.dataset.originalBackupHtml = triggerBtn.innerHTML;
+            }
+            restoreHtml = triggerBtn.dataset.originalBackupHtml || `
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span>Download Full Backup JSON</span>
+            `;
             triggerBtn.disabled = true;
             triggerBtn.classList.add('opacity-75', 'cursor-wait');
             triggerBtn.innerHTML = `
@@ -26409,7 +26423,8 @@ if (displayLoc) {
                 `;
                 setTimeout(() => {
                     triggerBtn.disabled = false;
-                    triggerBtn.innerHTML = originalHtml;
+                    triggerBtn.innerHTML = restoreHtml;
+                    delete triggerBtn.dataset.originalBackupHtml;
                 }, 2500);
             }
             return true;
@@ -26421,9 +26436,12 @@ if (displayLoc) {
             if (triggerBtn) {
                 triggerBtn.disabled = false;
                 triggerBtn.classList.remove('opacity-75', 'cursor-wait');
-                triggerBtn.innerHTML = originalHtml;
+                triggerBtn.innerHTML = restoreHtml;
+                delete triggerBtn.dataset.originalBackupHtml;
             }
             return false;
+        } finally {
+            window.isDownloadingBackupJson = false;
         }
     };
 
@@ -26440,8 +26458,13 @@ if (displayLoc) {
     // Attach listener for Home Dashboard Backup Button if present
     const dashBackupBtn = document.getElementById('btn-dashboard-download-backup');
     if (dashBackupBtn) {
-        dashBackupBtn.addEventListener('click', async () => {
-            await window.downloadFullBackupJson(dashBackupBtn);
+        dashBackupBtn.onclick = null;
+        const newDashBtn = dashBackupBtn.cloneNode(true);
+        dashBackupBtn.parentNode.replaceChild(newDashBtn, dashBackupBtn);
+        newDashBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            await window.downloadFullBackupJson(newDashBtn);
         });
     }
     updateBackupTimestampDisplay();
