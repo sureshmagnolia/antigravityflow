@@ -16805,8 +16805,14 @@ Are you sure you want to update these records?
 
             if (await UiModal.confirm('Confirm Bulk Update', confirmMsg)) {
                 let updateCount = 0;
+                const updatedRegNos = new Set();
+                const isRescheduled = !!(newDate || newTime);
+                const effectiveNewDate = newDate || oldDate;
+                const effectiveNewTime = newTime || oldTime;
+                const oldSessionKey = `${oldDate} | ${oldTime}`;
+                const newSessionKey = `${effectiveNewDate} | ${effectiveNewTime}`;
 
-            // 6. Apply Updates
+                // 6. Apply Updates
                 allStudentData.forEach(student => {
                     // FIX: Added Stream check to ensure we target the correct group
                     if (student.Date === oldDate && 
@@ -16815,33 +16821,102 @@ Are you sure you want to update these records?
                         (student.Stream || "Regular") === targetStream) {
                         
                         // Update fields only if provided
-                        if (newExamName) student['Exam Name'] = newExamName; // <--- THE FIX
+                        if (newExamName) student['Exam Name'] = newExamName;
                         if (newCourseName) student.Course = newCourseName;
                         if (newStream) student.Stream = newStream;
                         if (newDate) student.Date = newDate;
                         if (newTime) student.Time = newTime;
                         
+                        const reg = getRegNo(student);
+                        if (reg) updatedRegNos.add(reg);
                         updateCount++;
                     }
                 });
 
-                // 7. Save to IDB & Sync
-                
+                // Clean up old session room, scribe & absentee allotments if students were moved to a different session
+                if (isRescheduled && oldSessionKey !== newSessionKey) {
+                    try {
+                        let roomAllots = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                        if (roomAllots[oldSessionKey]) {
+                            roomAllots[oldSessionKey].forEach(room => {
+                                room.students = (room.students || []).filter(s => {
+                                    const reg = (typeof s === 'object') ? getRegNo(s) : s;
+                                    return !updatedRegNos.has(reg);
+                                });
+                            });
+                            localStorage.setItem('examRoomAllotment', JSON.stringify(roomAllots));
+                        }
+                    } catch (e) {
+                        console.warn("Bulk update room allotment cleanup warning:", e);
+                    }
 
-                
-                await UiModal.alert(`✅ Updated ${updateCount} students! Syncing changes...`);
-                
-                // Trigger Sync
-                if (typeof syncSessionToCloud === 'function') {
-                    // Sync the OLD session (to remove moved students) AND the NEW session (if date changed)
-                    await syncSessionToCloud(document.getElementById('edit-session-select').value);
-                    if (newDate || newTime) {
-                        // If date/time changed, we technically created a new session key, 
-                        // but a full reload is safer to handle the split.
+                    try {
+                        let scribeAllots = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+                        if (scribeAllots[oldSessionKey]) {
+                            updatedRegNos.forEach(r => delete scribeAllots[oldSessionKey][r]);
+                            localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(scribeAllots));
+                        }
+                    } catch (e) {
+                        console.warn("Bulk update scribe cleanup warning:", e);
+                    }
+
+                    try {
+                        let allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
+                        if (allAbsentees[oldSessionKey]) {
+                            allAbsentees[oldSessionKey] = allAbsentees[oldSessionKey].filter(r => !updatedRegNos.has(r));
+                            localStorage.setItem(ABSENTEE_LIST_KEY, JSON.stringify(allAbsentees));
+                        }
+                    } catch (e) {
+                        console.warn("Bulk update absentee cleanup warning:", e);
+                    }
+
+                    try {
+                        let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+                        const remainingInOld = allStudentData.some(s => s.Date === oldDate && s.Time === oldTime);
+                        if (!remainingInOld) {
+                            known = known.filter(k => k !== oldSessionKey);
+                        }
+                        if (!known.includes(newSessionKey)) {
+                            known.push(newSessionKey);
+                        }
+                        localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
+                    } catch (e) {
+                        console.warn("Bulk update known sessions warning:", e);
                     }
                 }
 
-                // Reload to refresh all views and dropdowns
+                // 7. Save to IDB (Critical persistence to survive page reload)
+                if (typeof saveExamDataIDB === 'function') {
+                    await saveExamDataIDB(allStudentData, true);
+                }
+
+                // Update in-memory DOM store if present
+                if (typeof jsonDataStore !== 'undefined' && jsonDataStore) {
+                    jsonDataStore.innerHTML = JSON.stringify(allStudentData);
+                }
+
+                // 8. Authoritative Cloud Sync
+                // A. Upload base student database to Firebase Storage
+                if (typeof syncDataToCloud === 'function') {
+                    await syncDataToCloud('baseData');
+                }
+
+                // B. Sync modular sessions (Firestore)
+                if (typeof syncSessionToCloud === 'function') {
+                    const remainingInOld = allStudentData.some(s => s.Date === oldDate && s.Time === oldTime);
+                    if (!remainingInOld && typeof deleteSessionFromCloud === 'function') {
+                        await deleteSessionFromCloud(oldSessionKey);
+                    } else {
+                        await syncSessionToCloud(oldSessionKey);
+                    }
+                    if (isRescheduled && oldSessionKey !== newSessionKey) {
+                        await syncSessionToCloud(newSessionKey);
+                    }
+                }
+
+                await UiModal.alert(`✅ Successfully updated ${updateCount} students! Changes saved and synced.`);
+
+                // Reload to refresh all views, dropdowns, and sessions
                 window.location.reload();
             }
         });
