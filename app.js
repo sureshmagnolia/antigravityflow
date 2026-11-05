@@ -6458,6 +6458,7 @@ if (toggleButton && sidebar) {
 
 // --- Update Dashboard Function (Remaining / Past / Total) ---
     function updateDashboard() {
+        if (typeof updateBackupTimestampDisplay === 'function') updateBackupTimestampDisplay();
         const dashContainer = document.getElementById('data-snapshot');
         
         // Target Elements
@@ -26272,16 +26273,64 @@ if (displayLoc) {
     // 🛡️ THE BUNKER: FULL BACKUP & RESTORE (FIXED)
     // ==========================================
 
-    // 1. FULL BACKUP (Download JSON)
-    if (backupDataButton) {
-        // Remove old listeners to prevent duplicates
-        const newBackupBtn = backupDataButton.cloneNode(true);
-        backupDataButton.parentNode.replaceChild(newBackupBtn, backupDataButton);
+    // Helper: Format and update Last Downloaded time in UI
+    function updateBackupTimestampDisplay() {
+        const lastEl = document.getElementById('dash-backup-last-time');
+        if (!lastEl) return;
+        const lastTime = localStorage.getItem('examLastBackupTimestamp');
+        if (!lastTime) {
+            lastEl.textContent = 'Last Downloaded: Never';
+            return;
+        }
+        try {
+            const d = new Date(lastTime);
+            if (isNaN(d.getTime())) {
+                lastEl.textContent = `Last Downloaded: ${lastTime}`;
+            } else {
+                const datePart = d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+                const timePart = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true });
+                lastEl.textContent = `Last Downloaded: ${datePart}, ${timePart}`;
+            }
+        } catch(e) {
+            lastEl.textContent = `Last Downloaded: ${lastTime}`;
+        }
+    }
+    window.updateBackupTimestampDisplay = updateBackupTimestampDisplay;
 
-        newBackupBtn.addEventListener('click', async () => {
+    // 1. FULL BACKUP (Download JSON) - Unified engine for Home Dashboard, Danger Zone, and Safety hooks
+    window.downloadFullBackupJson = async function (triggerBtn = null) {
+        if (window.isDownloadingBackupJson) {
+            console.warn("Full backup download already in progress. Ignoring duplicate call.");
+            return false;
+        }
+        window.isDownloadingBackupJson = true;
+
+        let restoreHtml = "";
+        if (triggerBtn) {
+            if (!triggerBtn.dataset.originalBackupHtml && !triggerBtn.innerHTML.includes('Preparing JSON')) {
+                triggerBtn.dataset.originalBackupHtml = triggerBtn.innerHTML;
+            }
+            restoreHtml = triggerBtn.dataset.originalBackupHtml || `
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span>Download Full Backup JSON</span>
+            `;
+            triggerBtn.disabled = true;
+            triggerBtn.classList.add('opacity-75', 'cursor-wait');
+            triggerBtn.innerHTML = `
+                <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                <span>Preparing JSON...</span>
+            `;
+        }
+
+        try {
             const backup = {};
             // Gather all data defined in your ALL_DATA_KEYS constant
-            if (typeof ALL_DATA_KEYS !== 'undefined') {
+            if (typeof ALL_DATA_KEYS !== 'undefined' && Array.isArray(ALL_DATA_KEYS)) {
                 for (const key of ALL_DATA_KEYS) {
                     // Check for student data key (IndexedDB)
                     if (key === 'examBaseData') {
@@ -26290,6 +26339,8 @@ if (displayLoc) {
                             const idbData = await loadExamDataIDB();
                             if (idbData && idbData.length > 0) {
                                 backup[key] = idbData;
+                            } else if (typeof allStudentData !== 'undefined' && Array.isArray(allStudentData) && allStudentData.length > 0) {
+                                backup[key] = allStudentData;
                             }
                         } catch (err) {
                             console.error("Backup Error: Failed to load student data from IDB", err);
@@ -26312,9 +26363,10 @@ if (displayLoc) {
                 }
             } else {
                 // Fallback if constant missing
-                for (const key of Object.keys(localStorage)) {
-                    if (key.startsWith('exam')) {
-                        backup[key] = localStorage.getItem(key);
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && (k.startsWith('exam') || k.startsWith('invig'))) {
+                        backup[k] = localStorage.getItem(k);
                     }
                 }
                 // Even in fallback, try to get IDB data
@@ -26324,17 +26376,98 @@ if (displayLoc) {
                 } catch(e) {}
             }
 
+            // Also sweep any additional exam* or invig* keys in localStorage not explicitly in ALL_DATA_KEYS
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && (k.startsWith('exam') || k.startsWith('invig')) && !backup.hasOwnProperty(k)) {
+                    const val = localStorage.getItem(k);
+                    if (val !== null && val !== undefined) {
+                        backup[k] = val;
+                    }
+                }
+            }
+
+            // Save backup timestamp
+            const nowIso = new Date().toISOString();
+            localStorage.setItem('examLastBackupTimestamp', nowIso);
+            updateBackupTimestampDisplay();
+
             // Create and download file
             const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
+            const dateStr = (typeof window.getIsoDateLocal === 'function') 
+                ? window.getIsoDateLocal(new Date()) 
+                : new Date().toISOString().split('T')[0];
             a.href = url;
-            a.download = `ExamFlow_Full_Backup_${window.getIsoDateLocal(new Date())}.json`;
+            a.download = `ExamFlow_Full_Backup_${dateStr}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+            // Inform user with toast
+            const studentCount = Array.isArray(backup['examBaseData']) ? backup['examBaseData'].length : 0;
+            const keysCount = Object.keys(backup).length;
+            if (window.UiModal && typeof window.UiModal.toast === 'function') {
+                window.UiModal.toast(`✅ Full System Backup downloaded (${studentCount} students, ${keysCount} modules)!`, 'success');
+            }
+
+            if (triggerBtn) {
+                triggerBtn.classList.remove('opacity-75', 'cursor-wait');
+                triggerBtn.innerHTML = `
+                    <svg class="w-5 h-5 text-emerald-200 inline-block mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Backup Saved!</span>
+                `;
+                setTimeout(() => {
+                    triggerBtn.disabled = false;
+                    triggerBtn.innerHTML = restoreHtml;
+                    delete triggerBtn.dataset.originalBackupHtml;
+                }, 2500);
+            }
+            return true;
+        } catch (err) {
+            console.error("Critical error downloading full backup JSON:", err);
+            if (window.UiModal && typeof window.UiModal.alert === 'function') {
+                await window.UiModal.alert("Backup Failed", "Failed to compile full system backup: " + err.message);
+            }
+            if (triggerBtn) {
+                triggerBtn.disabled = false;
+                triggerBtn.classList.remove('opacity-75', 'cursor-wait');
+                triggerBtn.innerHTML = restoreHtml;
+                delete triggerBtn.dataset.originalBackupHtml;
+            }
+            return false;
+        } finally {
+            window.isDownloadingBackupJson = false;
+        }
+    };
+
+    if (backupDataButton) {
+        // Remove old listeners to prevent duplicates
+        const newBackupBtn = backupDataButton.cloneNode(true);
+        backupDataButton.parentNode.replaceChild(newBackupBtn, backupDataButton);
+
+        newBackupBtn.addEventListener('click', async () => {
+            await window.downloadFullBackupJson(newBackupBtn);
         });
     }
+
+    // Attach listener for Home Dashboard Backup Button if present
+    const dashBackupBtn = document.getElementById('btn-dashboard-download-backup');
+    if (dashBackupBtn) {
+        dashBackupBtn.onclick = null;
+        const newDashBtn = dashBackupBtn.cloneNode(true);
+        dashBackupBtn.parentNode.replaceChild(newDashBtn, dashBackupBtn);
+        newDashBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            await window.downloadFullBackupJson(newDashBtn);
+        });
+    }
+    updateBackupTimestampDisplay();
 
     // ==========================================
     // 📥 RESTORE SEQUENTIAL LAUNCH MODAL LOGIC
@@ -27990,7 +28123,10 @@ async function triggerSafetyBackup() {
     await new Promise(r => setTimeout(r, 1500));
     
     // Trigger JSON
-    if (jsonBtn) {
+    if (typeof window.downloadFullBackupJson === 'function') {
+        console.log("Triggering Safety JSON Backup via downloadFullBackupJson...");
+        await window.downloadFullBackupJson(jsonBtn);
+    } else if (jsonBtn) {
         console.log("Triggering Safety JSON Backup...");
         jsonBtn.click();
     }
@@ -28364,8 +28500,13 @@ async function runSystemHealthCheck() {
                     </button>
                 `;
 
-                // 3. Append to the bottom of the dashboard card
-                dashboardCard.appendChild(checkContainer);
+                // 3. Append to the bottom of the dashboard card (keep backup section at very bottom)
+                const backupSection = document.getElementById('dashboard-backup-section');
+                if (backupSection && backupSection.parentNode === dashboardCard) {
+                    dashboardCard.insertBefore(checkContainer, backupSection);
+                } else {
+                    dashboardCard.appendChild(checkContainer);
+                }
             }
 
             // Re-attach event listener (safe to do multiple times)
