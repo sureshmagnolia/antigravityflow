@@ -623,6 +623,62 @@
                             <p class="text-gray-400 italic ml-2">Select a date above to see details.</p>
                         </div>
                     </div>
+
+                    <!-- ========================================== -->
+                    <!-- 💾 SYSTEM BACKUP & RECOVERY (HOME DASHBOARD BOTTOM) -->
+                    <!-- ========================================== -->
+                    <div id="dashboard-backup-section" class="mt-8 border-t border-gray-200 pt-6">
+                        <div class="bg-gradient-to-br from-slate-50 via-indigo-50/40 to-blue-50/50 border border-indigo-100/80 rounded-2xl p-5 sm:p-6 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+                                <div class="flex items-start gap-4">
+                                    <div class="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <h3 class="text-xl font-bold text-gray-800">Full System Backup</h3>
+                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                Offline Safe
+                                            </span>
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-100 text-indigo-700 border border-indigo-200">
+                                                Complete JSON
+                                            </span>
+                                        </div>
+                                        <p class="text-sm text-gray-600 mt-1.5 max-w-2xl leading-relaxed">
+                                            Export an offline JSON backup of your entire examination database anytime. Captures all registered students, room allocations, timetable sessions, QP codes, seating rules, staff, and invigilation assignments.
+                                        </p>
+                                        <div class="flex items-center gap-3 sm:gap-4 mt-3 text-xs text-gray-500 flex-wrap">
+                                            <span class="flex items-center gap-1.5 text-indigo-700 font-medium bg-white/70 px-2.5 py-1 rounded-md border border-indigo-100">
+                                                <svg class="w-3.5 h-3.5 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
+                                                <span>IndexedDB Vault &amp; Local Storage</span>
+                                            </span>
+                                            <span class="text-gray-300 hidden sm:inline">•</span>
+                                            <span id="dash-backup-last-time" class="text-gray-500 font-medium">
+                                                Last Downloaded: Never
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="w-full lg:w-auto shrink-0 flex flex-col sm:flex-row lg:flex-col gap-2">
+                                    <button id="btn-dashboard-download-backup" 
+                                            onclick="window.downloadFullBackupJson(this)" 
+                                            type="button"
+                                            class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 active:scale-[0.98] text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                        </svg>
+                                        <span>Download Full Backup JSON</span>
+                                    </button>
+                                    <p class="text-[11px] text-gray-500 text-center lg:text-right font-medium">
+                                        Compatible with System Restore &amp; Smart QP
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
             </div>
