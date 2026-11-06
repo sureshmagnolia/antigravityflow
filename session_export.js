@@ -232,7 +232,7 @@ const SESSION_EXPORT_JS = {
         const UiModal = {
 
     // --- TEMPLATES ---
-    _overlayClass: "fixed inset-0 z-[150] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-200 opacity-0",
+    _overlayClass: "fixed inset-0 z-[1000000] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-200 opacity-0",
     _cardClass: "bg-white rounded-2xl shadow-2xl max-w-md w-full transform scale-95 transition-all duration-200 overflow-hidden",
     _headerClass: "px-6 py-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between",
     _titleClass: "text-lg font-bold text-gray-800",
@@ -373,7 +373,8 @@ const SESSION_EXPORT_JS = {
     _create(contentHtml, buttons = [], cancelValue = null) {
         return new Promise((resolve) => {
             const overlay = document.createElement('div');
-            overlay.className = this._overlayClass;
+            overlay.className = this._overlayClass;
+            overlay.style.setProperty('z-index', '2147483640', 'important');
             const card = document.createElement('div');
             card.className = this._cardClass;
             card.innerHTML = contentHtml;

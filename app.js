@@ -20097,7 +20097,7 @@ window.handlePythonExtraction = async function (jsonString) {
         }
         modal.classList.remove('hidden');
         modal.style.setProperty('display', 'flex', 'important');
-        modal.style.setProperty('z-index', '9999999', 'important');
+        modal.style.setProperty('z-index', '10000', 'important');
         modal.style.setProperty('position', 'fixed', 'important');
         modal.style.setProperty('inset', '0px', 'important');
         await window.renderOrphanSessionsTable();

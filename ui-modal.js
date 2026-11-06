@@ -1,7 +1,7 @@
 const UiModal = {
 
     // --- TEMPLATES ---
-    _overlayClass: "fixed inset-0 z-[150] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-200 opacity-0",
+    _overlayClass: "fixed inset-0 z-[1000000] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-200 opacity-0",
     _cardClass: "bg-white rounded-2xl shadow-2xl max-w-md w-full transform scale-95 transition-all duration-200 overflow-hidden",
     _headerClass: "px-6 py-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between",
     _titleClass: "text-lg font-bold text-gray-800",
@@ -143,6 +143,7 @@ const UiModal = {
         return new Promise((resolve) => {
             const overlay = document.createElement('div');
             overlay.className = this._overlayClass;
+            overlay.style.setProperty('z-index', '2147483640', 'important');
             const card = document.createElement('div');
             card.className = this._cardClass;
             card.innerHTML = contentHtml;
@@ -217,7 +218,8 @@ const UiModal = {
     toast(message, type = 'info') {
         const toast = document.createElement('div');
         const colors = type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-green-500' : 'bg-gray-800');
-        toast.className = `fixed bottom-4 right-4 ${colors} text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-10 opacity-0 transition-all duration-300 z-[200] font-medium flex items-center gap-2`;
+        toast.className = `fixed bottom-4 right-4 ${colors} text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-10 opacity-0 transition-all duration-300 z-[2000000] font-medium flex items-center gap-2`;
+        toast.style.setProperty('z-index', '2147483647', 'important');
         toast.innerHTML = `<span>${message}</span>`;
 
         document.body.appendChild(toast);
