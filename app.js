@@ -2084,7 +2084,9 @@ window.recalcInvigSlots = async function () {
         window.fetchSlotsData = async () => {
             const { collection, getDocs } = window.firebase;
             try {
-                const shardsRef = collection(db, "colleges", collegeId, "slots_daily");
+                const cid = collegeId || window.currentCollegeId || localStorage.getItem('my_college_id') || '';
+                if (!cid) return null;
+                const shardsRef = collection(db, "colleges", cid, "slots_daily");
                 const querySnap = await getDocs(shardsRef);
                 let newSlots = {};
                 querySnap.forEach(shardDoc => {
@@ -2095,29 +2097,15 @@ window.recalcInvigSlots = async function () {
                 });
                 
                 const localRaw = localStorage.getItem('examInvigilationSlots');
-                let mergedSlots = { ...newSlots };
-                
+                let mergedSlots = {};
                 if (localRaw) {
                     try {
-                        const localSlots = JSON.parse(localRaw);
-                        // Local takes precedence for 'assigned' array ONLY if local actually has assigned staff
-                        Object.keys(localSlots).forEach(k => {
-                            if (!mergedSlots[k]) {
-                                mergedSlots[k] = localSlots[k];
-                            } else {
-                                if (Array.isArray(localSlots[k].assigned) && localSlots[k].assigned.length > 0) {
-                                    mergedSlots[k].assigned = localSlots[k].assigned;
-                                }
-                                if (Array.isArray(localSlots[k].unavailable) && localSlots[k].unavailable.length > 0) {
-                                    mergedSlots[k].unavailable = localSlots[k].unavailable;
-                                }
-                                if (localSlots[k].isLocked !== undefined) {
-                                    mergedSlots[k].isLocked = localSlots[k].isLocked;
-                                }
-                            }
-                        });
+                        mergedSlots = JSON.parse(localRaw) || {};
                     } catch(e){}
                 }
+                
+                // Cloud daily shards are authoritative for all keys present in Firestore
+                Object.assign(mergedSlots, newSlots);
                 
                 if (Object.keys(mergedSlots).length > 0) {
                     localStorage.setItem('examInvigilationSlots', JSON.stringify(mergedSlots));
@@ -2127,6 +2115,46 @@ window.recalcInvigSlots = async function () {
                 console.error("Failed to fetch slots from shards:", e);
                 return null;
             }
+        };
+
+        // 🛡️ ON-DEMAND SESSION SLOT FETCHER: Fetches single daily shard for the active session (1 read, ~50ms)
+        window.fetchSlotForSessionOnDemand = async (sessionKey) => {
+            if (!sessionKey || !navigator.onLine || !window.firebase) return null;
+            const cid = collegeId || window.currentCollegeId || (typeof currentCollegeId !== 'undefined' ? currentCollegeId : null) || localStorage.getItem('my_college_id') || '';
+            if (!cid) return null;
+
+            try {
+                const { getDoc, doc } = window.firebase;
+                const [dRaw] = sessionKey.split('|');
+                const clean = (dRaw || '').trim().replace(/[-/]/g, '.');
+                const parts = clean.split('.');
+                if (parts.length >= 3) {
+                    const shardId = (parts[0].length === 4) 
+                        ? `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`
+                        : `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                    
+                    const shardRef = doc(window.firebase.db, "colleges", cid, "slots_daily", shardId);
+                    const shardSnap = await getDoc(shardRef);
+                    if (shardSnap.exists()) {
+                        const shardMap = JSON.parse(shardSnap.data().data || '{}');
+                        const cleanTarget = sessionKey.replace(/\s/g, '').toLowerCase();
+                        let matchedSlot = shardMap[sessionKey];
+                        if (!matchedSlot) {
+                            const fuzzyKey = Object.keys(shardMap).find(k => k.replace(/\s/g, '').toLowerCase() === cleanTarget);
+                            if (fuzzyKey) matchedSlot = shardMap[fuzzyKey];
+                        }
+                        if (matchedSlot) {
+                            const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+                            invigSlots[sessionKey] = matchedSlot;
+                            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigSlots));
+                            return matchedSlot;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("fetchSlotForSessionOnDemand error:", err);
+            }
+            return null;
         };
 
         // 3. OPERATIONS (Absentees/QP) - On-Demand Fetcher
@@ -10652,10 +10680,17 @@ async function syncToPrintManager() {
         showView(viewRoomAllotment, navRoomAllotment); 
         if (typeof window.fetchSettingsData === 'function') window.fetchSettingsData(); 
         if (typeof window.fetchAllocationData === 'function') window.fetchAllocationData(); 
+        if (typeof window.fetchStaffData === 'function') window.fetchStaffData(); 
         
-        // 🛡️ [PERSISTENCE FIX]: Force refresh of Scribe UI when returning to this tab
+        // 🛡️ [PERSISTENCE FIX]: Force refresh of Scribe UI & Invigilation when returning to this tab
         if (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect.value) {
-            if (typeof loadScribeAllotment === 'function') loadScribeAllotment(allotmentSessionSelect.value);
+            const activeSession = allotmentSessionSelect.value;
+            if (typeof loadScribeAllotment === 'function') loadScribeAllotment(activeSession);
+            if (typeof window.fetchSlotForSessionOnDemand === 'function') {
+                window.fetchSlotForSessionOnDemand(activeSession).then(() => {
+                    if (typeof window.renderInvigilationPanel === 'function') window.renderInvigilationPanel();
+                });
+            }
         }
     });
     navQPCodes.addEventListener('click', () => { 
@@ -15096,9 +15131,18 @@ window.real_populate_qp_code_session_dropdown = function () {
 
             if (sessionKey) {
                 loadRoomAllotment(sessionKey);
-                Promise.resolve(loadScribeAllotment(sessionKey)).catch(e => {
-                    console.error("loadScribeAllotment error:", e);
-                }).finally(() => {
+                const slotPromise = (typeof window.fetchSlotForSessionOnDemand === 'function')
+                    ? window.fetchSlotForSessionOnDemand(sessionKey)
+                    : Promise.resolve();
+
+                Promise.all([
+                    Promise.resolve(loadScribeAllotment(sessionKey)).catch(e => {
+                        console.error("loadScribeAllotment error:", e);
+                    }),
+                    slotPromise.catch(e => {
+                        console.warn("fetchSlotForSessionOnDemand error:", e);
+                    })
+                ]).finally(() => {
                     renderInvigilationPanel();
                     if (typeof window.updateRoomAllotmentBanner === 'function') {
                         window.updateRoomAllotmentBanner();
@@ -24881,7 +24925,7 @@ const allRooms = Object.values(roomDataMap);
 
 
     // 4. Open Modal (Populates List)
-    window.openInvigModal = function (roomName) {
+    window.openInvigModal = async function (roomName) {
         const modal = document.getElementById('invigilator-select-modal');
         const list = document.getElementById('invig-options-list');
         const input = document.getElementById('invig-search-input');
@@ -24895,6 +24939,16 @@ const allRooms = Object.values(roomDataMap);
         input.value = "";
         modal.classList.remove('hidden');
         setTimeout(() => input.focus(), 100);
+
+        // Fetch latest slot & staff on-demand if online to ensure 100% parity with Invigilation Portal
+        if (sessionKey && navigator.onLine && typeof window.fetchSlotForSessionOnDemand === 'function') {
+            try {
+                await Promise.all([
+                    window.fetchSlotForSessionOnDemand(sessionKey),
+                    (typeof window.fetchStaffData === 'function') ? window.fetchStaffData() : Promise.resolve()
+                ]);
+            } catch(e) {}
+        }
 
         // Get Data
         const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
@@ -25211,6 +25265,16 @@ const allRooms = Object.values(roomDataMap);
             window.cleanupGhostInvigilatorMappings(sessionKey);
         }
 
+        // Ensure latest slot and staff data from cloud before assigning
+        if (sessionKey && navigator.onLine) {
+            if (typeof window.fetchSlotForSessionOnDemand === 'function') {
+                await window.fetchSlotForSessionOnDemand(sessionKey);
+            }
+            if (typeof window.fetchStaffData === 'function') {
+                await window.fetchStaffData();
+            }
+        }
+
         // Ensure we have latest local data before starting
         const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
         currentInvigMapping = allMappings[sessionKey] || {};
@@ -25219,36 +25283,12 @@ const allRooms = Object.values(roomDataMap);
         let staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
         let slot = invigSlots[sessionKey];
 
-        // 🛡️ ON-DEMAND FETCH: If slot or assigned staff is missing, fetch latest shard from cloud before giving up
-        if ((!slot || !slot.assigned || slot.assigned.length === 0) && window.currentCollegeId && navigator.onLine) {
-            try {
-                const { getDoc, doc } = window.firebase;
-                const [dRaw] = sessionKey.split(' | ');
-                const dStr = (dRaw || '').replace(/[-/]/g, '.');
-                const parts = dStr.split('.');
-                if (parts.length >= 3) {
-                    const shardId = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-                    const shardRef = doc(window.firebase.db, "colleges", window.currentCollegeId, "slots_daily", shardId);
-                    const shardSnap = await getDoc(shardRef);
-                    if (shardSnap.exists()) {
-                        const shardMap = JSON.parse(shardSnap.data().data || '{}');
-                        if (shardMap[sessionKey]) {
-                            invigSlots[sessionKey] = shardMap[sessionKey];
-                            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigSlots));
-                            slot = invigSlots[sessionKey];
-                        }
-                    }
-                }
-            } catch (err) {
-                console.warn("On-demand slot fetch failed:", err);
-            }
-            // Fallback to fetchSlotsData if single shard wasn't found
-            if ((!slot || !slot.assigned || slot.assigned.length === 0) && typeof window.fetchSlotsData === 'function') {
-                const freshSlots = await window.fetchSlotsData();
-                if (freshSlots && freshSlots[sessionKey]) {
-                    invigSlots = freshSlots;
-                    slot = invigSlots[sessionKey];
-                }
+        // Fallback: If still missing slot, try full fetchSlotsData
+        if ((!slot || !slot.assigned || slot.assigned.length === 0) && typeof window.fetchSlotsData === 'function' && navigator.onLine) {
+            const freshSlots = await window.fetchSlotsData();
+            if (freshSlots && freshSlots[sessionKey]) {
+                invigSlots = freshSlots;
+                slot = invigSlots[sessionKey];
             }
         }
 
