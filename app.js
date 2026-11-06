@@ -20121,7 +20121,31 @@ window.handlePythonExtraction = async function (jsonString) {
         const selectAllChk = document.getElementById('orphan-select-all');
         if (!tbody) return;
 
-        const orphans = await window.detectOrphanedSessions();
+        // Immediate feedback: spinner while detecting
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="py-8 text-center text-gray-500">
+                    <div class="inline-flex items-center gap-2">
+                        <svg class="animate-spin h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                        </svg>
+                        <span class="text-xs font-semibold">Scanning storage for historical sessions...</span>
+                    </div>
+                </td>
+            </tr>
+        `;
+        if (emptyNotice) emptyNotice.classList.add('hidden');
+        if (selectAllChk) selectAllChk.checked = false;
+
+        let orphans = [];
+        try {
+            orphans = await window.detectOrphanedSessions();
+        } catch(err) {
+            console.error("detectOrphanedSessions failed:", err);
+            tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-red-500 text-xs">Error scanning storage: ${err.message || err}</td></tr>`;
+            return;
+        }
         window._cachedOrphanSessions = orphans;
 
         const q = (filterQuery || '').trim().toLowerCase();

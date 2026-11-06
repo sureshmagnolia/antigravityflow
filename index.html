@@ -3,9 +3,9 @@
 
 <head>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/svg+xml" href="magnolia-logo.svg?v=12.8.66">
+    <link rel="icon" type="image/svg+xml" href="magnolia-logo.svg?v=12.8.67">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ExamFlow v12.8.66</title>
+    <title>ExamFlow v12.8.67</title>
 
     <script src="tailwind.js"></script>
     <script>
@@ -17,7 +17,7 @@
     <script src="jspdf.plugin.autotable.min.js"></script>
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
-    <script src="drive_sync.js?v=12.8.66"></script>
+    <script src="drive_sync.js?v=12.8.67"></script>
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 
@@ -217,7 +217,7 @@
                 </svg>
                 <div>
                     <h1 class="text-sm md:text-lg font-bold text-white leading-none">
-                        ExamFlow <span class="text-[10px] font-normal text-gray-400 ml-1">v12.8.66</span>
+                        ExamFlow <span class="text-[10px] font-normal text-gray-400 ml-1">v12.8.67</span>
                         <button onclick="openManualNewTab()" class="ml-1 bg-indigo-800 hover:bg-indigo-700 text-white p-1 rounded shadow-sm transition border border-indigo-600" title="Open User Manual">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 md:w-4 md:h-4">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
@@ -5677,8 +5677,61 @@
                         </div>
                     </div>
 
-                    <!-- === ORPHANED / STORAGE VAULT SESSIONS MODAL === -->
-                    <div id="orphaned-sessions-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-3 sm:p-5 transition-opacity">
+                    
+
+
+                </div>
+            </div>
+
+            <div>
+                <h4 class="text-xs font-extrabold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">Maintenance</h4>
+                <button id="btn-normalize-time" class="w-full bg-white border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-300 font-bold py-2 px-4 rounded-xl text-xs transition shadow-sm flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Fix/Normalize Time Formats
+                </button>
+            </div>
+
+            <div>
+                <h4 class="text-xs font-extrabold text-red-400 uppercase tracking-widest mb-3 border-b border-red-100 pb-1">Destructive Actions</h4>
+                
+                <div class="space-y-3">
+                    <button id="nuke-it-all-btn" class="group w-full relative overflow-hidden bg-white border-2 border-red-100 hover:border-red-500 text-red-600 rounded-xl p-4 text-left shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
+                        <div class="flex items-center gap-3 relative z-10">
+                            <div class="w-10 h-10 rounded-lg bg-red-50 text-red-500 flex items-center justify-center text-xl group-hover:bg-red-500 group-hover:text-white transition-colors">☢️</div>
+                            <div>
+                                <div class="font-bold text-gray-800 group-hover:text-red-600 transition-colors">Nuke It All (Master Reset)</div>
+                                <div class="text-[10px] text-gray-500">Wipes Local & Cloud Data. Total Annihilation.</div>
+                            </div>
+                        </div>
+                    </button>
+
+                    <button id="reset-student-data-button" class="group w-full relative overflow-hidden bg-white border-2 border-orange-100 hover:border-orange-400 text-orange-600 rounded-xl p-4 text-left shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
+                        <div class="flex items-center gap-3 relative z-10">
+                            <div class="w-10 h-10 rounded-lg bg-orange-50 text-orange-500 flex items-center justify-center text-xl group-hover:bg-orange-500 group-hover:text-white transition-colors">🧹</div>
+                            <div>
+                                <div class="font-bold text-gray-800 group-hover:text-orange-600 transition-colors">Reset Student Data Only</div>
+                                <div class="text-[10px] text-gray-500">Clears students & allotments. Keeps settings.</div>
+                            </div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+
+        
+</div>
+
+
+
+
+    
+
+        <!-- === ORPHANED / STORAGE VAULT SESSIONS MODAL === -->
+                    <div id="orphaned-sessions-modal" onclick="if(event.target === this) window.closeOrphanedSessionsModal()" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-3 sm:p-5 transition-opacity">
                         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh] animate-slide-up border border-gray-200">
                             <!-- Header -->
                             <div class="bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-600 p-4 shrink-0 flex justify-between items-center text-white">
@@ -5773,57 +5826,6 @@
                     </div>
                     <!-- ================================================= -->
 
-
-                </div>
-            </div>
-
-            <div>
-                <h4 class="text-xs font-extrabold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">Maintenance</h4>
-                <button id="btn-normalize-time" class="w-full bg-white border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-300 font-bold py-2 px-4 rounded-xl text-xs transition shadow-sm flex items-center justify-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Fix/Normalize Time Formats
-                </button>
-            </div>
-
-            <div>
-                <h4 class="text-xs font-extrabold text-red-400 uppercase tracking-widest mb-3 border-b border-red-100 pb-1">Destructive Actions</h4>
-                
-                <div class="space-y-3">
-                    <button id="nuke-it-all-btn" class="group w-full relative overflow-hidden bg-white border-2 border-red-100 hover:border-red-500 text-red-600 rounded-xl p-4 text-left shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
-                        <div class="flex items-center gap-3 relative z-10">
-                            <div class="w-10 h-10 rounded-lg bg-red-50 text-red-500 flex items-center justify-center text-xl group-hover:bg-red-500 group-hover:text-white transition-colors">☢️</div>
-                            <div>
-                                <div class="font-bold text-gray-800 group-hover:text-red-600 transition-colors">Nuke It All (Master Reset)</div>
-                                <div class="text-[10px] text-gray-500">Wipes Local & Cloud Data. Total Annihilation.</div>
-                            </div>
-                        </div>
-                    </button>
-
-                    <button id="reset-student-data-button" class="group w-full relative overflow-hidden bg-white border-2 border-orange-100 hover:border-orange-400 text-orange-600 rounded-xl p-4 text-left shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
-                        <div class="flex items-center gap-3 relative z-10">
-                            <div class="w-10 h-10 rounded-lg bg-orange-50 text-orange-500 flex items-center justify-center text-xl group-hover:bg-orange-500 group-hover:text-white transition-colors">🧹</div>
-                            <div>
-                                <div class="font-bold text-gray-800 group-hover:text-orange-600 transition-colors">Reset Student Data Only</div>
-                                <div class="text-[10px] text-gray-500">Clears students & allotments. Keeps settings.</div>
-                            </div>
-                        </div>
-                    </button>
-                </div>
-            </div>
-
-        </div>
-
-
-        
-</div>
-
-
-
-
-    
-
         <py-config class="hidden">
             packages = ["pandas", "pdfplumber==0.9.0"]
         </py-config>
@@ -5898,8 +5900,8 @@
     </div>
 </div>
 
-<script src="session_export.js?v=12.8.66"></script>
-<script src="app.js?v=12.8.66"></script>
+<script src="session_export.js?v=12.8.67"></script>
+<script src="app.js?v=12.8.67"></script>
 <script src="excel_extraction.js"></script>    
 <!-- Global Datalist for Searchable Parent Rooms -->
 <datalist id="parent-rooms-list"></datalist>
