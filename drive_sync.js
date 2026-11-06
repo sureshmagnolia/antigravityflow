@@ -20,7 +20,7 @@ const DATA_KEYS = [
       'invigDepartments', 'invigRoles', 'invigGlobalTarget',
       'invigGuestTarget', 'invigVacationTarget', 'invigVacationConfig',
       'invigDesignations', 'invigGoogleScriptUrl',
-      'examHistoricalMeta', 'examAllKnownSessions', 'lastUpdated'
+      'examHistoricalMeta', 'examAllKnownSessions', 'examDeletedSessions', 'lastUpdated'
   ];
 window.DATA_KEYS = DATA_KEYS; // Expose to app.js
 
@@ -1118,7 +1118,12 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
 
                     // CONFIG DATA (Staff, Rooms, Settings):
                     if (key === 'examRoomAllotment' && typeof val === 'object' && val !== null) {
+                        const tombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
                         for (const sk of Object.keys(val)) {
+                            if (tombstones[sk]) {
+                                delete val[sk]; // Strip tombstoned session
+                                continue;
+                            }
                             if (Array.isArray(val[sk]) && typeof window.saveRoomAllotmentIDB === 'function') {
                                 await window.saveRoomAllotmentIDB(sk, val[sk]);
                             }
@@ -1185,9 +1190,6 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
         localStorage.removeItem('examBaseData'); // Clean ghost legacy key
         // 🛡️ [REMOVED]: pendingDriveRestoreSync is no longer needed because cloud is now updated BEFORE refresh.
 
-        if (typeof window.autoHealOrphanedAllotmentSessions === 'function') {
-            await window.autoHealOrphanedAllotmentSessions();
-        }
         window.isDriveRestoringData = false;
         await UiModal.alert("Restore Successful", "✅ Restored & Synced successfully! Reloading to apply changes.");
         location.reload();

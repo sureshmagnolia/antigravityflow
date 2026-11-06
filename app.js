@@ -947,6 +947,7 @@ async function finalizeAppLoad() {
         if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
         if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
         if (typeof restoreActiveTab === 'function') restoreActiveTab();
+        if (typeof window.checkOrphanedSessionsBadge === 'function') window.checkOrphanedSessionsBadge();
     } catch (err) {
         console.warn("finalizeAppLoad warning:", err);
     }
@@ -2181,8 +2182,8 @@ window.recalcInvigSlots = async function () {
                 const fetchHeavyData = async () => {
             console.log("☁️ Fetching Data (Hybrid Mode)...");
 
-            // --- 🏠 SCR5 PATTERN: LOAD LOCAL DATA IMMEDIATELY (with Auto-Healing) ---
-            const localStudents = (typeof autoHealOrphanedAllotmentSessions === 'function') ? await autoHealOrphanedAllotmentSessions() : (await loadExamDataIDB() || []);
+            // --- 🏠 SCR5 PATTERN: LOAD LOCAL DATA IMMEDIATELY ---
+            const localStudents = await loadExamDataIDB() || [];
             if (localStudents.length > 0) {
                 allStudentData = localStudents;
                 console.log(`🏠 Local Students found: ${allStudentData.length}. Initializing UI...`);
@@ -2310,14 +2311,24 @@ window.recalcInvigSlots = async function () {
                         console.log(`📡 LIVE SYNC: Processing ${sessionSnap.size} session updates...`);
                         updateLoaderProgress(85, `Processing ${sessionSnap.size} active sessions...`);
                         
-                        const { getDoc } = window.firebase;
+                        const { getDoc, deleteDoc, doc } = window.firebase;
                         let missingStudentsPromises = [];
                         const localDB = await loadExamDataIDB() || [];
                         const localSessionHashes = JSON.parse(localStorage.getItem('examLocalSessionHashes') || '{}');
+                        const localTombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
 
                         sessionSnap.forEach(docSnap => {
                             const s = docSnap.data();
                             const sessionKey = `${s.date} | ${s.time}`;
+
+                            // 🛡️ TOMBSTONE GUARD: Skip and clean any cloud document that was explicitly deleted
+                            if (localTombstones[sessionKey]) {
+                                console.log(`🛡️ Skipping & purging tombstoned cloud session: ${sessionKey}`);
+                                try {
+                                    deleteDoc(doc(db, "colleges", collegeId, "sessions", docSnap.id)).catch(() => {});
+                                } catch(_) {}
+                                return;
+                            }
                             const examTimestamp = (s.meta && s.meta.timestamp) ? s.meta.timestamp : new Date(s.date.split('.').reverse().join('-')).getTime();
                             const isTodayOrFuture = examTimestamp >= midnightObj;
 
@@ -2548,6 +2559,26 @@ loadInitialData();
 };
 
 
+        // 🛡️ TOMBSTONES FETCHER: Pull cloud deletion tombstones to protect local state
+        window.fetchTombstoneData = async () => {
+            const cid = collegeId || window.currentCollegeId || localStorage.getItem('my_college_id');
+            if (!window.firebase || !cid) return;
+            try {
+                const { getDoc, doc } = window.firebase;
+                const snap = await getDoc(doc(db, "colleges", cid, "system_data", "tombstones"));
+                if (snap.exists() && snap.data().tombstones) {
+                    const cloudTombstones = snap.data().tombstones;
+                    const localTombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
+                    const merged = { ...localTombstones, ...cloudTombstones };
+                    localStorage.setItem('examDeletedSessions', JSON.stringify(merged));
+                    return merged;
+                }
+            } catch(e) {
+                console.warn("fetchTombstoneData warning:", e);
+            }
+            return JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
+        };
+
        (async () => {
         updateLoaderProgress(48, "Syncing staff & invigilation rosters...");
         try {
@@ -2556,7 +2587,8 @@ loadInitialData();
                 typeof fetchAllocationData === 'function' ? fetchAllocationData() : Promise.resolve(),
                 typeof fetchStaffData === 'function' ? fetchStaffData() : Promise.resolve(),
                 typeof fetchSlotsData === 'function' ? fetchSlotsData() : Promise.resolve(),
-                typeof loadGlobalScribeList === 'function' ? loadGlobalScribeList() : Promise.resolve()
+                typeof loadGlobalScribeList === 'function' ? loadGlobalScribeList() : Promise.resolve(),
+                typeof fetchTombstoneData === 'function' ? fetchTombstoneData() : Promise.resolve()
             ]);
         } catch (e) {
             console.warn("Pre-flight data sync error:", e);
@@ -2746,89 +2778,146 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
         });
     };
 
-async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
-    if (!currentCollegeId || !navigator.onLine) return;
-    
-    updateSyncStatus(`Deleting ${sessionKey}...`, "neutral");
-    // Added getDoc and setDoc to interface with the index document
-    const { db, doc, deleteDoc, getDoc, setDoc } = window.firebase;
-    const sessionId = generateSessionId(sessionKey);
-    
+// 🛡️ UNIVERSAL CASCADING PURGE: Purges session across Browser, Firebase Cloud, and Google Drive
+window.cascadeDeleteSession = async function(sessionKey, skipIndexUpdate = false) {
+    if (!sessionKey) return;
+    console.log(`🗑️ [Cascade Delete]: Executing universal purge for "${sessionKey}"...`);
+
+    // 1. TOMBSTONE REGISTRATION (Prevents any future resurrection from cloud, vault, or drive)
     try {
-        // 1. Delete main session from private admin area
-        await deleteDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId));
+        const tombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
+        tombstones[sessionKey] = {
+            deletedAt: Date.now(),
+            deletedBy: (currentUser && currentUser.email) || localStorage.getItem('last_user_email') || 'admin',
+            reason: 'explicit_deletion'
+        };
+        localStorage.setItem('examDeletedSessions', JSON.stringify(tombstones));
 
-        // --- 1b. [AUDIT FIX]: Delete associated student data (including chunks) ---
-        const studentDocRef = doc(db, 'colleges', currentCollegeId, 'session_students', sessionId);
-        const studentSnap = await getDoc(studentDocRef);
-        if (studentSnap.exists()) {
-            const sData = studentSnap.data();
-            if (sData.isChunked && sData.totalChunks) {
-                for (let i = 0; i < sData.totalChunks; i++) {
-                    await deleteDoc(doc(db, 'colleges', currentCollegeId, 'session_students', `${sessionId}_chunk_${i}`));
-                }
-            }
-            await deleteDoc(studentDocRef);
+        // Sync tombstone to cloud
+        const cid = window.currentCollegeId || (typeof currentCollegeId !== 'undefined' ? currentCollegeId : null) || localStorage.getItem('my_college_id');
+        if (cid && window.firebase && navigator.onLine) {
+            const { doc, setDoc } = window.firebase;
+            const tombRef = doc(window.firebase.db, 'colleges', cid, 'system_data', 'tombstones');
+            await setDoc(tombRef, { tombstones }, { merge: true }).catch(err => console.warn("Tombstone cloud sync warning:", err));
         }
-        
-        // --- 2. NEW: Delete from public seating index and chunk ---
-        const chunkId = `${currentCollegeId}_${sessionId}`;
-        await deleteDoc(doc(db, 'public_seating', chunkId)); // Deletes the heavy student list
-        
-        const indexRef = doc(db, 'public_seating', currentCollegeId);
-        const indexSnap = await getDoc(indexRef);
-        if (indexSnap.exists()) {
-            const data = indexSnap.data();
-            if (data.sessions && data.sessions[sessionKey]) {
-                delete data.sessions[sessionKey];
-                                if (skipIndexUpdate) {
-                    console.log(`⚡ Skipped Public Index Update for ${sessionKey} (Bulk Mode)`);
-                } else {
-                    await setDoc(indexRef, data); // Resave the cleaned index
-                }
-            }
-        }
-        // ---------------------------------------------------------
+    } catch(err) {
+        console.warn("Tombstone registration warning:", err);
+    }
 
-        // --- 3. NEW: Delete from Firebase Storage historical_sessions (Safe Guard) ---
-        try {
-            const { storage, ref, deleteObject } = window.firebase;
-            const dateStr = sessionKey.split(' | ')[0].trim();
-            
-            // 🛡️ [AUDIT FIX]: Only delete the archive if NO other sessions for this date exist in the registry.
-            // This prevents deleting the Morning archive if only the Afternoon session is being deleted.
-            const currentRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-            const sessionsForThisDate = currentRegistry.filter(sk => sk.startsWith(dateStr));
-            
-            if (sessionsForThisDate.length <= 1) { 
-                const storageRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateStr}.json`);
-                await deleteObject(storageRef).catch(() => {}); 
-                console.log(`🗑️ Deleted historical_sessions Storage file: ${dateStr}.json`);
-            }
-        } catch (storageErr) {
-            // File didn't exist in Storage — that's fine, nothing to delete
-        }
-        // ---------------------------------------------------------------
-        
-        // Purge from IndexedDB Allotment Vault so auto-heal does not resurrect it
+    // 2. LOCAL BROWSER PURGE (LocalStorage & IndexedDB)
+    try {
+        // A. Purge IndexedDB Allotment Vault
         if (typeof window.deleteRoomAllotmentIDB === 'function') {
             await window.deleteRoomAllotmentIDB(sessionKey);
         }
 
-        // Update the Master Registry to remove from all dropdowns
+        // B. Purge IndexedDB Scribe Vault
+        try {
+            const db = await openExamDB();
+            if (db.objectStoreNames.contains('scribeVault')) {
+                const tx = db.transaction('scribeVault', 'readwrite');
+                tx.objectStore('scribeVault').delete(sessionKey);
+            }
+            db.close();
+        } catch(e) {}
+
+        // C. Purge students from active memory and IndexedDB
+        const parts = sessionKey.split('|').map(x => (x || '').trim());
+        const dPart = parts[0] || '';
+        const tPart = parts[1] || '';
+        if (Array.isArray(allStudentData) && allStudentData.length > 0) {
+            allStudentData = allStudentData.filter(s => {
+                const sDate = (s.Date || '').trim();
+                const sTime = (s.Time || '').trim();
+                return !(sDate === dPart && sTime === tPart);
+            });
+            await saveExamDataIDB(allStudentData, true);
+        }
+
+        // D. Purge from LocalStorage JSON dictionaries
+        ['examRoomAllotment', 'examScribeAllotment', 'examAbsenteeList', 'examQPCodes', 'examInvigilatorMapping'].forEach(k => {
+            try {
+                const m = JSON.parse(localStorage.getItem(k) || '{}');
+                if (m && m[sessionKey]) {
+                    delete m[sessionKey];
+                    localStorage.setItem(k, JSON.stringify(m));
+                }
+            } catch(e) {}
+        });
+
+        // E. Purge from Master Known Sessions registry
         let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
         known = known.filter(k => k !== sessionKey);
         localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
         if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
-
-        updateSyncStatus("Deleted from Cloud", "success");
-
-    } catch (e) {
-
-        console.error("Session Delete Error:", e);
-        updateSyncStatus("Delete Failed", "error");
+    } catch (err) {
+        console.warn("Local cascade purge warning:", err);
     }
+
+    // 3. FIREBASE CLOUD PURGE (Firestore & Storage)
+    const cid = window.currentCollegeId || (typeof currentCollegeId !== 'undefined' ? currentCollegeId : null) || localStorage.getItem('my_college_id');
+    if (cid && window.firebase && navigator.onLine) {
+        try {
+            const { db, doc, deleteDoc, getDoc, setDoc, storage, ref, deleteObject } = window.firebase;
+            const sessionId = generateSessionId(sessionKey);
+
+            // A. Delete main session document
+            await deleteDoc(doc(db, 'colleges', cid, 'sessions', sessionId)).catch(() => {});
+
+            // B. Delete student documents and chunks
+            const studentDocRef = doc(db, 'colleges', cid, 'session_students', sessionId);
+            const studentSnap = await getDoc(studentDocRef).catch(() => null);
+            if (studentSnap && studentSnap.exists()) {
+                const sData = studentSnap.data();
+                if (sData.isChunked && sData.totalChunks) {
+                    for (let i = 0; i < sData.totalChunks; i++) {
+                        await deleteDoc(doc(db, 'colleges', cid, 'session_students', `${sessionId}_chunk_${i}`)).catch(() => {});
+                    }
+                }
+                await deleteDoc(studentDocRef).catch(() => {});
+            }
+
+            // C. Delete public seating
+            const chunkId = `${cid}_${sessionId}`;
+            await deleteDoc(doc(db, 'public_seating', chunkId)).catch(() => {});
+            const indexRef = doc(db, 'public_seating', cid);
+            const indexSnap = await getDoc(indexRef).catch(() => null);
+            if (indexSnap && indexSnap.exists()) {
+                const data = indexSnap.data();
+                if (data.sessions && data.sessions[sessionKey]) {
+                    delete data.sessions[sessionKey];
+                    if (!skipIndexUpdate) {
+                        await setDoc(indexRef, data).catch(() => {});
+                    }
+                }
+            }
+
+            // D. Delete Storage historical file if date has no other sessions
+            const dateStr = sessionKey.split(' | ')[0].trim();
+            const currentRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            const sessionsForThisDate = currentRegistry.filter(sk => sk.startsWith(dateStr));
+            if (sessionsForThisDate.length <= 1 && storage) {
+                const storageRef = ref(storage, `historical_sessions/${cid}/${dateStr}.json`);
+                await deleteObject(storageRef).catch(() => {});
+            }
+        } catch (err) {
+            console.warn("Cloud cascade purge warning:", err);
+        }
+    }
+
+    // 4. GOOGLE DRIVE SYNC PURGE
+    if (typeof window.triggerDriveAutoSync === 'function' && localStorage.getItem('isDriveConnected') === 'true') {
+        try { window.triggerDriveAutoSync(); } catch(e) {}
+    }
+
+    if (typeof updateSyncStatus === 'function') updateSyncStatus("Session Purged (All Tiers)", "success");
+};
+
+// Aliased so all existing delete callers execute full multi-tier cascade
+async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
+    await window.cascadeDeleteSession(sessionKey, skipIndexUpdate);
 }
+window.deleteSessionFromCloud = deleteSessionFromCloud;
 
     
 
@@ -19907,102 +19996,309 @@ window.handlePythonExtraction = async function (jsonString) {
         });
     }
 
-    // 🩹 AUTONOMOUS SELF-HEALING ENGINE (Vault-to-Roster Recovery)
-async function autoHealOrphanedAllotmentSessions() {
-    try {
-        let currentStudents = await loadExamDataIDB() || [];
-        const fullAllotments = (typeof window.getFullRoomAllotments === 'function')
-            ? await window.getFullRoomAllotments()
-            : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+    // ==========================================
+    // 🛡️ CONTROLLED STORAGE VAULT GOVERNANCE
+    // (Replaces blind auto-healing with explicit Admin inspection and control)
+    // ==========================================
 
-        if (!fullAllotments || typeof fullAllotments !== 'object') return currentStudents;
+    // Legacy no-op stub: ensures existing external calls never silently auto-resurrect
+    window.autoHealOrphanedAllotmentSessions = async function() {
+        return await loadExamDataIDB() || [];
+    };
 
-        const sessionKeys = Object.keys(fullAllotments);
-        if (sessionKeys.length === 0) return currentStudents;
+    // 1. Read-Only Detection: Finds unlinked sessions in vault without altering any state
+    window.detectOrphanedSessions = async function() {
+        try {
+            const fullAllotments = (typeof window.getFullRoomAllotments === 'function')
+                ? await window.getFullRoomAllotments()
+                : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
 
-        const studentSessionKeys = new Set(currentStudents.map(s => `${(s.Date || '').trim()} | ${(s.Time || '').trim()}`));
-        let knownRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-        const knownSet = new Set(knownRegistry);
+            if (!fullAllotments || typeof fullAllotments !== 'object') return [];
 
-        const existingStudentKeys = new Set(currentStudents.map(s => {
-            const d = (s.Date || '').trim();
-            const t = (s.Time || '').trim();
-            const r = (typeof getRegNo === 'function' ? getRegNo(s) : (s['Register Number'] || s.RegisterNo || '')).trim();
-            const c = (s.Course || '').trim();
-            return `${d}|${t}|${r}|${c}`.toUpperCase();
-        }));
+            const sessionKeys = Object.keys(fullAllotments);
+            if (sessionKeys.length === 0) return [];
 
-        let healedCount = 0;
-        let sessionsHealed = 0;
-        let knownSessionsAdded = 0;
+            const currentStudents = await loadExamDataIDB() || [];
+            const studentSessionKeys = new Set(currentStudents.map(s => `${(s.Date || '').trim()} | ${(s.Time || '').trim()}`));
+            const tombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
 
-        for (const sessionKey of sessionKeys) {
-            const rooms = fullAllotments[sessionKey];
-            if (!Array.isArray(rooms) || rooms.length === 0) continue;
+            const orphaned = [];
 
-            const totalSeated = rooms.reduce((acc, r) => acc + (r.students ? r.students.length : 0), 0);
-            if (totalSeated === 0) continue;
+            for (const sessionKey of sessionKeys) {
+                // If already active in student records or marked as deleted, ignore
+                if (studentSessionKeys.has(sessionKey)) continue;
+                if (tombstones[sessionKey]) continue;
 
-            const parts = sessionKey.split('|').map(x => x.trim());
-            if (parts.length < 2) continue;
-            const datePart = parts[0];
-            const timePart = parts[1];
+                const rooms = fullAllotments[sessionKey];
+                if (!Array.isArray(rooms) || rooms.length === 0) continue;
 
-            // If this session has 0 records in currentStudents, reconstruct from allotment rooms
-            if (!studentSessionKeys.has(sessionKey)) {
-                let sessionAdded = false;
-                rooms.forEach(r => {
-                    (r.students || []).forEach(s => {
-                        const reg = (typeof getRegNo === 'function' ? getRegNo(s) : (s['Register Number'] || s.RegisterNo || '')).trim();
-                        const course = (s.Course || '').trim();
-                        const dedupeKey = `${datePart}|${timePart}|${reg}|${course}`.toUpperCase();
+                const totalSeated = rooms.reduce((acc, r) => acc + (r.students ? r.students.length : 0), 0);
+                if (totalSeated === 0) continue;
 
-                        if (reg && !existingStudentKeys.has(dedupeKey)) {
-                            existingStudentKeys.add(dedupeKey);
-                            currentStudents.push({
-                                'Date': datePart,
-                                'Time': timePart,
-                                'Course': course,
-                                'Register Number': reg,
-                                'Name': s.Name || '',
-                                'Stream': s.Stream || r.stream || 'Regular',
-                                'Exam Name': s['Exam Name'] || s.examName || 'University Examination',
-                                'Source File': 'Auto-Healed from Allotment Vault'
-                            });
-                            healedCount++;
-                            sessionAdded = true;
-                        }
-                    });
+                const parts = sessionKey.split('|').map(x => x.trim());
+                const datePart = parts[0] || '';
+                const timePart = parts[1] || '';
+
+                orphaned.push({
+                    sessionKey,
+                    date: datePart,
+                    time: timePart,
+                    roomCount: rooms.length,
+                    studentCount: totalSeated,
+                    rooms: rooms
                 });
-
-                if (sessionAdded) {
-                    sessionsHealed++;
-                    studentSessionKeys.add(sessionKey);
-                }
             }
 
-            // Always ensure the session is registered in known sessions
+            return orphaned;
+        } catch(e) {
+            console.warn("detectOrphanedSessions warning:", e);
+            return [];
+        }
+    };
+
+    // 2. Notification Badge Updater
+    window.checkOrphanedSessionsBadge = async function() {
+        try {
+            const orphans = await window.detectOrphanedSessions();
+            const headerBadge = document.getElementById('btn-orphaned-badge');
+            const headerCount = document.getElementById('header-orphaned-count');
+            const sideBadge = document.getElementById('orphaned-count-badge');
+
+            if (orphans.length > 0) {
+                if (headerBadge) headerBadge.classList.remove('hidden');
+                if (headerCount) headerCount.textContent = `${orphans.length} Vault Sessions`;
+                if (sideBadge) {
+                    sideBadge.classList.remove('hidden');
+                    sideBadge.textContent = `${orphans.length} Found`;
+                }
+            } else {
+                if (headerBadge) headerBadge.classList.add('hidden');
+                if (sideBadge) sideBadge.classList.add('hidden');
+            }
+        } catch(e) {
+            console.warn("checkOrphanedSessionsBadge warning:", e);
+        }
+    };
+
+    // 3. Open Modal & Render Table
+    window.openOrphanedSessionsModal = async function() {
+        const modal = document.getElementById('orphaned-sessions-modal');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        await window.renderOrphanSessionsTable();
+    };
+
+    window.closeOrphanedSessionsModal = function() {
+        const modal = document.getElementById('orphaned-sessions-modal');
+        if (modal) modal.classList.add('hidden');
+    };
+
+    window._cachedOrphanSessions = [];
+
+    window.renderOrphanSessionsTable = async function(filterQuery = '') {
+        const tbody = document.getElementById('orphan-sessions-table-body');
+        const emptyNotice = document.getElementById('orphan-empty-notice');
+        const counter = document.getElementById('orphan-selected-counter');
+        const selectAllChk = document.getElementById('orphan-select-all');
+        if (!tbody) return;
+
+        const orphans = await window.detectOrphanedSessions();
+        window._cachedOrphanSessions = orphans;
+
+        const q = (filterQuery || '').trim().toLowerCase();
+        const filtered = orphans.filter(o => !q || o.sessionKey.toLowerCase().includes(q));
+
+        tbody.innerHTML = '';
+        if (selectAllChk) selectAllChk.checked = false;
+
+        if (filtered.length === 0) {
+            if (emptyNotice) emptyNotice.classList.remove('hidden');
+            if (counter) counter.textContent = '(0 of 0 selected)';
+            return;
+        }
+
+        if (emptyNotice) emptyNotice.classList.add('hidden');
+        if (counter) counter.textContent = `(0 of ${filtered.length} selected)`;
+
+        filtered.forEach(o => {
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-amber-50/50 transition-colors";
+            tr.innerHTML = `
+                <td class="w-10 px-3 py-2.5 text-center">
+                    <input type="checkbox" class="orphan-row-chk rounded border-gray-300 text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer" data-session="${o.sessionKey}" onchange="window.updateOrphanSelectionCount()">
+                </td>
+                <td class="px-3 py-2.5 font-bold text-gray-800">
+                    ${o.date} <span class="text-xs font-normal text-gray-500">| ${o.time}</span>
+                </td>
+                <td class="px-3 py-2.5 text-center text-gray-600 font-semibold">${o.roomCount}</td>
+                <td class="px-3 py-2.5 text-center">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                        ${o.studentCount} Candidates
+                    </span>
+                </td>
+                <td class="px-3 py-2.5 text-right">
+                    <button onclick="window.purgeSingleOrphanSession('${o.sessionKey}')" class="text-red-600 hover:text-red-800 font-bold hover:underline text-[11px] px-2 py-1">
+                        Purge
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    };
+
+    window.toggleSelectAllOrphans = function(checked) {
+        const checkboxes = document.querySelectorAll('.orphan-row-chk');
+        checkboxes.forEach(c => c.checked = checked);
+        window.updateOrphanSelectionCount();
+    };
+
+    window.updateOrphanSelectionCount = function() {
+        const all = document.querySelectorAll('.orphan-row-chk');
+        const checked = document.querySelectorAll('.orphan-row-chk:checked');
+        const counter = document.getElementById('orphan-selected-counter');
+        const selectAllChk = document.getElementById('orphan-select-all');
+        if (counter) counter.textContent = `(${checked.length} of ${all.length} selected)`;
+        if (selectAllChk && all.length > 0) selectAllChk.checked = (checked.length === all.length);
+    };
+
+    window.filterOrphanList = function(q) {
+        window.renderOrphanSessionsTable(q);
+    };
+
+    // 4. EXPLICIT RESTORE: Restores only selected sessions
+    window.restoreSelectedOrphanSessions = async function() {
+        const checkedBoxes = Array.from(document.querySelectorAll('.orphan-row-chk:checked'));
+        if (checkedBoxes.length === 0) {
+            return await UiModal.alert("No Sessions Selected", "Please check at least one session to restore.");
+        }
+
+        const selectedKeys = checkedBoxes.map(c => c.getAttribute('data-session'));
+        const confirmed = await UiModal.confirm(
+            "Restore Selected Sessions",
+            `Are you sure you want to restore ${selectedKeys.length} session(s) to your active student database?`
+        );
+        if (!confirmed) return;
+
+        let currentStudents = await loadExamDataIDB() || [];
+        let knownRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+        const knownSet = new Set(knownRegistry);
+        let restoredStudentsCount = 0;
+
+        for (const sessionKey of selectedKeys) {
+            const orphan = (window._cachedOrphanSessions || []).find(o => o.sessionKey === sessionKey);
+            if (!orphan) continue;
+
+            const datePart = orphan.date;
+            const timePart = orphan.time;
+
+            orphan.rooms.forEach(r => {
+                (r.students || []).forEach(s => {
+                    const reg = (typeof getRegNo === 'function' ? getRegNo(s) : (s['Register Number'] || s.RegisterNo || '')).trim();
+                    const course = (s.Course || '').trim();
+                    if (reg) {
+                        currentStudents.push({
+                            'Date': datePart,
+                            'Time': timePart,
+                            'Course': course,
+                            'Register Number': reg,
+                            'Name': s.Name || '',
+                            'Stream': s.Stream || r.stream || 'Regular',
+                            'Exam Name': s['Exam Name'] || s.examName || 'University Examination',
+                            'Source File': 'Explicitly Restored from Vault'
+                        });
+                        restoredStudentsCount++;
+                    }
+                });
+            });
+
             if (!knownSet.has(sessionKey)) {
                 knownSet.add(sessionKey);
                 knownRegistry.push(sessionKey);
             }
         }
 
-        if (healedCount > 0 || knownSessionsAdded > 0) {
-            console.log(`🩹 [Self-Healing Engine]: Automatically recovered ${healedCount} students across ${sessionsHealed} missing sessions from Allotment Vault!`);
-            await saveExamDataIDB(currentStudents, true);
-            localStorage.setItem('examAllKnownSessions', JSON.stringify(knownRegistry));
-            allStudentData = currentStudents;
-            return currentStudents;
+        await saveExamDataIDB(currentStudents, true);
+        localStorage.setItem('examAllKnownSessions', JSON.stringify(knownRegistry));
+        allStudentData = currentStudents;
+
+        if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+        if (typeof updateDashboard === 'function') updateDashboard();
+
+        // Push restored sessions to cloud if online
+        for (const sk of selectedKeys) {
+            if (typeof window.syncSessionToCloud === 'function') {
+                await window.syncSessionToCloud(sk).catch(() => {});
+            }
+        }
+        if (typeof window.syncDataToCloud === 'function') {
+            await window.syncDataToCloud('baseData').catch(() => {});
+        }
+        if (typeof window.triggerDriveAutoSync === 'function') {
+            try { window.triggerDriveAutoSync(); } catch(_) {}
         }
 
-        return currentStudents;
-    } catch (e) {
-        console.warn("Self-healing check warning:", e);
-        return await loadExamDataIDB() || [];
-    }
-}
-window.autoHealOrphanedAllotmentSessions = autoHealOrphanedAllotmentSessions;
+        await UiModal.alert("Restoration Complete", `✅ Successfully restored ${selectedKeys.length} session(s) (${restoredStudentsCount} candidates) into active records.`);
+        await window.renderOrphanSessionsTable();
+        await window.checkOrphanedSessionsBadge();
+    };
+
+    // 5. EXPLICIT PURGE: Purges checked sessions across Browser, Cloud, and Drive
+    window.purgeSelectedOrphanSessions = async function() {
+        const checkedBoxes = Array.from(document.querySelectorAll('.orphan-row-chk:checked'));
+        if (checkedBoxes.length === 0) {
+            return await UiModal.alert("No Sessions Selected", "Please check at least one session to purge.");
+        }
+
+        const selectedKeys = checkedBoxes.map(c => c.getAttribute('data-session'));
+        const confirmed = await UiModal.confirm(
+            "Permanent Universal Purge",
+            `⚠️ Are you sure you want to PERMANENTLY PURGE ${selectedKeys.length} session(s) from:\n\n• Browser IndexedDB (allotmentVault & scribeVault)\n• Firebase Cloud Database\n• Google Drive Backups\n\nThis will register tombstones and cannot be undone.`
+        );
+        if (!confirmed) return;
+
+        for (const sk of selectedKeys) {
+            await window.cascadeDeleteSession(sk);
+        }
+
+        await UiModal.alert("Purge Complete", `✅ Successfully purged ${selectedKeys.length} session(s) across all systems.`);
+        await window.renderOrphanSessionsTable();
+        await window.checkOrphanedSessionsBadge();
+    };
+
+    // 6. SINGLE PURGE
+    window.purgeSingleOrphanSession = async function(sessionKey) {
+        const confirmed = await UiModal.confirm(
+            "Permanent Purge",
+            `Permanently purge "${sessionKey}" across Browser, Firebase Cloud, and Google Drive?`
+        );
+        if (!confirmed) return;
+
+        await window.cascadeDeleteSession(sessionKey);
+        await window.renderOrphanSessionsTable();
+        await window.checkOrphanedSessionsBadge();
+    };
+
+    // 7. PURGE ALL UNLINKED
+    window.purgeAllOrphanSessions = async function() {
+        const orphans = window._cachedOrphanSessions || await window.detectOrphanedSessions();
+        if (orphans.length === 0) {
+            return await UiModal.alert("Vault Clean", "There are no unlinked historical sessions in storage.");
+        }
+
+        const confirmed = await UiModal.confirm(
+            "Purge All Unlinked Historical Data",
+            `⚠️ CRITICAL WARNING: This will permanently delete ALL ${orphans.length} unlinked historical sessions from:\n\n• Browser IndexedDB Storage\n• Firebase Cloud\n• Google Drive Backups\n\nProceed?`
+        );
+        if (!confirmed) return;
+
+        for (const o of orphans) {
+            await window.cascadeDeleteSession(o.sessionKey);
+        }
+
+        await UiModal.alert("All Purged", `✅ All ${orphans.length} unlinked sessions have been completely purged from all storage systems.`);
+        window.closeOrphanedSessionsModal();
+        await window.checkOrphanedSessionsBadge();
+    };
 
 // --- V65: Initial Data Load on Startup (Clean Version) ---
 async function loadInitialData() { 
@@ -20035,8 +20331,8 @@ async function loadInitialData() {
             if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
             // ******************************************************************************
             if (typeof initRemunerationModule === 'function') initRemunerationModule();
-            // 2. Check for base student data persistence (with Auto-Healing)
-            const savedData = (typeof autoHealOrphanedAllotmentSessions === 'function') ? await autoHealOrphanedAllotmentSessions() : (await loadExamDataIDB());
+            // 2. Check for base student data persistence
+            const savedData = await loadExamDataIDB();
 
     // 2. Check for base student data persistence in IndexedDB
     if (savedData && savedData.length > 0) {
@@ -26417,7 +26713,6 @@ if (displayLoc) {
                     // Check for student data key (IndexedDB)
                     if (key === 'examBaseData') {
                         try {
-                            if (typeof autoHealOrphanedAllotmentSessions === 'function') await autoHealOrphanedAllotmentSessions();
                             const idbData = await loadExamDataIDB();
                             if (idbData && idbData.length > 0) {
                                 backup[key] = idbData;
