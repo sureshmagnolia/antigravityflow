@@ -10817,6 +10817,9 @@ async function syncToPrintManager() {
         // 3. Show target view & activate button
         if (viewToShow) {
             viewToShow.classList.remove('hidden');
+            if (typeof window.checkOrphanedSessionsBadge === 'function') {
+                window.checkOrphanedSessionsBadge();
+            }
         }
 
         if (buttonToActivate) {
@@ -20056,23 +20059,39 @@ window.handlePythonExtraction = async function (jsonString) {
         }
     };
 
-    // 2. Notification Badge Updater
+    // 2. Notification Badge Updater: Updates Header, Dashboard Card, and Extractor Banner
     window.checkOrphanedSessionsBadge = async function() {
         try {
             const orphans = await window.detectOrphanedSessions();
-            const headerBadge = document.getElementById('btn-orphaned-badge');
-            const headerCount = document.getElementById('header-orphaned-count');
+            const headerPill = document.getElementById('header-orphaned-badge-pill');
+            const dashPill = document.getElementById('dash-vault-status-pill');
+            const extractorPill = document.getElementById('extractor-vault-status-pill');
             const sideBadge = document.getElementById('orphaned-count-badge');
 
             if (orphans.length > 0) {
-                if (headerBadge) headerBadge.classList.remove('hidden');
-                if (headerCount) headerCount.textContent = `${orphans.length} Vault Sessions`;
+                if (headerPill) {
+                    headerPill.classList.remove('hidden');
+                    headerPill.textContent = `${orphans.length}`;
+                }
+                if (dashPill) {
+                    dashPill.className = "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse";
+                    dashPill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> ${orphans.length} Unlinked Sessions Detected`;
+                }
+                if (extractorPill) {
+                    extractorPill.classList.remove('hidden');
+                    extractorPill.textContent = `${orphans.length} Unlinked`;
+                }
                 if (sideBadge) {
                     sideBadge.classList.remove('hidden');
                     sideBadge.textContent = `${orphans.length} Found`;
                 }
             } else {
-                if (headerBadge) headerBadge.classList.add('hidden');
+                if (headerPill) headerPill.classList.add('hidden');
+                if (dashPill) {
+                    dashPill.className = "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200";
+                    dashPill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Vault Clean (0 Unlinked)`;
+                }
+                if (extractorPill) extractorPill.classList.add('hidden');
                 if (sideBadge) sideBadge.classList.add('hidden');
             }
         } catch(e) {
