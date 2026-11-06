@@ -13292,10 +13292,207 @@ window.printAttendanceReport = function () {
 };
 
 // ==========================================
-// RESTORED: WEEKLY AUTO-ASSIGN & LOGS
+// FATIGUE RELAXATION HELPER (PREVIOUS WEEK 3+ DUTIES)
+// ==========================================
+function getPreviousWeekInfo(monthStr, weekNum, earliestDate) {
+    if (weekNum > 1) {
+        return {
+            weekKey: `${monthStr}-${weekNum - 1}`,
+            label: `${monthStr}, Week ${weekNum - 1}`
+        };
+    }
+    const refDate = earliestDate ? new Date(earliestDate) : new Date(`${monthStr} 01`);
+    refDate.setDate(refDate.getDate() - 7);
+    const prevMonthStr = refDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+    const prevWeekNum = (typeof getWeekOfMonth === 'function') ? getWeekOfMonth(refDate) : 1;
+    return {
+        weekKey: `${prevMonthStr}-${prevWeekNum}`,
+        label: `${prevMonthStr}, Week ${prevWeekNum}`
+    };
+}
+
+window.promptFatigueRelaxationModal = function promptFatigueRelaxationModal(fatiguedStaffList, currentWeekLabel, prevWeekLabel) {
+    return new Promise((resolve) => {
+        const existing = document.getElementById('fatigue-relaxation-modal');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'fatigue-relaxation-modal';
+        overlay.className = 'fixed inset-0 flex items-center justify-center p-3 sm:p-5';
+        overlay.style.cssText = 'position: fixed; inset: 0; z-index: 2147483640 !important; background-color: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);';
+
+        const rowsHtml = fatiguedStaffList.map((item, idx) => {
+            return `
+                <tr class="hover:bg-amber-50/50 transition-colors border-b border-gray-100">
+                    <td class="w-12 px-3 py-3 text-center">
+                        <input type="checkbox" id="fatigue-chk-${idx}" class="fatigue-staff-chk rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer" data-email="${item.email}" checked onchange="window.updateFatigueModalRowStatus(${idx})">
+                    </td>
+                    <td class="px-3 py-3 font-bold text-gray-800">
+                        <div class="text-xs font-bold text-gray-900">${item.name}</div>
+                        <div class="text-[10px] text-gray-500 font-normal">${item.dept || 'General'} ${item.designation ? '• ' + item.designation : ''}</div>
+                    </td>
+                    <td class="px-3 py-3 text-center">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                            ${item.prevDuties} duties
+                        </span>
+                    </td>
+                    <td class="px-3 py-3 text-center">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-900 border border-indigo-200">
+                            +${item.proposedThisWeek} proposed
+                        </span>
+                    </td>
+                    <td class="px-3 py-3 text-right" id="fatigue-status-${idx}">
+                        <span class="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                            ⚡ Allow Allotment
+                        </span>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        overlay.innerHTML = `
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] animate-slide-up border border-gray-200">
+                <!-- Header -->
+                <div class="bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-600 p-4 shrink-0 flex justify-between items-center text-white">
+                    <div class="flex items-center gap-2.5">
+                        <span class="bg-white/20 p-2 rounded-xl text-lg">⚠️</span>
+                        <div>
+                            <h3 class="text-base font-bold leading-tight">Previous Week Fatigue Alert &amp; Relaxation</h3>
+                            <p class="text-amber-100 text-xs">${currentWeekLabel} • Staff Workload Governance</p>
+                        </div>
+                    </div>
+                    <button id="btn-fatigue-close" class="text-white/80 hover:text-white hover:bg-white/20 p-1.5 rounded-full transition cursor-pointer">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Banner Explanation -->
+                <div class="bg-amber-50 border-b border-amber-200 px-5 py-3 text-xs text-amber-900 leading-relaxed shrink-0">
+                    <p class="font-bold text-amber-950 mb-1">
+                        Heavy Workload Detected:
+                    </p>
+                    <p>
+                        The following faculty completed <strong>3+ duties in the previous week</strong> (${prevWeekLabel}), and the system is proposing to allot additional duties to them in ${currentWeekLabel}.
+                    </p>
+                    <p class="mt-1.5 text-[11px] text-amber-800">
+                        • <strong>Uncheck</strong> any faculty to <strong>relax / rest</strong> them this week (system will re-route their duties to other eligible colleagues).<br>
+                        • <strong>Leave checked</strong> to allow further duties for them.
+                    </p>
+                </div>
+
+                <!-- Controls Bar -->
+                <div class="px-5 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2 shrink-0">
+                    <div class="flex items-center gap-2">
+                        <button type="button" id="btn-fatigue-relax-all" class="text-xs font-bold px-2.5 py-1 rounded bg-amber-100 text-amber-900 hover:bg-amber-200 transition border border-amber-300 cursor-pointer">
+                            🌿 Relax All (${fatiguedStaffList.length})
+                        </button>
+                        <button type="button" id="btn-fatigue-allow-all" class="text-xs font-medium px-2.5 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 transition cursor-pointer">
+                            ⚡ Allow All
+                        </button>
+                    </div>
+                    <div id="fatigue-summary-count" class="text-xs font-semibold text-gray-600">
+                        0 of ${fatiguedStaffList.length} relaxed
+                    </div>
+                </div>
+
+                <!-- Table Container -->
+                <div class="overflow-y-auto custom-scroll flex-1 p-5">
+                    <table class="min-w-full divide-y divide-gray-200 text-xs">
+                        <thead class="bg-gray-50 text-gray-600 font-bold uppercase tracking-wider">
+                            <tr>
+                                <th class="w-12 px-3 py-2 text-center">Allow?</th>
+                                <th class="px-3 py-2 text-left">Faculty Member</th>
+                                <th class="px-3 py-2 text-center">Prev Week</th>
+                                <th class="px-3 py-2 text-center">This Week</th>
+                                <th class="px-3 py-2 text-right">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 bg-white">
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Footer Actions -->
+                <div class="bg-gray-50 border-t border-gray-200 px-5 py-3.5 flex items-center justify-between gap-2 shrink-0">
+                    <button type="button" id="btn-fatigue-cancel" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="button" id="btn-fatigue-proceed" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer flex items-center gap-1.5">
+                        <span>⚡</span> Apply &amp; Run Auto-Assign
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        window.updateFatigueModalRowStatus = function(idx) {
+            const chk = document.getElementById(`fatigue-chk-${idx}`);
+            const statusCell = document.getElementById(`fatigue-status-${idx}`);
+            if (!chk || !statusCell) return;
+            if (chk.checked) {
+                statusCell.innerHTML = `<span class="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">⚡ Allow Allotment</span>`;
+            } else {
+                statusCell.innerHTML = `<span class="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">🌿 Relax (Exempt)</span>`;
+            }
+
+            const allChks = Array.from(document.querySelectorAll('.fatigue-staff-chk'));
+            const relaxedCount = allChks.filter(c => !c.checked).length;
+            const summary = document.getElementById('fatigue-summary-count');
+            if (summary) {
+                summary.textContent = `${relaxedCount} of ${allChks.length} relaxed`;
+            }
+        };
+
+        const cleanup = () => {
+            if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        };
+
+        document.getElementById('btn-fatigue-relax-all').onclick = () => {
+            document.querySelectorAll('.fatigue-staff-chk').forEach((c, idx) => {
+                c.checked = false;
+                window.updateFatigueModalRowStatus(idx);
+            });
+        };
+
+        document.getElementById('btn-fatigue-allow-all').onclick = () => {
+            document.querySelectorAll('.fatigue-staff-chk').forEach((c, idx) => {
+                c.checked = true;
+                window.updateFatigueModalRowStatus(idx);
+            });
+        };
+
+        document.getElementById('btn-fatigue-close').onclick = () => {
+            cleanup();
+            resolve(null);
+        };
+
+        document.getElementById('btn-fatigue-cancel').onclick = () => {
+            cleanup();
+            resolve(null);
+        };
+
+        document.getElementById('btn-fatigue-proceed').onclick = () => {
+            const relaxedEmails = new Set();
+            document.querySelectorAll('.fatigue-staff-chk').forEach(c => {
+                if (!c.checked) {
+                    relaxedEmails.add(c.getAttribute('data-email'));
+                }
+            });
+            cleanup();
+            resolve({ relaxedEmails });
+        };
+    });
+}
+
+// ==========================================
+// RESTORED: WEEKLY AUTO-ASSIGN & LOGS (WITH FATIGUE COOLDOWN)
 // ==========================================
 window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
-    if (!await UiModal.confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots (Admin Mode).\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 60% of a dept per session\n4. "Show Must Go On" - Rules break if necessary.`)) return;
+    if (!await UiModal.confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots (Admin Mode).\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 60% of a dept per session\n4. Fatigue Cooldown: Alert on staff with 3+ duties last week\n5. "Show Must Go On" - Rules break if necessary.`)) return;
 
     // --- V2.0 ENGINE CONFIGURATION ---
     const AUTO_ASSIGN_WEIGHTS = {
@@ -13309,7 +13506,6 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     // --- 1. CREATE SIMULATION SANDBOX ---
     // Deep clone to prevent mutating the UI until we are happy with the result
     const trialSlots = JSON.parse(JSON.stringify(invigilationSlots));
-    const modifiedKeys = new Set(); // Track exactly what we change
 
     const targetSlots = [];
     Object.keys(trialSlots).forEach(key => {
@@ -13372,7 +13568,6 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
         };
     });
 
-
     Object.keys(invigilationSlots).forEach(k => {
         const d = parseDate(k);
         const mStr = d.toLocaleString('default', { month: 'long', year: 'numeric' });
@@ -13387,143 +13582,245 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
         });
     });
 
-    const logEntries = [];
-    let assignedCount = 0;
+    // --- PREVIOUS WEEK FATIGUE AUDIT ---
+    const prevWeek = getPreviousWeekInfo(monthStr, weekNum, targetSlots[0].date);
+    const earliestDate = targetSlots[0].date;
+    const sevenDaysAgo = new Date(earliestDate);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    eligibleStaff.forEach(s => {
+        const pKeyDuties = s.weeklyLoad[prevWeek.weekKey] || 0;
+        let trailingDuties = 0;
+        Object.keys(invigilationSlots).forEach(k => {
+            const slotD = parseDate(k);
+            if (slotD >= sevenDaysAgo && slotD < earliestDate) {
+                if (invigilationSlots[k].assigned && invigilationSlots[k].assigned.includes(s.email)) {
+                    trailingDuties++;
+                }
+            }
+        });
+        s.prevWeekTotalDuties = Math.max(pKeyDuties, trailingDuties);
+    });
+
     const timestamp = new Date().toLocaleString();
 
-    for (const target of targetSlots) {
-        const { key, date, slot } = target;
-        const needed = slot.required - slot.assigned.length;
-        if (needed <= 0) continue;
+    // CORE SIMULATION ENGINE FUNCTION
+    const executeAssignmentEngine = (relaxedEmailSet = new Set()) => {
+        const runTrialSlots = JSON.parse(JSON.stringify(trialSlots));
+        const runModifiedKeys = new Set();
+        const runLogEntries = [];
+        let runAssignedCount = 0;
+        const staffWeeklyAllotted = {};
 
-        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const wNum = getWeekOfMonth(date);
-        const currentWeekKey = `${mStr}-${wNum}`;
-        const prevDate = new Date(date); prevDate.setDate(date.getDate() - 1);
-        const nextDate = new Date(date); nextDate.setDate(date.getDate() + 1);
+        const runStaff = eligibleStaff.map(s => ({
+            ...s,
+            regularPending: s.regularPending,
+            vacationPending: s.vacationPending,
+            weeklyLoad: { ...s.weeklyLoad }
+        }));
 
-        const slotDeptCounts = {};
-        slot.assigned.forEach(email => {
-            const s = staffData.find(st => st.email === email);
-            if (s && s.dept) slotDeptCounts[s.dept] = (slotDeptCounts[s.dept] || 0) + 1;
-        });
+        for (const target of targetSlots) {
+            const { key, date } = target;
+            const slot = runTrialSlots[key];
+            const needed = slot.required - slot.assigned.length;
+            if (needed <= 0) continue;
 
-        // Check if this specific slot is considered a Vacation duty
-        const slotIso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-        const isVacDate = isDateInVacation(date) || (window.vacationDutyDates && window.vacationDutyDates.includes(slotIso));
+            const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+            const wNum = getWeekOfMonth(date);
+            const currentWeekKey = `${mStr}-${wNum}`;
+            const prevDate = new Date(date); prevDate.setDate(date.getDate() - 1);
+            const nextDate = new Date(date); nextDate.setDate(date.getDate() + 1);
 
-        for (let i = 0; i < needed; i++) {
-            const candidates = eligibleStaff.map(s => {
-                let activePending = isVacDate ? s.vacationPending : s.regularPending;
-                let baseScore = Math.max(0, activePending) * AUTO_ASSIGN_WEIGHTS.BASE_MULTIPLIER;
-                let score = baseScore;
-                let warnings = [];
-                let reasoning = { base: baseScore, penalties: {} };
+            const slotDeptCounts = {};
+            slot.assigned.forEach(email => {
+                const s = staffData.find(st => st.email === email);
+                if (s && s.dept) slotDeptCounts[s.dept] = (slotDeptCounts[s.dept] || 0) + 1;
+            });
 
-                if (slot.assigned.includes(s.email) || isUserUnavailable(slot, s.email, key) || s.status === 'archived') return null;
+            // Check if this specific slot is considered a Vacation duty
+            const slotIso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            const isVacDate = isDateInVacation(date) || (window.vacationDutyDates && window.vacationDutyDates.includes(slotIso));
 
-                // --- 1. Weekly Soft Limit ---
-                const dutiesThisWeek = s.weeklyLoad[currentWeekKey] || 0;
-                if (dutiesThisWeek >= 3) { 
-                    score -= AUTO_ASSIGN_WEIGHTS.WEEKLY_LIMIT; 
-                    warnings.push("Max 3/wk"); 
-                    reasoning.penalties.weekly = -AUTO_ASSIGN_WEIGHTS.WEEKLY_LIMIT;
-                }
+            for (let i = 0; i < needed; i++) {
+                const candidates = runStaff.map(s => {
+                    let activePending = isVacDate ? s.vacationPending : s.regularPending;
+                    let baseScore = Math.max(0, activePending) * AUTO_ASSIGN_WEIGHTS.BASE_MULTIPLIER;
+                    let score = baseScore;
+                    let warnings = [];
+                    let reasoning = { base: baseScore, penalties: {} };
 
-                // --- 2. Same Day Rule ---
-                const sameDayKeys = targetSlots.filter(t => t.date.toDateString() === date.toDateString() && t.key !== key).map(t => t.key);
-                if (sameDayKeys.some(sdk => trialSlots[sdk].assigned.includes(s.email))) { 
-                    score -= AUTO_ASSIGN_WEIGHTS.SAME_DAY; 
-                    warnings.push("Same Day"); 
-                    reasoning.penalties.sameDay = -AUTO_ASSIGN_WEIGHTS.SAME_DAY;
-                }
+                    if (slot.assigned.includes(s.email) || isUserUnavailable(slot, s.email, key) || s.status === 'archived') return null;
 
-                // --- 3. Dept Saturation (Dynamic Check) ---
-                const dTotal = deptCounts[s.dept] || 0;
-                if (dTotal > 1 && (slotDeptCounts[s.dept] || 0) >= Math.ceil(dTotal * 0.6)) { 
-                    score -= AUTO_ASSIGN_WEIGHTS.DEPT_SATURATION; 
-                    warnings.push("Dept Saturation"); 
-                    reasoning.penalties.dept = -AUTO_ASSIGN_WEIGHTS.DEPT_SATURATION;
-                }
-
-                // --- 4. Adjacent Day Rule ---
-                let hasAdjacent = false;
-                targetSlots.forEach(t => {
-                    if ((t.date.toDateString() === prevDate.toDateString() || t.date.toDateString() === nextDate.toDateString()) && t.slot.assigned.includes(s.email)) {
-                        hasAdjacent = true;
+                    // --- FATIGUE RELAXATION PENALTY ---
+                    // If relaxed by admin, apply a massive penalty so all other eligible colleagues are chosen first!
+                    if (relaxedEmailSet.has(s.email)) {
+                        score -= 500000;
+                        warnings.push("Relaxed (Fatigue Cooldown)");
+                        reasoning.penalties.relaxed = -500000;
                     }
-                });
-                if (hasAdjacent) { 
-                    score -= AUTO_ASSIGN_WEIGHTS.ADJACENT_DAY; 
-                    warnings.push("Adjacent"); 
-                    reasoning.penalties.adjacent = -AUTO_ASSIGN_WEIGHTS.ADJACENT_DAY;
+
+                    // --- 1. Weekly Soft Limit ---
+                    const dutiesThisWeek = s.weeklyLoad[currentWeekKey] || 0;
+                    if (dutiesThisWeek >= 3) { 
+                        score -= AUTO_ASSIGN_WEIGHTS.WEEKLY_LIMIT; 
+                        warnings.push("Max 3/wk"); 
+                        reasoning.penalties.weekly = -AUTO_ASSIGN_WEIGHTS.WEEKLY_LIMIT;
+                    }
+
+                    // --- 2. Same Day Rule ---
+                    const sameDayKeys = targetSlots.filter(t => t.date.toDateString() === date.toDateString() && t.key !== key).map(t => t.key);
+                    if (sameDayKeys.some(sdk => runTrialSlots[sdk].assigned.includes(s.email))) { 
+                        score -= AUTO_ASSIGN_WEIGHTS.SAME_DAY; 
+                        warnings.push("Same Day"); 
+                        reasoning.penalties.sameDay = -AUTO_ASSIGN_WEIGHTS.SAME_DAY;
+                    }
+
+                    // --- 3. Dept Saturation (Dynamic Check) ---
+                    const dTotal = deptCounts[s.dept] || 0;
+                    if (dTotal > 1 && (slotDeptCounts[s.dept] || 0) >= Math.ceil(dTotal * 0.6)) { 
+                        score -= AUTO_ASSIGN_WEIGHTS.DEPT_SATURATION; 
+                        warnings.push("Dept Saturation"); 
+                        reasoning.penalties.dept = -AUTO_ASSIGN_WEIGHTS.DEPT_SATURATION;
+                    }
+
+                    // --- 4. Adjacent Day Rule ---
+                    let hasAdjacent = false;
+                    targetSlots.forEach(t => {
+                        if ((t.date.toDateString() === prevDate.toDateString() || t.date.toDateString() === nextDate.toDateString()) && t.slot.assigned.includes(s.email)) {
+                            hasAdjacent = true;
+                        }
+                    });
+                    if (hasAdjacent) { 
+                        score -= AUTO_ASSIGN_WEIGHTS.ADJACENT_DAY; 
+                        warnings.push("Adjacent"); 
+                        reasoning.penalties.adjacent = -AUTO_ASSIGN_WEIGHTS.ADJACENT_DAY;
+                    }
+
+                    return { staff: s, score, warnings, reasoning };
+                }).filter(c => c !== null);
+
+                candidates.sort((a, b) => b.score - a.score);
+
+                if (candidates.length > 0) {
+                    const choice = candidates[0];
+                    slot.assigned.push(choice.staff.email);
+                    if (isVacDate) choice.staff.vacationPending--;
+                    else choice.staff.regularPending--;
+
+                    if (!choice.staff.weeklyLoad[currentWeekKey]) choice.staff.weeklyLoad[currentWeekKey] = 0;
+                    choice.staff.weeklyLoad[currentWeekKey]++;
+                    slotDeptCounts[choice.staff.dept] = (slotDeptCounts[choice.staff.dept] || 0) + 1;
+                    runAssignedCount++;
+                    runModifiedKeys.add(key);
+
+                    staffWeeklyAllotted[choice.staff.email] = (staffWeeklyAllotted[choice.staff.email] || 0) + 1;
+
+                    // Generate Traceable Log
+                    const penaltyStr = Object.entries(choice.reasoning.penalties).map(([k,v]) => `${k}:${v}`).join(', ');
+                    const debugInfo = penaltyStr ? `(Base: ${choice.reasoning.base} | ${penaltyStr})` : `(Base: ${choice.reasoning.base})`;
+
+                    let logEntry = `<div class="text-xs border-b border-gray-100 pb-1 mb-1">
+                        <span class="text-green-700 font-bold">Auto-Assigned:</span> <b>${choice.staff.name}</b> 
+                        <span class="text-gray-500 font-mono text-[9px] ml-1">${debugInfo}</span>
+                        ${choice.warnings.length > 0 ? `<span class="text-red-500 text-[10px] ml-1 font-bold">[BREACH: ${choice.warnings.join(', ')}]</span>` : ""}
+                    </div>`;
+                    
+                    const skipped = candidates.slice(1, 4);
+                    if (skipped.length > 0) {
+                        logEntry += `<div class="text-[10px] text-gray-500 ml-2 mb-2 leading-tight"><b>Skipped:</b> ` + skipped.map(s => `${s.staff.name} (${s.score})`).join(', ') + `</div>`;
+                    }
+
+                    if (!slot.allocationLog) slot.allocationLog = `<div class="mb-2 pb-2 border-b"><div class="font-bold text-indigo-700">⚙️ Auto-Assign V2 (${timestamp})</div></div>`;
+                    slot.allocationLog += logEntry;
+
+                    if (choice.warnings.length > 0) runLogEntries.push({ type: "WARN", msg: `Assigned ${choice.staff.name} to ${key}. Breached: ${choice.warnings.join(", ")}` });
                 }
-
-                return { staff: s, score, warnings, reasoning };
-            }).filter(c => c !== null);
-
-            candidates.sort((a, b) => b.score - a.score);
-
-            if (candidates.length > 0) {
-                const choice = candidates[0];
-                slot.assigned.push(choice.staff.email);
-                if (isVacDate) choice.staff.vacationPending--;
-                else choice.staff.regularPending--;
-
-                if (!choice.staff.weeklyLoad[currentWeekKey]) choice.staff.weeklyLoad[currentWeekKey] = 0;
-                choice.staff.weeklyLoad[currentWeekKey]++;
-                slotDeptCounts[choice.staff.dept] = (slotDeptCounts[choice.staff.dept] || 0) + 1;
-                assignedCount++;
-                modifiedKeys.add(key); // Track that we altered this slot
-
-                // Generate Traceable Log
-                const penaltyStr = Object.entries(choice.reasoning.penalties).map(([k,v]) => `${k}:${v}`).join(', ');
-                const debugInfo = penaltyStr ? `(Base: ${choice.reasoning.base} | ${penaltyStr})` : `(Base: ${choice.reasoning.base})`;
-
-                let logEntry = `<div class="text-xs border-b border-gray-100 pb-1 mb-1">
-                    <span class="text-green-700 font-bold">Auto-Assigned:</span> <b>${choice.staff.name}</b> 
-                    <span class="text-gray-500 font-mono text-[9px] ml-1">${debugInfo}</span>
-                    ${choice.warnings.length > 0 ? `<span class="text-red-500 text-[10px] ml-1 font-bold">[BREACH: ${choice.warnings.join(', ')}]</span>` : ""}
-                </div>`;
-                
-                const skipped = candidates.slice(1, 4);
-                if (skipped.length > 0) {
-                    logEntry += `<div class="text-[10px] text-gray-500 ml-2 mb-2 leading-tight"><b>Skipped:</b> ` + skipped.map(s => `${s.staff.name} (${s.score})`).join(', ') + `</div>`;
-                }
-
-                if (!slot.allocationLog) slot.allocationLog = `<div class="mb-2 pb-2 border-b"><div class="font-bold text-indigo-700">⚙️ Auto-Assign V2 (${timestamp})</div></div>`;
-                slot.allocationLog += logEntry;
-
-                if (choice.warnings.length > 0) logEntries.push({ type: "WARN", msg: `Assigned ${choice.staff.name} to ${key}. Breached: ${choice.warnings.join(", ")}` });
             }
+        }
+
+        return {
+            trialSlots: runTrialSlots,
+            modifiedKeys: runModifiedKeys,
+            logEntries: runLogEntries,
+            assignedCount: runAssignedCount,
+            staffWeeklyAllotted
+        };
+    };
+
+    // Step 1: Run unconstrained trial simulation pass
+    const initialRun = executeAssignmentEngine(new Set());
+
+    // Step 2: Check for fatigued staff who are slated to receive duties
+    const fatiguedStaffToAlert = [];
+    eligibleStaff.forEach(s => {
+        if (s.prevWeekTotalDuties >= 3) {
+            const proposed = initialRun.staffWeeklyAllotted[s.email] || 0;
+            if (proposed > 0) {
+                fatiguedStaffToAlert.push({
+                    name: s.name,
+                    dept: s.dept || 'General',
+                    designation: s.designation || '',
+                    email: s.email,
+                    prevDuties: s.prevWeekTotalDuties,
+                    proposedThisWeek: proposed
+                });
+            }
+        }
+    });
+
+    let finalRun = initialRun;
+    let relaxedStaffCount = 0;
+
+    // Step 3: If fatigued staff are slated for duties, alert admin with interactive modal
+    if (fatiguedStaffToAlert.length > 0) {
+        const decision = await promptFatigueRelaxationModal(
+            fatiguedStaffToAlert,
+            `${monthStr}, Week ${weekNum}`,
+            prevWeek.label
+        );
+
+        // If admin clicked Cancel on the modal, abort cleanly!
+        if (!decision) {
+            console.log("⚡ Auto-Assign cancelled by admin during Fatigue Review.");
+            return;
+        }
+
+        // If admin chose to relax any staff, re-run allocation with relaxed staff excluded
+        if (decision.relaxedEmails && decision.relaxedEmails.size > 0) {
+            relaxedStaffCount = decision.relaxedEmails.size;
+            finalRun = executeAssignmentEngine(decision.relaxedEmails);
         }
     }
 
     // --- FINAL VERIFICATION & COMMIT ---
-    if (assignedCount === 0) {
+    if (finalRun.assignedCount === 0) {
         return await UiModal.alert("⚠️ Auto-Assign Finished, but no positions could be filled (or all targets were already met).");
     }
 
     // Merge Sandbox Back to Reality
-    modifiedKeys.forEach(k => {
-        invigilationSlots[k] = trialSlots[k];
+    finalRun.modifiedKeys.forEach(k => {
+        invigilationSlots[k] = finalRun.trialSlots[k];
     });
 
-    if (logEntries.length > 0) {
+    if (finalRun.logEntries.length > 0) {
         const logRef = doc(db, "colleges", currentCollegeId);
-        const newLogs = logEntries.map(e => `[${timestamp}] ${e.type}: ${e.msg}`);
+        const newLogs = finalRun.logEntries.map(e => `[${timestamp}] ${e.type}: ${e.msg}`);
         try { await updateDoc(logRef, { autoAssignLogs: arrayUnion(...newLogs) }); } catch (e) { }
     }
 
-    if (typeof logActivity === 'function') logActivity("Auto-Assign Week", `V2 Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
+    if (typeof logActivity === 'function') logActivity("Auto-Assign Week", `V2 Run for ${monthStr} Week ${weekNum}. Filled ${finalRun.assignedCount} slots.`);
     
     // SURGICAL SYNC: Instead of FORCE_OVERWRITE, we rely on the standard sync function
     // which intelligently merges local changes with the cloud.
     await syncSlotsToCloud(); 
     renderSlotsGridAdmin();
 
-    let alertMsg = `✅ Auto-Assign V2 Complete!\nFilled ${assignedCount} positions across ${modifiedKeys.size} sessions.`;
-    if (logEntries.length > 0) alertMsg += `\n\n⚠️ ${logEntries.length} constraint warnings generated. Check Admin Logs.`;
+    let alertMsg = `✅ Auto-Assign V2 Complete!\nFilled ${finalRun.assignedCount} positions across ${finalRun.modifiedKeys.size} sessions.`;
+    if (relaxedStaffCount > 0) {
+        alertMsg += `\n\n🌿 ${relaxedStaffCount} faculty member(s) with 3+ duties in the previous week were relaxed and rested for this week.`;
+    }
+    if (finalRun.logEntries.length > 0) alertMsg += `\n\n⚠️ ${finalRun.logEntries.length} constraint warnings generated. Check Admin Logs.`;
     await UiModal.alert(alertMsg);
 };
 
