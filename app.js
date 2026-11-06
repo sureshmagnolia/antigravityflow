@@ -2835,11 +2835,18 @@ window.cascadeDeleteSession = async function(sessionKey, skipIndexUpdate = false
         }
 
         // D. Purge from LocalStorage JSON dictionaries
-        ['examRoomAllotment', 'examScribeAllotment', 'examAbsenteeList', 'examQPCodes', 'examInvigilatorMapping'].forEach(k => {
+        const skClean = sessionKey.replace(/\s+/g, ' ').trim();
+        const skNoSpace = sessionKey.replace(/\s*\|\s*/g, '|').trim();
+        const skWithSpace = skNoSpace.replace('|', ' | ');
+
+        ['examRoomAllotment', 'examScribeAllotment', 'examAbsenteeList', 'examQPCodes', 'examInvigilatorMapping', 'examHistoricalMeta', 'examInvigilationSlots'].forEach(k => {
             try {
                 const m = JSON.parse(localStorage.getItem(k) || '{}');
-                if (m && m[sessionKey]) {
+                if (m) {
                     delete m[sessionKey];
+                    delete m[skClean];
+                    delete m[skNoSpace];
+                    delete m[skWithSpace];
                     localStorage.setItem(k, JSON.stringify(m));
                 }
             } catch(e) {}
@@ -2847,9 +2854,10 @@ window.cascadeDeleteSession = async function(sessionKey, skipIndexUpdate = false
 
         // E. Purge from Master Known Sessions registry
         let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-        known = known.filter(k => k !== sessionKey);
+        known = known.filter(k => k !== sessionKey && k !== skClean && k !== skNoSpace && k !== skWithSpace);
         localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
         if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+        if (typeof renderCalendar === 'function') renderCalendar();
     } catch (err) {
         console.warn("Local cascade purge warning:", err);
     }
@@ -6989,14 +6997,66 @@ if (toggleButton && sidebar) {
 
         const monthData = {};
 
-        // --- 📡 NEW: Scan Metadata Registry for Historical Sessions ---
+        // --- 📡 Authoritative Session Sources & Tombstone Filter ---
+        const tombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
+        const isTombstoned = (sk) => {
+            if (!sk) return false;
+            if (tombstones[sk]) return true;
+            const clean = sk.replace(/\s+/g, ' ').trim();
+            if (tombstones[clean]) return true;
+            const noSpace = sk.replace(/\s*\|\s*/g, '|').trim();
+            if (tombstones[noSpace]) return true;
+            const withSpace = noSpace.replace('|', ' | ');
+            if (tombstones[withSpace]) return true;
+            return false;
+        };
+
         const registryRaw = localStorage.getItem('examAllKnownSessions');
+        const knownRegistry = JSON.parse(registryRaw || '[]');
         const historicalMeta = JSON.parse(localStorage.getItem('examHistoricalMeta') || '{}');
         const activeSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
         const activeAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
 
+        // Collect all legitimate sessions currently in live student database
+        const liveStudentSessions = new Set();
+        if (allStudentData && allStudentData.length > 0) {
+            allStudentData.forEach(s => {
+                if (!s.Date || !s.Time) return;
+                const d = s.Date.trim();
+                const t = s.Time.trim();
+                liveStudentSessions.add(`${d} | ${t}`);
+            });
+        }
+
+        // Build a Set of all known legitimate sessions (Live + Master Registry, strictly excluding tombstones)
+        const validSessionsSet = new Set();
+        liveStudentSessions.forEach(sk => {
+            if (!isTombstoned(sk)) validSessionsSet.add(sk);
+        });
+        knownRegistry.forEach(sk => {
+            if (!isTombstoned(sk)) validSessionsSet.add(sk);
+        });
+
+        // 🛡️ Auto-clean stale ghosts from historicalMeta so deleted dates never linger
+        let metaCleaned = false;
+        Object.keys(historicalMeta).forEach(key => {
+            if (isTombstoned(key) || !validSessionsSet.has(key)) {
+                delete historicalMeta[key];
+                metaCleaned = true;
+            }
+        });
+        if (metaCleaned) {
+            try { localStorage.setItem('examHistoricalMeta', JSON.stringify(historicalMeta)); } catch(e) {}
+        }
+
+        const targetMonthStr = String(month + 1).padStart(2, '0');
+        const targetYearStr = String(year);
+
         const registerSessionInMonth = (sessionKey) => {
             if (!sessionKey || !sessionKey.includes('|')) return;
+            if (isTombstoned(sessionKey)) return;
+            if (!validSessionsSet.has(sessionKey)) return; // 🛡️ Must exist in valid active/known sessions!
+
             const [dateRaw, timeRaw] = sessionKey.split('|').map(s => s.trim());
             if (!dateRaw || !timeRaw) return;
             const dParts = dateRaw.split(/[./-]/);
@@ -7045,17 +7105,8 @@ if (toggleButton && sidebar) {
             }
         };
 
-        const targetMonthStr = String(month + 1).padStart(2, '0');
-        const targetYearStr = String(year);
-
-        if (registryRaw) {
-            const registry = JSON.parse(registryRaw);
-            registry.forEach(registerSessionInMonth);
-        }
-
-        // Also scan slots and historicalMeta for any valid session of this month
-        Object.keys(historicalMeta).forEach(registerSessionInMonth);
-        Object.keys(activeSlots).forEach(registerSessionInMonth);
+        // Scan only valid sessions that exist in active student data or master registry
+        validSessionsSet.forEach(registerSessionInMonth);
 
         // Keep your existing allStudentData scan (Authoritative live data)...
         if (allStudentData && allStudentData.length > 0) {
@@ -7269,6 +7320,13 @@ let html = "";
 
     // Add initialization call to your existing loadInitialData or updateDashboard
     // For now, we'll trigger it once the DOM is ready in app.js logic
+    // Expose calendar and dashboard functions globally for external events and testing
+    window.renderCalendar = renderCalendar;
+    window.initCalendar = initCalendar;
+    window.updateDashboard = updateDashboard;
+    window.getCurrentCalDate = () => currentCalDate;
+    window.setCurrentCalDate = (d) => { currentCalDate = d; renderCalendar(); };
+
     setTimeout(initCalendar, 1000);
 
     // --- Helper: Update the Specific Date Grid ---
@@ -21742,8 +21800,16 @@ function updateSessionOpsLockUI() {
                 await deleteKeyInStorage('examScribeAllotment');
                 await deleteKeyInStorage('examAbsenteeList');
                 await deleteKeyInStorage('examInvigilatorMapping');
-                // 🛡️ [FIX]: Do not delete examInvigilationSlots from app.js
                 await deleteKeyInStorage('examQPCodes');
+                await deleteKeyInStorage('examHistoricalMeta');
+                await deleteKeyInStorage('examInvigilationSlots');
+
+                // Register tombstone
+                try {
+                    const tombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
+                    tombstones[currentSession] = { deletedAt: Date.now(), reason: 'session_delete' };
+                    localStorage.setItem('examDeletedSessions', JSON.stringify(tombstones));
+                } catch(e) {}
 
                 // Remove from Master Known Sessions Registry
                 let knownSess = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
@@ -29447,7 +29513,9 @@ window.executeBulkDelete = async function() {
                 'examScribeAllotment',
                 'examAbsenteeList',
                 'examQPCodes',
-                'examInvigilatorMapping'
+                'examInvigilatorMapping',
+                'examHistoricalMeta',
+                'examInvigilationSlots'
             ];
             
             auxKeys.forEach(key => {
