@@ -529,12 +529,22 @@ window.updateLoaderProgress = function(percent, message) {
     const percentText = document.getElementById('loader-percentage');
     const msgElement = document.getElementById('loader-message');
     
-    // Stop the chaotic text interval if it's still running
-    if (window.loaderMessageInterval) clearInterval(window.loaderMessageInterval);
+    // Cancel legacy joke interval if active
+    if (window.loaderMessageInterval) {
+        clearInterval(window.loaderMessageInterval);
+        window.loaderMessageInterval = null;
+    }
     
-    if (progressBar) progressBar.style.width = `${percent}%`;
-    if (percentText) percentText.textContent = `${percent}%`;
-    if (msgElement && message) msgElement.textContent = message;
+    if (typeof percent === 'number') {
+        const cur = window._currentLoaderProgress || 0;
+        const target = Math.max(cur, Math.min(100, Math.round(percent)));
+        window._currentLoaderProgress = target;
+        if (progressBar) progressBar.style.width = `${target}%`;
+        if (percentText) percentText.textContent = `${target}%`;
+    }
+    if (msgElement && message) {
+        msgElement.textContent = message;
+    }
 };
 
 function clear_csv_upload_status() {
@@ -896,28 +906,53 @@ async function autoCleanPastGhostData() {
 function dismissLoader() {
     updateLoaderProgress(100, "Ready!");
     const loader = document.getElementById('initial-app-loader');
-    const msgInterval = window.loaderMessageInterval; // Get the interval ID if defined
+    if (window._loaderSafetyTimer) {
+        clearTimeout(window._loaderSafetyTimer);
+        window._loaderSafetyTimer = null;
+    }
+    if (window.loaderMessageInterval) {
+        clearInterval(window.loaderMessageInterval);
+        window.loaderMessageInterval = null;
+    }
 
-    if (msgInterval) clearInterval(msgInterval); // Stop the funny message timer
-
-    if (loader) {
-        loader.style.opacity = '0';
-        // Delay removal for CSS transition
-        setTimeout(() => { loader.remove(); }, 500);
+    if (loader && !window._loaderIsDismissing) {
+        window._loaderIsDismissing = true;
+        // Brief 250ms dwell at 100% so user perceives completion
+        setTimeout(() => {
+            loader.style.opacity = '0';
+            setTimeout(() => { 
+                try { loader.remove(); } catch(e) {}
+            }, 500);
+        }, 250);
     }
 }
 
-// Single function called when data is local, from cloud, or auth fails
+// Unified, robust finalizeAppLoad
 async function finalizeAppLoad() {
-    await migrateFromLocalStorage(); // Add this line!
-    if (typeof compactRoomAllotmentsInStorage === 'function') compactRoomAllotmentsInStorage();
-    if (typeof initTwoTierStorageShield === 'function') await initTwoTierStorageShield();
-    if (typeof updateDashboard === 'function') updateDashboard();
-    if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
-    if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-    if (typeof restoreActiveTab === 'function') restoreActiveTab(); // Restore last view
-    dismissLoader(); // Safely remove the loader once all is done
+    if (window._isAppFinalized) return;
+    window._isAppFinalized = true;
+
+    if (window._loaderSafetyTimer) {
+        clearTimeout(window._loaderSafetyTimer);
+        window._loaderSafetyTimer = null;
+    }
+
+    updateLoaderProgress(95, "Finalizing workspace...");
+    try {
+        if (typeof migrateFromLocalStorage === 'function') await migrateFromLocalStorage();
+        if (typeof compactRoomAllotmentsInStorage === 'function') compactRoomAllotmentsInStorage();
+        if (typeof initTwoTierStorageShield === 'function') await initTwoTierStorageShield();
+        if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+        if (typeof updateDashboard === 'function') updateDashboard();
+        if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
+        if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
+        if (typeof restoreActiveTab === 'function') restoreActiveTab();
+    } catch (err) {
+        console.warn("finalizeAppLoad warning:", err);
+    }
+    dismissLoader();
 }
+window.finalizeAppLoad = finalizeAppLoad;
 
 let currentUser = null;
 window.isAppInitializing = true;
@@ -961,57 +996,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof compactRoomAllotmentsInStorage === 'function') compactRoomAllotmentsInStorage();
     if (typeof initTwoTierStorageShield === 'function') initTwoTierStorageShield();
     if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns(); // <--- ADD THIS LINE
-    // --- LOADER ANIMATION LOGIC (New) ---
-    const loaderMessages = [
-        "Summoning the Exam Spirits... 👻",
-        "Convincing the server to cooperate... 🤖",
-        "Counting the students... (again) 🧐",
-        "Finding the missing QP Codes... 🔍",
-        "Waking up the Chief Superintendent... ☕",
-        "Aligning the planets for seating... 🪐",
-        "Loading faster than campus Wi-Fi... 🚀"
-    ];
+    // 🛡️ REAL-STATUS INITIAL LOADER
+    updateLoaderProgress(10, "Loading local configuration & settings...");
 
-    // Start the cycle immediately and save ID to window
-    const loaderMsgElement = document.getElementById('loader-message');
-    let loaderMsgIndex = 0;
-
-    if (loaderMsgElement) {
-        window.loaderMessageInterval = setInterval(() => {
-            loaderMsgIndex = (loaderMsgIndex + 1) % loaderMessages.length;
-            loaderMsgElement.textContent = loaderMessages[loaderMsgIndex];
-        }, 800); // Change message every 800ms
-    }
-
-    // Ensure this function exists to stop it later
-    window.finalizeAppLoad = function () {
-        // Cancel the safety timer since we loaded successfully  ← NEW LINE
-        if (window._loaderSafetyTimer) clearTimeout(window._loaderSafetyTimer); 
-        // 1. Run UI Updates
-        if (typeof updateDashboard === 'function') updateDashboard();
-        if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
-        if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-        if (typeof restoreActiveTab === 'function') restoreActiveTab();
-
-        // 2. Stop Animation & Remove Loader
-        if (window.loaderMessageInterval) clearInterval(window.loaderMessageInterval);
-
-        const loader = document.getElementById('initial-app-loader');
-        if (loader) {
-            loader.style.opacity = '0';
-            setTimeout(() => { loader.remove(); }, 500);
-        }
-    };
-    // --- SAFETY TIMEOUT: Force-dismiss loader after 12 seconds on all browsers ---
+    // --- SAFETY TIMEOUT: Gracefully finalize app if network or scripts stall ---
     window._loaderSafetyTimer = setTimeout(function() {
-        const loader = document.getElementById('initial-app-loader');
-        if (loader) {
-            console.warn('⚠️ Loader safety timeout fired — dismissing loader forcefully.');
-            if (window.loaderMessageInterval) clearInterval(window.loaderMessageInterval);
-            loader.style.opacity = '0';
-            setTimeout(() => { loader.remove(); }, 500);
+        if (!window._isAppFinalized) {
+            console.warn('⚠️ Loader safety timeout fired — finalizing app with available data.');
+            if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
         }
-    }, 12000); // 12 seconds max wait
+    }, 15000); // 15 seconds max wait for slow connections
 
     // ------------------------------------
 
@@ -1384,9 +1378,8 @@ async function migrateFromLocalStorage() {
 
         const { auth, onAuthStateChanged } = window.firebase;
         onAuthStateChanged(auth, async (user) => {
-        updateLoaderProgress(10, "Verifying Authentication...");
-            
             if (user) {
+                updateLoaderProgress(20, `Authenticated as ${user.displayName || user.email || 'User'}...`);
                   currentUser = user;
                   loginBtn.classList.add('hidden');
                   logoutBtn.classList.remove('hidden');
@@ -1438,8 +1431,9 @@ async function migrateFromLocalStorage() {
                 document.getElementById('cloud-migration-wrapper')?.classList.add('hidden');
 
                 // Load Local Data & Finalize
+                updateLoaderProgress(60, "Loading local offline database...");
                 await loadInitialData();
-                finalizeAppLoad();
+                await finalizeAppLoad();
             }
         });
     }
@@ -1897,11 +1891,13 @@ window.recalcInvigSlots = async function () {
         if (!navigator.onLine) {
             console.log("⚠️ Offline Mode. Loading local data.");
             updateSyncStatus("Offline Mode", "error");
-            loadInitialData();
-            if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+            updateLoaderProgress(60, "Offline Mode: Loading local database...");
+            loadInitialData().then(() => {
+                if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+            });
             return;
         }
-        updateLoaderProgress(50, "Connecting to Cloud Server...");
+        updateLoaderProgress(42, "Connecting to cloud sync service...");
         updateSyncStatus("Connecting...", "neutral");
         const { db, doc, onSnapshot, collection, getDocs, query, orderBy, where } = window.firebase;
 
@@ -1910,9 +1906,11 @@ window.recalcInvigSlots = async function () {
         const connectionTimeout = setTimeout(() => {
             console.warn("⚠️ Cloud connection is blocked or completely dead. Falling back to Local Data!");
             updateSyncStatus("Cloud Blocked (Using Local)", "error");
+            updateLoaderProgress(60, "Cloud unreachable. Loading offline local data...");
             if (cloudSyncUnsubscribe) cloudSyncUnsubscribe();
-            loadInitialData();
-            if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+            loadInitialData().then(() => {
+                if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+            });
         }, 10000);
         // --- PASTE END ---
 
@@ -2220,11 +2218,12 @@ window.recalcInvigSlots = async function () {
             if (hasLocalMatch) {
                 console.log(`⚡ [Tier 1 Cache Shield]: Local data matches cloud fingerprint (${cloudMasterHash || cloudLastUpload}). Bypassing Storage download!`);
                 updateSyncStatus("Synced (Instant)", "success");
-                if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+                updateLoaderProgress(72, "Student records verified. Syncing exam sessions...");
             } else {
                 try {
                     const { storage, ref, getDownloadURL } = window.firebase;
                     updateSyncStatus("Checking Firebase Storage...", "neutral");
+                    updateLoaderProgress(65, "Downloading student database from cloud storage...");
                     const storageRef = ref(storage, `colleges/${collegeId}/data/examBaseData.json`);
                     
                     // 🛡️ 6-second timeout controller so weak connections never hang indefinitely
@@ -2246,6 +2245,7 @@ window.recalcInvigSlots = async function () {
                         if (cloudLastUpload) localStorage.setItem('lastUploadEvent', cloudLastUpload);
                         
                         updateSyncStatus("Synced (Storage)", "success");
+                        updateLoaderProgress(72, "Student database saved. Syncing exam sessions...");
                         
                         // Rebuild Metadata Registry for Dropdowns (Normalize to Dots)
                         const sessions = new Set(students.map(s => {
@@ -2293,6 +2293,7 @@ window.recalcInvigSlots = async function () {
                     const fetchOptions = isRestoring ? { source: 'server' } : {};
                     
                     if (isRestoring) console.log("🛡️ [Cache Shield]: Bypassing Firestore Cache for integrity...");
+                    updateLoaderProgress(78, "Syncing modular session allotments & rooms...");
                     const sessionSnap = await getDocs(sessionsRef, fetchOptions);
 
                     let cloudMetaFound = false;
@@ -2307,6 +2308,7 @@ window.recalcInvigSlots = async function () {
                     if (!sessionSnap.empty) {
                         cloudMetaFound = true;
                         console.log(`📡 LIVE SYNC: Processing ${sessionSnap.size} session updates...`);
+                        updateLoaderProgress(85, `Processing ${sessionSnap.size} active sessions...`);
                         
                         const { getDoc } = window.firebase;
                         let missingStudentsPromises = [];
@@ -2503,9 +2505,7 @@ window.recalcInvigSlots = async function () {
                     }
 
                     updateSyncStatus("Synced (Live)", "success");
-                    
-                    // 🚀 LOADER DISMISSAL: Ensure the app finishes loading even on the first sync
-                    if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+                    updateLoaderProgress(92, "Room allotments and invigilators updated.");
 
                 // Check for V1 Fallback if sessions collection doesn't exist
                 const sessionSnapCheck = await getDocs(sessionsRef);
@@ -2549,7 +2549,7 @@ loadInitialData();
 
 
        (async () => {
-        updateLoaderProgress(55, "Loading Staff & Invigilation Data...");
+        updateLoaderProgress(48, "Syncing staff & invigilation rosters...");
         try {
             await Promise.all([
                 typeof fetchSettingsData === 'function' ? fetchSettingsData() : Promise.resolve(),
@@ -2561,7 +2561,9 @@ loadInitialData();
         } catch (e) {
             console.warn("Pre-flight data sync error:", e);
         }
+        updateLoaderProgress(60, "Verifying student database cache...");
         await fetchHeavyData();
+        if (typeof finalizeAppLoad === 'function') await finalizeAppLoad();
         
           // --- NEW: Automatic Cloud Healing (Full V2 Reconstruction) ---
         if (window.currentCollegeId && navigator.onLine) {
@@ -18346,7 +18348,7 @@ Are you sure?
     async function findMyCollege(user) {
         // Run Super Admin Check
         checkSuperAdminAccess(user);
-        updateLoaderProgress(25, "Locating College Database...");
+        updateLoaderProgress(28, "Locating college workspace...");
 
         updateSyncStatus("Searching...", "neutral");
         const { db, collection, query, where, getDocs, doc, getDoc } = window.firebase;
@@ -18365,6 +18367,7 @@ Are you sure?
                 window.currentCollegeId = collegeDoc.id;
                 localStorage.setItem('my_college_id', collegeDoc.id);
                 console.log("Joined College:", currentCollegeId);
+                updateLoaderProgress(35, "College workspace linked. Connecting to cloud...");
                 syncDataFromCloud(currentCollegeId);
                 document.getElementById('cloud-migration-wrapper')?.classList.remove('hidden');
 
