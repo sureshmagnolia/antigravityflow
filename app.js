@@ -20099,17 +20099,28 @@ window.handlePythonExtraction = async function (jsonString) {
         }
     };
 
-    // 3. Open Modal & Render Table
+    // 3. Open Modal & Render Table (with explicit z-index and display enforcement)
     window.openOrphanedSessionsModal = async function() {
+        console.log("Storage Vault: Opening Session Governance Modal...");
         const modal = document.getElementById('orphaned-sessions-modal');
-        if (!modal) return;
+        if (!modal) {
+            console.error("Storage Vault: #orphaned-sessions-modal element not found in DOM!");
+            return;
+        }
         modal.classList.remove('hidden');
+        modal.style.setProperty('display', 'flex', 'important');
+        modal.style.setProperty('z-index', '9999999', 'important');
+        modal.style.setProperty('position', 'fixed', 'important');
+        modal.style.setProperty('inset', '0px', 'important');
         await window.renderOrphanSessionsTable();
     };
 
     window.closeOrphanedSessionsModal = function() {
         const modal = document.getElementById('orphaned-sessions-modal');
-        if (modal) modal.classList.add('hidden');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.style.setProperty('display', 'none', 'important');
+        }
     };
 
     window._cachedOrphanSessions = [];
