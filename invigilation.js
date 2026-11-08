@@ -4890,6 +4890,42 @@ function generateExchangeBuyerEmail(seller, buyer, key) {
 window.generateExchangeSellerEmail = generateExchangeSellerEmail;
 window.generateExchangeBuyerEmail = generateExchangeBuyerEmail;
 
+window.triggerTestExchangeEmails = async function (testEmail = "sureshmagnolia@gmail.com", key = "09.11.2026 | 02:00 PM") {
+    const scriptUrl = googleScriptUrl || localStorage.getItem('invigGoogleScriptUrl') || document.getElementById('google-script-url')?.value;
+    if (!scriptUrl) {
+        alert("⚠️ Google Apps Script URL not configured.");
+        return console.error("No script URL found.");
+    }
+    const seller = { name: "Dr. Suresh (Exchanger)", email: testEmail, dept: "Botany" };
+    const buyer = { name: "Dr. Suresh (Acceptor)", email: testEmail, dept: "Exam Cell" };
+
+    console.log("📨 [1/2] Sending Exchanger (Relieved) email to " + testEmail + " via system template...");
+    await fetch(scriptUrl, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            to: testEmail,
+            subject: `Duty Exchange Accepted: ${key}`,
+            body: generateExchangeSellerEmail(seller, buyer, key)
+        })
+    }).catch(e => console.error("Seller test email failed", e));
+
+    console.log("📨 [2/2] Sending Acceptor (Assigned) email to " + testEmail + " via system template...");
+    await fetch(scriptUrl, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            to: testEmail,
+            subject: `Duty Assignment Confirmation: ${key} (Exchanged)`,
+            body: generateExchangeBuyerEmail(seller, buyer, key)
+        })
+    }).catch(e => console.error("Buyer test email failed", e));
+
+    console.log("%c🎉 Done! Both exchange emails sent to " + testEmail, "color:#10b981;font-weight:bold;font-size:13px;");
+};
+
 async function acceptExchange(key, buyerEmail, sellerEmail) {
     // 🛡️ DOUBLE-CLICK PROTECTION
     if (window._isAcceptingExchange) return;
