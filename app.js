@@ -529,12 +529,22 @@ window.updateLoaderProgress = function(percent, message) {
     const percentText = document.getElementById('loader-percentage');
     const msgElement = document.getElementById('loader-message');
     
-    // Stop the chaotic text interval if it's still running
-    if (window.loaderMessageInterval) clearInterval(window.loaderMessageInterval);
+    // Cancel legacy joke interval if active
+    if (window.loaderMessageInterval) {
+        clearInterval(window.loaderMessageInterval);
+        window.loaderMessageInterval = null;
+    }
     
-    if (progressBar) progressBar.style.width = `${percent}%`;
-    if (percentText) percentText.textContent = `${percent}%`;
-    if (msgElement && message) msgElement.textContent = message;
+    if (typeof percent === 'number') {
+        const cur = window._currentLoaderProgress || 0;
+        const target = Math.max(cur, Math.min(100, Math.round(percent)));
+        window._currentLoaderProgress = target;
+        if (progressBar) progressBar.style.width = `${target}%`;
+        if (percentText) percentText.textContent = `${target}%`;
+    }
+    if (msgElement && message) {
+        msgElement.textContent = message;
+    }
 };
 
 function clear_csv_upload_status() {
@@ -786,87 +796,9 @@ async function autoCleanPastGhostData() {
         }
     }
 
-    // 5. ☁️ AUTO-ARCHIVE: Move past Firestore session_students → Firebase Storage
-    if (window.firebase && window.currentCollegeId && navigator.onLine) {
-        try {
-            const { db, doc, collection, getDocs, getDoc, deleteDoc, storage, ref, uploadString, getDownloadURL } = window.firebase;
-            const sessionsRef = collection(db, 'colleges', window.currentCollegeId, 'sessions');
-            const sessionSnap = await getDocs(sessionsRef);
-
-            for (const docSnap of sessionSnap.docs) {
-                const s = docSnap.data();
-                if (!s.date) continue;
-
-                // Parse the exam date
-                const dateStr = s.date.trim();
-                let examDate;
-                if (dateStr.includes('.')) {
-                    const [d, m, y] = dateStr.split('.');
-                    examDate = new Date(`${y}-${m}-${d}`);
-                } else {
-                    examDate = new Date(dateStr);
-                }
-                examDate.setHours(0, 0, 0, 0);
-
-                // Only archive PAST sessions (before today)
-                if (examDate >= today) continue;
-
-                const sessionKey = `${s.date} | ${s.time}`;
-                const sessionIdStr = docSnap.id;
-                const storageRef = ref(storage, `historical_sessions/${window.currentCollegeId}/${dateStr}.json`);
-
-                // Check if already archived in Storage — skip if yes
-                let alreadyArchived = false;
-                try {
-                    await getDownloadURL(storageRef);
-                    alreadyArchived = true;
-                } catch (e) {
-                    // 404 = not archived yet. Any other error = log it.
-                    if (e?.code !== 'storage/object-not-found') {
-                        console.warn('Storage check error:', e?.code);
-                    }
-                }
-                if (alreadyArchived) continue;
-                // Fetch heavy student data from Firestore
-                const studentDoc = await getDoc(doc(db, 'colleges', window.currentCollegeId, 'session_students', sessionIdStr));
-                // GHOST CLEANUP: Student data is gone but sessions index still exists.
-                // Delete the orphaned sessions index doc so this never fires again.
-                if (!studentDoc.exists()) {
-                    console.log(`🧹 Ghost Session Detected: ${sessionKey} — removing orphaned index entry.`);
-                    await deleteDoc(doc(db, 'colleges', window.currentCollegeId, 'sessions', docSnap.id));
-                    continue;
-                }
-                const data = studentDoc.data();
-                let students = [];
-                if (data.isChunked) {
-                    let fullPayload = "";
-                    for (let i = 0; i < data.totalChunks; i++) {
-                        const chunkSnap = await getDoc(doc(db, 'colleges', window.currentCollegeId, 'session_students', `${sessionIdStr}_chunk_${i}`));
-                        if (chunkSnap.exists()) fullPayload += chunkSnap.data().payload;
-                    }
-                    const combined = JSON.parse(fullPayload);
-                    students = combined.students || [];
-                } else {
-                    students = data.students || [];
-                }
-
-                if (students.length === 0) continue;
-
-                // Build archive package (same format as manual migration)
-                const datePackage = { students, date: dateStr, archivedAt: new Date().toISOString() };
-
-                // Upload to Firebase Storage
-                await uploadString(storageRef, JSON.stringify(datePackage), 'raw', { contentType: 'application/json' });
-                console.log(`📦 Auto-Archived: ${sessionKey} → historical_sessions Storage`);
-
-                // Delete heavy Firestore doc to save costs
-                await deleteDoc(doc(db, 'colleges', window.currentCollegeId, 'session_students', sessionIdStr));
-                console.log(`🗑️ Freed Firestore: Deleted session_students for ${sessionKey}`);
-            }
-        } catch (e) {
-            console.error("Auto-archive error during maintenance:", e);
-        }
-    }
+    // 5. 🛡️ AUTO-ARCHIVE DISABLED: Archiving past sessions to Firebase Storage
+    // is strictly an explicit action triggered by the admin in the Storage Vault modal.
+    console.log("🛡️ [Governance] Auto-archive of past sessions disabled. All sessions remain active in database.");
 }
 
 
@@ -896,28 +828,54 @@ async function autoCleanPastGhostData() {
 function dismissLoader() {
     updateLoaderProgress(100, "Ready!");
     const loader = document.getElementById('initial-app-loader');
-    const msgInterval = window.loaderMessageInterval; // Get the interval ID if defined
+    if (window._loaderSafetyTimer) {
+        clearTimeout(window._loaderSafetyTimer);
+        window._loaderSafetyTimer = null;
+    }
+    if (window.loaderMessageInterval) {
+        clearInterval(window.loaderMessageInterval);
+        window.loaderMessageInterval = null;
+    }
 
-    if (msgInterval) clearInterval(msgInterval); // Stop the funny message timer
-
-    if (loader) {
-        loader.style.opacity = '0';
-        // Delay removal for CSS transition
-        setTimeout(() => { loader.remove(); }, 500);
+    if (loader && !window._loaderIsDismissing) {
+        window._loaderIsDismissing = true;
+        // Brief 250ms dwell at 100% so user perceives completion
+        setTimeout(() => {
+            loader.style.opacity = '0';
+            setTimeout(() => { 
+                try { loader.remove(); } catch(e) {}
+            }, 500);
+        }, 250);
     }
 }
 
-// Single function called when data is local, from cloud, or auth fails
+// Unified, robust finalizeAppLoad
 async function finalizeAppLoad() {
-    await migrateFromLocalStorage(); // Add this line!
-    if (typeof compactRoomAllotmentsInStorage === 'function') compactRoomAllotmentsInStorage();
-    if (typeof initTwoTierStorageShield === 'function') await initTwoTierStorageShield();
-    if (typeof updateDashboard === 'function') updateDashboard();
-    if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
-    if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-    if (typeof restoreActiveTab === 'function') restoreActiveTab(); // Restore last view
-    dismissLoader(); // Safely remove the loader once all is done
+    if (window._isAppFinalized) return;
+    window._isAppFinalized = true;
+
+    if (window._loaderSafetyTimer) {
+        clearTimeout(window._loaderSafetyTimer);
+        window._loaderSafetyTimer = null;
+    }
+
+    updateLoaderProgress(95, "Finalizing workspace...");
+    try {
+        if (typeof migrateFromLocalStorage === 'function') await migrateFromLocalStorage();
+        if (typeof compactRoomAllotmentsInStorage === 'function') compactRoomAllotmentsInStorage();
+        if (typeof initTwoTierStorageShield === 'function') await initTwoTierStorageShield();
+        if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+        if (typeof updateDashboard === 'function') updateDashboard();
+        if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
+        if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
+        if (typeof restoreActiveTab === 'function') restoreActiveTab();
+        if (typeof window.checkOrphanedSessionsBadge === 'function') window.checkOrphanedSessionsBadge();
+    } catch (err) {
+        console.warn("finalizeAppLoad warning:", err);
+    }
+    dismissLoader();
 }
+window.finalizeAppLoad = finalizeAppLoad;
 
 let currentUser = null;
 window.isAppInitializing = true;
@@ -961,57 +919,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof compactRoomAllotmentsInStorage === 'function') compactRoomAllotmentsInStorage();
     if (typeof initTwoTierStorageShield === 'function') initTwoTierStorageShield();
     if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns(); // <--- ADD THIS LINE
-    // --- LOADER ANIMATION LOGIC (New) ---
-    const loaderMessages = [
-        "Summoning the Exam Spirits... 👻",
-        "Convincing the server to cooperate... 🤖",
-        "Counting the students... (again) 🧐",
-        "Finding the missing QP Codes... 🔍",
-        "Waking up the Chief Superintendent... ☕",
-        "Aligning the planets for seating... 🪐",
-        "Loading faster than campus Wi-Fi... 🚀"
-    ];
+    // 🛡️ REAL-STATUS INITIAL LOADER
+    updateLoaderProgress(10, "Loading local configuration & settings...");
 
-    // Start the cycle immediately and save ID to window
-    const loaderMsgElement = document.getElementById('loader-message');
-    let loaderMsgIndex = 0;
-
-    if (loaderMsgElement) {
-        window.loaderMessageInterval = setInterval(() => {
-            loaderMsgIndex = (loaderMsgIndex + 1) % loaderMessages.length;
-            loaderMsgElement.textContent = loaderMessages[loaderMsgIndex];
-        }, 800); // Change message every 800ms
-    }
-
-    // Ensure this function exists to stop it later
-    window.finalizeAppLoad = function () {
-        // Cancel the safety timer since we loaded successfully  ← NEW LINE
-        if (window._loaderSafetyTimer) clearTimeout(window._loaderSafetyTimer); 
-        // 1. Run UI Updates
-        if (typeof updateDashboard === 'function') updateDashboard();
-        if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
-        if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-        if (typeof restoreActiveTab === 'function') restoreActiveTab();
-
-        // 2. Stop Animation & Remove Loader
-        if (window.loaderMessageInterval) clearInterval(window.loaderMessageInterval);
-
-        const loader = document.getElementById('initial-app-loader');
-        if (loader) {
-            loader.style.opacity = '0';
-            setTimeout(() => { loader.remove(); }, 500);
-        }
-    };
-    // --- SAFETY TIMEOUT: Force-dismiss loader after 12 seconds on all browsers ---
+    // --- SAFETY TIMEOUT: Gracefully finalize app if network or scripts stall ---
     window._loaderSafetyTimer = setTimeout(function() {
-        const loader = document.getElementById('initial-app-loader');
-        if (loader) {
-            console.warn('⚠️ Loader safety timeout fired — dismissing loader forcefully.');
-            if (window.loaderMessageInterval) clearInterval(window.loaderMessageInterval);
-            loader.style.opacity = '0';
-            setTimeout(() => { loader.remove(); }, 500);
+        if (!window._isAppFinalized) {
+            console.warn('⚠️ Loader safety timeout fired — finalizing app with available data.');
+            if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
         }
-    }, 12000); // 12 seconds max wait
+    }, 15000); // 15 seconds max wait for slow connections
 
     // ------------------------------------
 
@@ -1093,64 +1010,9 @@ function loadExamDataIDB() {
 }
 // --- NEW: BASIC USER AUTO-PRUNER ---
 async function pruneOldDataForBasicUsers() {
-    // 1. Only run for Basic (Offline) Users
-    if (window.currentCollegeId) return;
-    
-    try {
-        const dbData = await loadExamDataIDB() || [];
-        if (dbData.length === 0) return;
-
-        // 2. Count Unique Dates
-        const uniqueDates = [...new Set(dbData.map(s => s.Date).filter(Boolean))];
-        const MAX_DAYS_TO_KEEP = 60; // Keep roughly 1 full semester of history
-        
-        if (uniqueDates.length <= MAX_DAYS_TO_KEEP) return;
-
-        // 3. Sort chronologically (DD.MM.YYYY)
-        uniqueDates.sort((a, b) => {
-            const [d1, m1, y1] = a.split('.');
-            const [d2, m2, y2] = b.split('.');
-            return new Date(y1, m1 - 1, d1) - new Date(y2, m2 - 1, d2);
-        });
-
-        // 4. Target the oldest dates for deletion
-        const datesToDelete = new Set(uniqueDates.slice(0, uniqueDates.length - MAX_DAYS_TO_KEEP));
-        console.log(`🧹 Basic User Auto-Pruning: Deleting ${datesToDelete.size} oldest exam days to save quota.`);
-
-        // 5. Prune IndexedDB (Students)
-        const keptStudents = dbData.filter(s => !datesToDelete.has(s.Date));
-        await saveExamDataIDB(keptStudents, true); // true = skip cloud sync loop
-
-        // 6. Prune LocalStorage Allotments (Frees the 5MB Quota)
-        const lsKeys = [
-          'examRoomAllotment', 'examAllotmentData', 
-          'examScribeAllotment', 'examScribeAllotmentV2', 
-          'examInvigilatorMapping', 'examAbsenteeList', 
-          'examQPCodes', 'examAllKnownSessions',
-          'examInvigilationSlots', 'invigAdvanceUnavailability'
-        ];
-        lsKeys.forEach(key => {
-            const lsStr = localStorage.getItem(key);
-            if (!lsStr) return;
-            try {
-                const parsed = JSON.parse(lsStr);
-                let isModified = false;
-                
-                Object.keys(parsed).forEach(sessionKey => {
-                    const datePart = sessionKey.split('|')[0].trim();
-                    if (datesToDelete.has(datePart)) {
-                        delete parsed[sessionKey];
-                        isModified = true;
-                    }
-                });
-
-                if (isModified) localStorage.setItem(key, JSON.stringify(parsed));
-            } catch(e) { }
-        });
-
-    } catch (e) {
-        console.error("Auto-prune error:", e);
-    }
+    // 🛡️ GOVERNANCE: Automatic data pruning is disabled.
+    // Sessions remain active unless explicitly managed by the admin.
+    return;
 }
 
 // ==========================================
@@ -1384,9 +1246,8 @@ async function migrateFromLocalStorage() {
 
         const { auth, onAuthStateChanged } = window.firebase;
         onAuthStateChanged(auth, async (user) => {
-        updateLoaderProgress(10, "Verifying Authentication...");
-            
             if (user) {
+                updateLoaderProgress(20, `Authenticated as ${user.displayName || user.email || 'User'}...`);
                   currentUser = user;
                   loginBtn.classList.add('hidden');
                   logoutBtn.classList.remove('hidden');
@@ -1438,8 +1299,9 @@ async function migrateFromLocalStorage() {
                 document.getElementById('cloud-migration-wrapper')?.classList.add('hidden');
 
                 // Load Local Data & Finalize
+                updateLoaderProgress(60, "Loading local offline database...");
                 await loadInitialData();
-                finalizeAppLoad();
+                await finalizeAppLoad();
             }
         });
     }
@@ -1897,11 +1759,13 @@ window.recalcInvigSlots = async function () {
         if (!navigator.onLine) {
             console.log("⚠️ Offline Mode. Loading local data.");
             updateSyncStatus("Offline Mode", "error");
-            loadInitialData();
-            if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+            updateLoaderProgress(60, "Offline Mode: Loading local database...");
+            loadInitialData().then(() => {
+                if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+            });
             return;
         }
-        updateLoaderProgress(50, "Connecting to Cloud Server...");
+        updateLoaderProgress(42, "Connecting to cloud sync service...");
         updateSyncStatus("Connecting...", "neutral");
         const { db, doc, onSnapshot, collection, getDocs, query, orderBy, where } = window.firebase;
 
@@ -1910,9 +1774,11 @@ window.recalcInvigSlots = async function () {
         const connectionTimeout = setTimeout(() => {
             console.warn("⚠️ Cloud connection is blocked or completely dead. Falling back to Local Data!");
             updateSyncStatus("Cloud Blocked (Using Local)", "error");
+            updateLoaderProgress(60, "Cloud unreachable. Loading offline local data...");
             if (cloudSyncUnsubscribe) cloudSyncUnsubscribe();
-            loadInitialData();
-            if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+            loadInitialData().then(() => {
+                if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+            });
         }, 10000);
         // --- PASTE END ---
 
@@ -2084,7 +1950,9 @@ window.recalcInvigSlots = async function () {
         window.fetchSlotsData = async () => {
             const { collection, getDocs } = window.firebase;
             try {
-                const shardsRef = collection(db, "colleges", collegeId, "slots_daily");
+                const cid = collegeId || window.currentCollegeId || localStorage.getItem('my_college_id') || '';
+                if (!cid) return null;
+                const shardsRef = collection(db, "colleges", cid, "slots_daily");
                 const querySnap = await getDocs(shardsRef);
                 let newSlots = {};
                 querySnap.forEach(shardDoc => {
@@ -2095,29 +1963,15 @@ window.recalcInvigSlots = async function () {
                 });
                 
                 const localRaw = localStorage.getItem('examInvigilationSlots');
-                let mergedSlots = { ...newSlots };
-                
+                let mergedSlots = {};
                 if (localRaw) {
                     try {
-                        const localSlots = JSON.parse(localRaw);
-                        // Local takes precedence for 'assigned' array ONLY if local actually has assigned staff
-                        Object.keys(localSlots).forEach(k => {
-                            if (!mergedSlots[k]) {
-                                mergedSlots[k] = localSlots[k];
-                            } else {
-                                if (Array.isArray(localSlots[k].assigned) && localSlots[k].assigned.length > 0) {
-                                    mergedSlots[k].assigned = localSlots[k].assigned;
-                                }
-                                if (Array.isArray(localSlots[k].unavailable) && localSlots[k].unavailable.length > 0) {
-                                    mergedSlots[k].unavailable = localSlots[k].unavailable;
-                                }
-                                if (localSlots[k].isLocked !== undefined) {
-                                    mergedSlots[k].isLocked = localSlots[k].isLocked;
-                                }
-                            }
-                        });
+                        mergedSlots = JSON.parse(localRaw) || {};
                     } catch(e){}
                 }
+                
+                // Cloud daily shards are authoritative for all keys present in Firestore
+                Object.assign(mergedSlots, newSlots);
                 
                 if (Object.keys(mergedSlots).length > 0) {
                     localStorage.setItem('examInvigilationSlots', JSON.stringify(mergedSlots));
@@ -2127,6 +1981,46 @@ window.recalcInvigSlots = async function () {
                 console.error("Failed to fetch slots from shards:", e);
                 return null;
             }
+        };
+
+        // 🛡️ ON-DEMAND SESSION SLOT FETCHER: Fetches single daily shard for the active session (1 read, ~50ms)
+        window.fetchSlotForSessionOnDemand = async (sessionKey) => {
+            if (!sessionKey || !navigator.onLine || !window.firebase) return null;
+            const cid = collegeId || window.currentCollegeId || (typeof currentCollegeId !== 'undefined' ? currentCollegeId : null) || localStorage.getItem('my_college_id') || '';
+            if (!cid) return null;
+
+            try {
+                const { getDoc, doc } = window.firebase;
+                const [dRaw] = sessionKey.split('|');
+                const clean = (dRaw || '').trim().replace(/[-/]/g, '.');
+                const parts = clean.split('.');
+                if (parts.length >= 3) {
+                    const shardId = (parts[0].length === 4) 
+                        ? `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`
+                        : `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                    
+                    const shardRef = doc(window.firebase.db, "colleges", cid, "slots_daily", shardId);
+                    const shardSnap = await getDoc(shardRef);
+                    if (shardSnap.exists()) {
+                        const shardMap = JSON.parse(shardSnap.data().data || '{}');
+                        const cleanTarget = sessionKey.replace(/\s/g, '').toLowerCase();
+                        let matchedSlot = shardMap[sessionKey];
+                        if (!matchedSlot) {
+                            const fuzzyKey = Object.keys(shardMap).find(k => k.replace(/\s/g, '').toLowerCase() === cleanTarget);
+                            if (fuzzyKey) matchedSlot = shardMap[fuzzyKey];
+                        }
+                        if (matchedSlot) {
+                            const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+                            invigSlots[sessionKey] = matchedSlot;
+                            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigSlots));
+                            return matchedSlot;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("fetchSlotForSessionOnDemand error:", err);
+            }
+            return null;
         };
 
         // 3. OPERATIONS (Absentees/QP) - On-Demand Fetcher
@@ -2155,8 +2049,8 @@ window.recalcInvigSlots = async function () {
                 const fetchHeavyData = async () => {
             console.log("☁️ Fetching Data (Hybrid Mode)...");
 
-            // --- 🏠 SCR5 PATTERN: LOAD LOCAL DATA IMMEDIATELY (with Auto-Healing) ---
-            const localStudents = (typeof autoHealOrphanedAllotmentSessions === 'function') ? await autoHealOrphanedAllotmentSessions() : (await loadExamDataIDB() || []);
+            // --- 🏠 SCR5 PATTERN: LOAD LOCAL DATA IMMEDIATELY ---
+            const localStudents = await loadExamDataIDB() || [];
             if (localStudents.length > 0) {
                 allStudentData = localStudents;
                 console.log(`🏠 Local Students found: ${allStudentData.length}. Initializing UI...`);
@@ -2192,11 +2086,12 @@ window.recalcInvigSlots = async function () {
             if (hasLocalMatch) {
                 console.log(`⚡ [Tier 1 Cache Shield]: Local data matches cloud fingerprint (${cloudMasterHash || cloudLastUpload}). Bypassing Storage download!`);
                 updateSyncStatus("Synced (Instant)", "success");
-                if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+                updateLoaderProgress(72, "Student records verified. Syncing exam sessions...");
             } else {
                 try {
                     const { storage, ref, getDownloadURL } = window.firebase;
                     updateSyncStatus("Checking Firebase Storage...", "neutral");
+                    updateLoaderProgress(65, "Downloading student database from cloud storage...");
                     const storageRef = ref(storage, `colleges/${collegeId}/data/examBaseData.json`);
                     
                     // 🛡️ 6-second timeout controller so weak connections never hang indefinitely
@@ -2218,6 +2113,7 @@ window.recalcInvigSlots = async function () {
                         if (cloudLastUpload) localStorage.setItem('lastUploadEvent', cloudLastUpload);
                         
                         updateSyncStatus("Synced (Storage)", "success");
+                        updateLoaderProgress(72, "Student database saved. Syncing exam sessions...");
                         
                         // Rebuild Metadata Registry for Dropdowns (Normalize to Dots)
                         const sessions = new Set(students.map(s => {
@@ -2265,6 +2161,7 @@ window.recalcInvigSlots = async function () {
                     const fetchOptions = isRestoring ? { source: 'server' } : {};
                     
                     if (isRestoring) console.log("🛡️ [Cache Shield]: Bypassing Firestore Cache for integrity...");
+                    updateLoaderProgress(78, "Syncing modular session allotments & rooms...");
                     const sessionSnap = await getDocs(sessionsRef, fetchOptions);
 
                     let cloudMetaFound = false;
@@ -2279,15 +2176,26 @@ window.recalcInvigSlots = async function () {
                     if (!sessionSnap.empty) {
                         cloudMetaFound = true;
                         console.log(`📡 LIVE SYNC: Processing ${sessionSnap.size} session updates...`);
+                        updateLoaderProgress(85, `Processing ${sessionSnap.size} active sessions...`);
                         
-                        const { getDoc } = window.firebase;
+                        const { getDoc, deleteDoc, doc } = window.firebase;
                         let missingStudentsPromises = [];
                         const localDB = await loadExamDataIDB() || [];
                         const localSessionHashes = JSON.parse(localStorage.getItem('examLocalSessionHashes') || '{}');
+                        const localTombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
 
                         sessionSnap.forEach(docSnap => {
                             const s = docSnap.data();
                             const sessionKey = `${s.date} | ${s.time}`;
+
+                            // 🛡️ TOMBSTONE GUARD: Skip and clean any cloud document that was explicitly deleted
+                            if (localTombstones[sessionKey]) {
+                                console.log(`🛡️ Skipping & purging tombstoned cloud session: ${sessionKey}`);
+                                try {
+                                    deleteDoc(doc(db, "colleges", collegeId, "sessions", docSnap.id)).catch(() => {});
+                                } catch(_) {}
+                                return;
+                            }
                             const examTimestamp = (s.meta && s.meta.timestamp) ? s.meta.timestamp : new Date(s.date.split('.').reverse().join('-')).getTime();
                             const isTodayOrFuture = examTimestamp >= midnightObj;
 
@@ -2316,7 +2224,7 @@ window.recalcInvigSlots = async function () {
                             }
                             
                             // 2. Auto-fetch Heavy Students (Tier 2 Session Hash Check)
-                            if (s.meta && s.meta.studentCount > 0 && isTodayOrFuture) {
+                            if (s.meta && s.meta.studentCount > 0) {
                                 const localCount = localDB.filter(stu => stu.Date === s.date && stu.Time === s.time).length;
                                 const cloudSHash = (s.meta && s.meta.sessionHash) || s.sessionHash;
                                 const localSHash = localSessionHashes[sessionKey];
@@ -2475,9 +2383,7 @@ window.recalcInvigSlots = async function () {
                     }
 
                     updateSyncStatus("Synced (Live)", "success");
-                    
-                    // 🚀 LOADER DISMISSAL: Ensure the app finishes loading even on the first sync
-                    if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+                    updateLoaderProgress(92, "Room allotments and invigilators updated.");
 
                 // Check for V1 Fallback if sessions collection doesn't exist
                 const sessionSnapCheck = await getDocs(sessionsRef);
@@ -2520,20 +2426,43 @@ loadInitialData();
 };
 
 
+        // 🛡️ TOMBSTONES FETCHER: Pull cloud deletion tombstones to protect local state
+        window.fetchTombstoneData = async () => {
+            const cid = collegeId || window.currentCollegeId || localStorage.getItem('my_college_id');
+            if (!window.firebase || !cid) return;
+            try {
+                const { getDoc, doc } = window.firebase;
+                const snap = await getDoc(doc(db, "colleges", cid, "system_data", "tombstones"));
+                if (snap.exists() && snap.data().tombstones) {
+                    const cloudTombstones = snap.data().tombstones;
+                    const localTombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
+                    const merged = { ...localTombstones, ...cloudTombstones };
+                    localStorage.setItem('examDeletedSessions', JSON.stringify(merged));
+                    return merged;
+                }
+            } catch(e) {
+                console.warn("fetchTombstoneData warning:", e);
+            }
+            return JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
+        };
+
        (async () => {
-        updateLoaderProgress(55, "Loading Staff & Invigilation Data...");
+        updateLoaderProgress(48, "Syncing staff & invigilation rosters...");
         try {
             await Promise.all([
                 typeof fetchSettingsData === 'function' ? fetchSettingsData() : Promise.resolve(),
                 typeof fetchAllocationData === 'function' ? fetchAllocationData() : Promise.resolve(),
                 typeof fetchStaffData === 'function' ? fetchStaffData() : Promise.resolve(),
                 typeof fetchSlotsData === 'function' ? fetchSlotsData() : Promise.resolve(),
-                typeof loadGlobalScribeList === 'function' ? loadGlobalScribeList() : Promise.resolve()
+                typeof loadGlobalScribeList === 'function' ? loadGlobalScribeList() : Promise.resolve(),
+                typeof fetchTombstoneData === 'function' ? fetchTombstoneData() : Promise.resolve()
             ]);
         } catch (e) {
             console.warn("Pre-flight data sync error:", e);
         }
+        updateLoaderProgress(60, "Verifying student database cache...");
         await fetchHeavyData();
+        if (typeof finalizeAppLoad === 'function') await finalizeAppLoad();
         
           // --- NEW: Automatic Cloud Healing (Full V2 Reconstruction) ---
         if (window.currentCollegeId && navigator.onLine) {
@@ -2716,89 +2645,154 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
         });
     };
 
-async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
-    if (!currentCollegeId || !navigator.onLine) return;
-    
-    updateSyncStatus(`Deleting ${sessionKey}...`, "neutral");
-    // Added getDoc and setDoc to interface with the index document
-    const { db, doc, deleteDoc, getDoc, setDoc } = window.firebase;
-    const sessionId = generateSessionId(sessionKey);
-    
+// 🛡️ UNIVERSAL CASCADING PURGE: Purges session across Browser, Firebase Cloud, and Google Drive
+window.cascadeDeleteSession = async function(sessionKey, skipIndexUpdate = false) {
+    if (!sessionKey) return;
+    console.log(`🗑️ [Cascade Delete]: Executing universal purge for "${sessionKey}"...`);
+
+    // 1. TOMBSTONE REGISTRATION (Prevents any future resurrection from cloud, vault, or drive)
     try {
-        // 1. Delete main session from private admin area
-        await deleteDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId));
+        const tombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
+        tombstones[sessionKey] = {
+            deletedAt: Date.now(),
+            deletedBy: (currentUser && currentUser.email) || localStorage.getItem('last_user_email') || 'admin',
+            reason: 'explicit_deletion'
+        };
+        localStorage.setItem('examDeletedSessions', JSON.stringify(tombstones));
 
-        // --- 1b. [AUDIT FIX]: Delete associated student data (including chunks) ---
-        const studentDocRef = doc(db, 'colleges', currentCollegeId, 'session_students', sessionId);
-        const studentSnap = await getDoc(studentDocRef);
-        if (studentSnap.exists()) {
-            const sData = studentSnap.data();
-            if (sData.isChunked && sData.totalChunks) {
-                for (let i = 0; i < sData.totalChunks; i++) {
-                    await deleteDoc(doc(db, 'colleges', currentCollegeId, 'session_students', `${sessionId}_chunk_${i}`));
-                }
-            }
-            await deleteDoc(studentDocRef);
+        // Sync tombstone to cloud
+        const cid = window.currentCollegeId || (typeof currentCollegeId !== 'undefined' ? currentCollegeId : null) || localStorage.getItem('my_college_id');
+        if (cid && window.firebase && navigator.onLine) {
+            const { doc, setDoc } = window.firebase;
+            const tombRef = doc(window.firebase.db, 'colleges', cid, 'system_data', 'tombstones');
+            await setDoc(tombRef, { tombstones }, { merge: true }).catch(err => console.warn("Tombstone cloud sync warning:", err));
         }
-        
-        // --- 2. NEW: Delete from public seating index and chunk ---
-        const chunkId = `${currentCollegeId}_${sessionId}`;
-        await deleteDoc(doc(db, 'public_seating', chunkId)); // Deletes the heavy student list
-        
-        const indexRef = doc(db, 'public_seating', currentCollegeId);
-        const indexSnap = await getDoc(indexRef);
-        if (indexSnap.exists()) {
-            const data = indexSnap.data();
-            if (data.sessions && data.sessions[sessionKey]) {
-                delete data.sessions[sessionKey];
-                                if (skipIndexUpdate) {
-                    console.log(`⚡ Skipped Public Index Update for ${sessionKey} (Bulk Mode)`);
-                } else {
-                    await setDoc(indexRef, data); // Resave the cleaned index
-                }
-            }
-        }
-        // ---------------------------------------------------------
+    } catch(err) {
+        console.warn("Tombstone registration warning:", err);
+    }
 
-        // --- 3. NEW: Delete from Firebase Storage historical_sessions (Safe Guard) ---
-        try {
-            const { storage, ref, deleteObject } = window.firebase;
-            const dateStr = sessionKey.split(' | ')[0].trim();
-            
-            // 🛡️ [AUDIT FIX]: Only delete the archive if NO other sessions for this date exist in the registry.
-            // This prevents deleting the Morning archive if only the Afternoon session is being deleted.
-            const currentRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-            const sessionsForThisDate = currentRegistry.filter(sk => sk.startsWith(dateStr));
-            
-            if (sessionsForThisDate.length <= 1) { 
-                const storageRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateStr}.json`);
-                await deleteObject(storageRef).catch(() => {}); 
-                console.log(`🗑️ Deleted historical_sessions Storage file: ${dateStr}.json`);
-            }
-        } catch (storageErr) {
-            // File didn't exist in Storage — that's fine, nothing to delete
-        }
-        // ---------------------------------------------------------------
-        
-        // Purge from IndexedDB Allotment Vault so auto-heal does not resurrect it
+    // 2. LOCAL BROWSER PURGE (LocalStorage & IndexedDB)
+    try {
+        // A. Purge IndexedDB Allotment Vault
         if (typeof window.deleteRoomAllotmentIDB === 'function') {
             await window.deleteRoomAllotmentIDB(sessionKey);
         }
 
-        // Update the Master Registry to remove from all dropdowns
+        // B. Purge IndexedDB Scribe Vault
+        try {
+            const db = await openExamDB();
+            if (db.objectStoreNames.contains('scribeVault')) {
+                const tx = db.transaction('scribeVault', 'readwrite');
+                tx.objectStore('scribeVault').delete(sessionKey);
+            }
+            db.close();
+        } catch(e) {}
+
+        // C. Purge students from active memory and IndexedDB
+        const parts = sessionKey.split('|').map(x => (x || '').trim());
+        const dPart = parts[0] || '';
+        const tPart = parts[1] || '';
+        if (Array.isArray(allStudentData) && allStudentData.length > 0) {
+            allStudentData = allStudentData.filter(s => {
+                const sDate = (s.Date || '').trim();
+                const sTime = (s.Time || '').trim();
+                return !(sDate === dPart && sTime === tPart);
+            });
+            await saveExamDataIDB(allStudentData, true);
+        }
+
+        // D. Purge from LocalStorage JSON dictionaries
+        const skClean = sessionKey.replace(/\s+/g, ' ').trim();
+        const skNoSpace = sessionKey.replace(/\s*\|\s*/g, '|').trim();
+        const skWithSpace = skNoSpace.replace('|', ' | ');
+
+        ['examRoomAllotment', 'examScribeAllotment', 'examAbsenteeList', 'examQPCodes', 'examInvigilatorMapping', 'examHistoricalMeta', 'examInvigilationSlots'].forEach(k => {
+            try {
+                const m = JSON.parse(localStorage.getItem(k) || '{}');
+                if (m) {
+                    delete m[sessionKey];
+                    delete m[skClean];
+                    delete m[skNoSpace];
+                    delete m[skWithSpace];
+                    localStorage.setItem(k, JSON.stringify(m));
+                }
+            } catch(e) {}
+        });
+
+        // E. Purge from Master Known Sessions registry
         let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-        known = known.filter(k => k !== sessionKey);
+        known = known.filter(k => k !== sessionKey && k !== skClean && k !== skNoSpace && k !== skWithSpace);
         localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
         if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
-
-        updateSyncStatus("Deleted from Cloud", "success");
-
-    } catch (e) {
-
-        console.error("Session Delete Error:", e);
-        updateSyncStatus("Delete Failed", "error");
+        if (typeof renderCalendar === 'function') renderCalendar();
+    } catch (err) {
+        console.warn("Local cascade purge warning:", err);
     }
+
+    // 3. FIREBASE CLOUD PURGE (Firestore & Storage)
+    const cid = window.currentCollegeId || (typeof currentCollegeId !== 'undefined' ? currentCollegeId : null) || localStorage.getItem('my_college_id');
+    if (cid && window.firebase && navigator.onLine) {
+        try {
+            const { db, doc, deleteDoc, getDoc, setDoc, storage, ref, deleteObject } = window.firebase;
+            const sessionId = generateSessionId(sessionKey);
+
+            // A. Delete main session document
+            await deleteDoc(doc(db, 'colleges', cid, 'sessions', sessionId)).catch(() => {});
+
+            // B. Delete student documents and chunks
+            const studentDocRef = doc(db, 'colleges', cid, 'session_students', sessionId);
+            const studentSnap = await getDoc(studentDocRef).catch(() => null);
+            if (studentSnap && studentSnap.exists()) {
+                const sData = studentSnap.data();
+                if (sData.isChunked && sData.totalChunks) {
+                    for (let i = 0; i < sData.totalChunks; i++) {
+                        await deleteDoc(doc(db, 'colleges', cid, 'session_students', `${sessionId}_chunk_${i}`)).catch(() => {});
+                    }
+                }
+                await deleteDoc(studentDocRef).catch(() => {});
+            }
+
+            // C. Delete public seating
+            const chunkId = `${cid}_${sessionId}`;
+            await deleteDoc(doc(db, 'public_seating', chunkId)).catch(() => {});
+            const indexRef = doc(db, 'public_seating', cid);
+            const indexSnap = await getDoc(indexRef).catch(() => null);
+            if (indexSnap && indexSnap.exists()) {
+                const data = indexSnap.data();
+                if (data.sessions && data.sessions[sessionKey]) {
+                    delete data.sessions[sessionKey];
+                    if (!skipIndexUpdate) {
+                        await setDoc(indexRef, data).catch(() => {});
+                    }
+                }
+            }
+
+            // D. Delete Storage historical file if date has no other sessions
+            const dateStr = sessionKey.split(' | ')[0].trim();
+            const currentRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            const sessionsForThisDate = currentRegistry.filter(sk => sk.startsWith(dateStr));
+            if (sessionsForThisDate.length <= 1 && storage) {
+                const storageRef = ref(storage, `historical_sessions/${cid}/${dateStr}.json`);
+                await deleteObject(storageRef).catch(() => {});
+            }
+        } catch (err) {
+            console.warn("Cloud cascade purge warning:", err);
+        }
+    }
+
+    // 4. GOOGLE DRIVE SYNC PURGE
+    if (typeof window.triggerDriveAutoSync === 'function' && localStorage.getItem('isDriveConnected') === 'true') {
+        try { window.triggerDriveAutoSync(); } catch(e) {}
+    }
+
+    if (typeof updateSyncStatus === 'function') updateSyncStatus("Session Purged (All Tiers)", "success");
+};
+
+// Aliased so all existing delete callers execute full multi-tier cascade
+async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
+    await window.cascadeDeleteSession(sessionKey, skipIndexUpdate);
 }
+window.deleteSessionFromCloud = deleteSessionFromCloud;
 
     
 
@@ -6870,14 +6864,66 @@ if (toggleButton && sidebar) {
 
         const monthData = {};
 
-        // --- 📡 NEW: Scan Metadata Registry for Historical Sessions ---
+        // --- 📡 Authoritative Session Sources & Tombstone Filter ---
+        const tombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
+        const isTombstoned = (sk) => {
+            if (!sk) return false;
+            if (tombstones[sk]) return true;
+            const clean = sk.replace(/\s+/g, ' ').trim();
+            if (tombstones[clean]) return true;
+            const noSpace = sk.replace(/\s*\|\s*/g, '|').trim();
+            if (tombstones[noSpace]) return true;
+            const withSpace = noSpace.replace('|', ' | ');
+            if (tombstones[withSpace]) return true;
+            return false;
+        };
+
         const registryRaw = localStorage.getItem('examAllKnownSessions');
+        const knownRegistry = JSON.parse(registryRaw || '[]');
         const historicalMeta = JSON.parse(localStorage.getItem('examHistoricalMeta') || '{}');
         const activeSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
         const activeAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
 
+        // Collect all legitimate sessions currently in live student database
+        const liveStudentSessions = new Set();
+        if (allStudentData && allStudentData.length > 0) {
+            allStudentData.forEach(s => {
+                if (!s.Date || !s.Time) return;
+                const d = s.Date.trim();
+                const t = s.Time.trim();
+                liveStudentSessions.add(`${d} | ${t}`);
+            });
+        }
+
+        // Build a Set of all known legitimate sessions (Live + Master Registry, strictly excluding tombstones)
+        const validSessionsSet = new Set();
+        liveStudentSessions.forEach(sk => {
+            if (!isTombstoned(sk)) validSessionsSet.add(sk);
+        });
+        knownRegistry.forEach(sk => {
+            if (!isTombstoned(sk)) validSessionsSet.add(sk);
+        });
+
+        // 🛡️ Auto-clean stale ghosts from historicalMeta so deleted dates never linger
+        let metaCleaned = false;
+        Object.keys(historicalMeta).forEach(key => {
+            if (isTombstoned(key) || !validSessionsSet.has(key)) {
+                delete historicalMeta[key];
+                metaCleaned = true;
+            }
+        });
+        if (metaCleaned) {
+            try { localStorage.setItem('examHistoricalMeta', JSON.stringify(historicalMeta)); } catch(e) {}
+        }
+
+        const targetMonthStr = String(month + 1).padStart(2, '0');
+        const targetYearStr = String(year);
+
         const registerSessionInMonth = (sessionKey) => {
             if (!sessionKey || !sessionKey.includes('|')) return;
+            if (isTombstoned(sessionKey)) return;
+            if (!validSessionsSet.has(sessionKey)) return; // 🛡️ Must exist in valid active/known sessions!
+
             const [dateRaw, timeRaw] = sessionKey.split('|').map(s => s.trim());
             if (!dateRaw || !timeRaw) return;
             const dParts = dateRaw.split(/[./-]/);
@@ -6926,17 +6972,8 @@ if (toggleButton && sidebar) {
             }
         };
 
-        const targetMonthStr = String(month + 1).padStart(2, '0');
-        const targetYearStr = String(year);
-
-        if (registryRaw) {
-            const registry = JSON.parse(registryRaw);
-            registry.forEach(registerSessionInMonth);
-        }
-
-        // Also scan slots and historicalMeta for any valid session of this month
-        Object.keys(historicalMeta).forEach(registerSessionInMonth);
-        Object.keys(activeSlots).forEach(registerSessionInMonth);
+        // Scan only valid sessions that exist in active student data or master registry
+        validSessionsSet.forEach(registerSessionInMonth);
 
         // Keep your existing allStudentData scan (Authoritative live data)...
         if (allStudentData && allStudentData.length > 0) {
@@ -7150,6 +7187,13 @@ let html = "";
 
     // Add initialization call to your existing loadInitialData or updateDashboard
     // For now, we'll trigger it once the DOM is ready in app.js logic
+    // Expose calendar and dashboard functions globally for external events and testing
+    window.renderCalendar = renderCalendar;
+    window.initCalendar = initCalendar;
+    window.updateDashboard = updateDashboard;
+    window.getCurrentCalDate = () => currentCalDate;
+    window.setCurrentCalDate = (d) => { currentCalDate = d; renderCalendar(); };
+
     setTimeout(initCalendar, 1000);
 
     // --- Helper: Update the Specific Date Grid ---
@@ -10652,10 +10696,17 @@ async function syncToPrintManager() {
         showView(viewRoomAllotment, navRoomAllotment); 
         if (typeof window.fetchSettingsData === 'function') window.fetchSettingsData(); 
         if (typeof window.fetchAllocationData === 'function') window.fetchAllocationData(); 
+        if (typeof window.fetchStaffData === 'function') window.fetchStaffData(); 
         
-        // 🛡️ [PERSISTENCE FIX]: Force refresh of Scribe UI when returning to this tab
+        // 🛡️ [PERSISTENCE FIX]: Force refresh of Scribe UI & Invigilation when returning to this tab
         if (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect.value) {
-            if (typeof loadScribeAllotment === 'function') loadScribeAllotment(allotmentSessionSelect.value);
+            const activeSession = allotmentSessionSelect.value;
+            if (typeof loadScribeAllotment === 'function') loadScribeAllotment(activeSession);
+            if (typeof window.fetchSlotForSessionOnDemand === 'function') {
+                window.fetchSlotForSessionOnDemand(activeSession).then(() => {
+                    if (typeof window.renderInvigilationPanel === 'function') window.renderInvigilationPanel();
+                });
+            }
         }
     });
     navQPCodes.addEventListener('click', () => { 
@@ -10691,6 +10742,9 @@ async function syncToPrintManager() {
         // 3. Show target view & activate button
         if (viewToShow) {
             viewToShow.classList.remove('hidden');
+            if (typeof window.checkOrphanedSessionsBadge === 'function') {
+                window.checkOrphanedSessionsBadge();
+            }
         }
 
         if (buttonToActivate) {
@@ -15096,9 +15150,18 @@ window.real_populate_qp_code_session_dropdown = function () {
 
             if (sessionKey) {
                 loadRoomAllotment(sessionKey);
-                Promise.resolve(loadScribeAllotment(sessionKey)).catch(e => {
-                    console.error("loadScribeAllotment error:", e);
-                }).finally(() => {
+                const slotPromise = (typeof window.fetchSlotForSessionOnDemand === 'function')
+                    ? window.fetchSlotForSessionOnDemand(sessionKey)
+                    : Promise.resolve();
+
+                Promise.all([
+                    Promise.resolve(loadScribeAllotment(sessionKey)).catch(e => {
+                        console.error("loadScribeAllotment error:", e);
+                    }),
+                    slotPromise.catch(e => {
+                        console.warn("fetchSlotForSessionOnDemand error:", e);
+                    })
+                ]).finally(() => {
                     renderInvigilationPanel();
                     if (typeof window.updateRoomAllotmentBanner === 'function') {
                         window.updateRoomAllotmentBanner();
@@ -18302,7 +18365,7 @@ Are you sure?
     async function findMyCollege(user) {
         // Run Super Admin Check
         checkSuperAdminAccess(user);
-        updateLoaderProgress(25, "Locating College Database...");
+        updateLoaderProgress(28, "Locating college workspace...");
 
         updateSyncStatus("Searching...", "neutral");
         const { db, collection, query, where, getDocs, doc, getDoc } = window.firebase;
@@ -18321,6 +18384,7 @@ Are you sure?
                 window.currentCollegeId = collegeDoc.id;
                 localStorage.setItem('my_college_id', collegeDoc.id);
                 console.log("Joined College:", currentCollegeId);
+                updateLoaderProgress(35, "College workspace linked. Connecting to cloud...");
                 syncDataFromCloud(currentCollegeId);
                 document.getElementById('cloud-migration-wrapper')?.classList.remove('hidden');
 
@@ -19860,58 +19924,718 @@ window.handlePythonExtraction = async function (jsonString) {
         });
     }
 
-    // 🩹 AUTONOMOUS SELF-HEALING ENGINE (Vault-to-Roster Recovery)
-async function autoHealOrphanedAllotmentSessions() {
-    try {
-        let currentStudents = await loadExamDataIDB() || [];
-        const fullAllotments = (typeof window.getFullRoomAllotments === 'function')
-            ? await window.getFullRoomAllotments()
-            : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+    // ==========================================
+    // 🛡️ CONTROLLED STORAGE VAULT GOVERNANCE
+    // (Replaces blind auto-healing with explicit Admin inspection and control)
+    // ==========================================
 
-        if (!fullAllotments || typeof fullAllotments !== 'object') return currentStudents;
+    // Legacy no-op stub: ensures existing external calls never silently auto-resurrect
+    window.autoHealOrphanedAllotmentSessions = async function() {
+        return await loadExamDataIDB() || [];
+    };
 
-        const sessionKeys = Object.keys(fullAllotments);
-        if (sessionKeys.length === 0) return currentStudents;
+    // =========================================================================
+    // STORAGE VAULT & HISTORICAL SESSION GOVERNANCE (EXPLICIT ADMIN ARCHIVAL)
+    // =========================================================================
 
-        const studentSessionKeys = new Set(currentStudents.map(s => `${(s.Date || '').trim()} | ${(s.Time || '').trim()}`));
-        let knownRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-        const knownSet = new Set(knownRegistry);
+    // 0. Tab Switching between Active Database Sessions and Unlinked Vault Sessions
+    window.switchVaultTab = function(tabName) {
+        const activeTabBtn = document.getElementById('tab-vault-active-btn');
+        const unlinkedTabBtn = document.getElementById('tab-vault-unlinked-btn');
+        const activePanel = document.getElementById('vault-tab-active-panel');
+        const unlinkedPanel = document.getElementById('vault-tab-unlinked-panel');
 
-        const existingStudentKeys = new Set(currentStudents.map(s => {
+        if (tabName === 'active') {
+            if (activeTabBtn) {
+                activeTabBtn.className = "px-4 py-2.5 text-xs font-bold rounded-t-lg transition border-b-2 border-amber-600 text-amber-900 bg-white shadow-sm flex items-center gap-1.5 cursor-pointer";
+            }
+            if (unlinkedTabBtn) {
+                unlinkedTabBtn.className = "px-4 py-2.5 text-xs font-medium rounded-t-lg transition border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 cursor-pointer";
+            }
+            if (activePanel) activePanel.classList.remove('hidden');
+            if (unlinkedPanel) unlinkedPanel.classList.add('hidden');
+        } else {
+            if (activeTabBtn) {
+                activeTabBtn.className = "px-4 py-2.5 text-xs font-medium rounded-t-lg transition border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 cursor-pointer";
+            }
+            if (unlinkedTabBtn) {
+                unlinkedTabBtn.className = "px-4 py-2.5 text-xs font-bold rounded-t-lg transition border-b-2 border-amber-600 text-amber-900 bg-white shadow-sm flex items-center gap-1.5 cursor-pointer";
+            }
+            if (activePanel) activePanel.classList.add('hidden');
+            if (unlinkedPanel) unlinkedPanel.classList.remove('hidden');
+        }
+    };
+
+    // 1. Gather all Active Database Sessions
+    window.getActiveDatabaseSessions = async function() {
+        let currentStudents = [];
+        try {
+            currentStudents = (typeof allStudentData !== 'undefined' && Array.isArray(allStudentData) && allStudentData.length > 0)
+                ? allStudentData
+                : (await loadExamDataIDB() || []);
+        } catch(e) {
+            currentStudents = [];
+        }
+
+        const sessionMap = new Map();
+
+        // Count students per session in active memory / IDB
+        for (const s of currentStudents) {
             const d = (s.Date || '').trim();
             const t = (s.Time || '').trim();
-            const r = (typeof getRegNo === 'function' ? getRegNo(s) : (s['Register Number'] || s.RegisterNo || '')).trim();
-            const c = (s.Course || '').trim();
-            return `${d}|${t}|${r}|${c}`.toUpperCase();
-        }));
+            if (!d || !t) continue;
+            const key = `${d} | ${t}`;
+            if (!sessionMap.has(key)) {
+                sessionMap.set(key, { sessionKey: key, date: d, time: t, studentCount: 0 });
+            }
+            sessionMap.get(key).studentCount++;
+        }
 
-        let healedCount = 0;
-        let sessionsHealed = 0;
-        let knownSessionsAdded = 0;
+        // Also check examAllKnownSessions in localStorage
+        try {
+            const known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            const tombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
+            for (const sk of known) {
+                if (tombstones[sk]) continue;
+                if (!sessionMap.has(sk)) {
+                    const parts = sk.split('|').map(x => x.trim());
+                    if (parts.length >= 2) {
+                        sessionMap.set(sk, { sessionKey: sk, date: parts[0], time: parts[1], studentCount: 0 });
+                    }
+                }
+            }
+        } catch(_) {}
 
-        for (const sessionKey of sessionKeys) {
-            const rooms = fullAllotments[sessionKey];
-            if (!Array.isArray(rooms) || rooms.length === 0) continue;
+        const list = Array.from(sessionMap.values());
 
-            const totalSeated = rooms.reduce((acc, r) => acc + (r.students ? r.students.length : 0), 0);
-            if (totalSeated === 0) continue;
+        const parseSessionDate = (dStr) => {
+            if (!dStr) return new Date(0);
+            if (!dStr.includes('.')) return new Date(dStr);
+            const [d, m, y] = dStr.split('.');
+            const fullYear = y.length === 2 ? parseInt('20' + y) : parseInt(y);
+            return new Date(fullYear, parseInt(m) - 1, parseInt(d));
+        };
 
-            const parts = sessionKey.split('|').map(x => x.trim());
-            if (parts.length < 2) continue;
-            const datePart = parts[0];
-            const timePart = parts[1];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-            // If this session has 0 records in currentStudents, reconstruct from allotment rooms
-            if (!studentSessionKeys.has(sessionKey)) {
-                let sessionAdded = false;
-                rooms.forEach(r => {
+        for (const item of list) {
+            const dObj = parseSessionDate(item.date);
+            dObj.setHours(0, 0, 0, 0);
+            if (dObj.getTime() < today.getTime()) {
+                item.status = 'Past Session';
+                item.statusClass = 'bg-gray-100 text-gray-700 border-gray-300';
+                item.isPast = true;
+            } else if (dObj.getTime() === today.getTime()) {
+                item.status = 'Today';
+                item.statusClass = 'bg-blue-100 text-blue-800 border-blue-200';
+                item.isPast = false;
+            } else {
+                item.status = 'Upcoming';
+                item.statusClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+                item.isPast = false;
+            }
+            item.timestamp = dObj.getTime();
+        }
+
+        // Sort descending by date
+        list.sort((a, b) => b.timestamp - a.timestamp);
+        return list;
+    };
+
+    window._cachedActiveSessions = [];
+
+    // 2. Render Active Sessions Table
+    window.renderActiveSessionsTable = async function(filterQuery = '') {
+        const tbody = document.getElementById('vault-active-table-body');
+        const emptyNotice = document.getElementById('vault-active-empty-notice');
+        const counter = document.getElementById('vault-active-selected-counter');
+        const badge = document.getElementById('vault-active-count-badge');
+        const selectAllChk = document.getElementById('vault-active-select-all');
+        if (!tbody) return;
+
+        const sessions = await window.getActiveDatabaseSessions();
+        window._cachedActiveSessions = sessions;
+        if (badge) badge.textContent = sessions.length;
+
+        const q = (filterQuery || '').trim().toLowerCase();
+        const filtered = sessions.filter(s => !q || s.sessionKey.toLowerCase().includes(q) || s.status.toLowerCase().includes(q));
+
+        tbody.innerHTML = '';
+        if (selectAllChk) selectAllChk.checked = false;
+
+        if (filtered.length === 0) {
+            if (emptyNotice) emptyNotice.classList.remove('hidden');
+            if (counter) counter.textContent = '(0 of 0 selected)';
+            return;
+        }
+
+        if (emptyNotice) emptyNotice.classList.add('hidden');
+        if (counter) counter.textContent = `(0 of ${filtered.length} selected)`;
+
+        filtered.forEach(s => {
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-amber-50/50 transition-colors";
+            tr.innerHTML = `
+                <td class="w-10 px-3 py-2.5 text-center">
+                    <input type="checkbox" class="vault-active-row-chk rounded border-gray-300 text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer" data-session="${s.sessionKey}" onchange="window.updateActiveSessionSelectionCount()">
+                </td>
+                <td class="px-3 py-2.5 font-bold text-gray-800">
+                    ${s.date} <span class="text-xs font-normal text-gray-500">| ${s.time}</span>
+                </td>
+                <td class="px-3 py-2.5 text-center">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${s.statusClass}">
+                        ${s.status}
+                    </span>
+                </td>
+                <td class="px-3 py-2.5 text-center">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        ${s.studentCount} Candidates
+                    </span>
+                </td>
+                <td class="px-3 py-2.5 text-right">
+                    <button onclick="window.archiveSingleActiveSession('${s.sessionKey}')" class="text-amber-700 hover:text-amber-900 font-bold hover:underline text-[11px] px-2 py-1 inline-flex items-center gap-1 cursor-pointer">
+                        <span>☁️ Archive</span>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    };
+
+    window.toggleSelectAllActiveSessions = function(checked) {
+        const checkboxes = document.querySelectorAll('.vault-active-row-chk');
+        checkboxes.forEach(c => c.checked = checked);
+        window.updateActiveSessionSelectionCount();
+    };
+
+    window.updateActiveSessionSelectionCount = function() {
+        const all = document.querySelectorAll('.vault-active-row-chk');
+        const checked = document.querySelectorAll('.vault-active-row-chk:checked');
+        const counter = document.getElementById('vault-active-selected-counter');
+        const selectAllChk = document.getElementById('vault-active-select-all');
+        if (counter) counter.textContent = `(${checked.length} of ${all.length} selected)`;
+        if (selectAllChk && all.length > 0) selectAllChk.checked = (checked.length === all.length);
+    };
+
+    window.filterActiveSessionsList = function(q) {
+        window.renderActiveSessionsTable(q);
+    };
+
+    // 3. EXPLICIT ARCHIVE: Archives checked active sessions to Firebase Cold Storage
+    window.archiveSelectedActiveSessions = async function() {
+        const checkedBoxes = Array.from(document.querySelectorAll('.vault-active-row-chk:checked'));
+        if (checkedBoxes.length === 0) {
+            return await UiModal.alert("No Sessions Selected", "Please select at least one active session to archive.");
+        }
+
+        const selectedKeys = checkedBoxes.map(c => c.getAttribute('data-session'));
+
+        if (window.firebase && window.currentCollegeId && !navigator.onLine) {
+            return await UiModal.alert("Network Offline", "Please connect to the internet to upload to Cold Storage.");
+        }
+
+        const confirmed = await UiModal.confirm(
+            "Archive Sessions to Cold Storage",
+            `Are you sure you want to archive ${selectedKeys.length} session(s) to Cold Storage (historical_sessions)?\n\n` +
+            `• Candidate records and allotments will be packaged and stored in Firebase Cold Storage.\n` +
+            `• They will be safely moved out of active live database to keep performance fast.\n` +
+            `• You can restore these sessions back to live data at any time from the "Unlinked Vault & Recovery" tab.\n\n` +
+            `Proceed with archival?`
+        );
+        if (!confirmed) return;
+
+        const btn = document.getElementById('btn-archive-selected-active');
+        const origText = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<span class="inline-block animate-spin mr-1">⏳</span> Archiving...`;
+        }
+
+        try {
+            let allStudents = await loadExamDataIDB() || [];
+            const rawRoomAllotment = (typeof window.getFullRoomAllotments === 'function') 
+                ? await window.getFullRoomAllotments() 
+                : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            const rawInvigMapping = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+            const rawScribeAllotment = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
+            const rawQPCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+            const rawAbsentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}');
+
+            const filterBySession = (obj, sk) => {
+                const res = {};
+                if (obj && obj[sk]) res[sk] = obj[sk];
+                return res;
+            };
+
+            const { storage, ref, uploadString, db, doc, deleteDoc } = window.firebase || {};
+            let archivedCount = 0;
+
+            for (const sk of selectedKeys) {
+                const [dateStr, timeStr] = sk.split('|').map(x => x.trim());
+                const sessionStudents = allStudents.filter(s => (s.Date || '').trim() === dateStr && (s.Time || '').trim() === timeStr);
+
+                const sessionPackage = {
+                    sessionKey: sk,
+                    date: dateStr,
+                    time: timeStr,
+                    students: sessionStudents,
+                    roomAllotment: filterBySession(rawRoomAllotment, sk),
+                    invigilatorMapping: filterBySession(rawInvigMapping, sk),
+                    scribeAllotment: filterBySession(rawScribeAllotment, sk),
+                    qpCodes: filterBySession(rawQPCodes, sk),
+                    absentees: filterBySession(rawAbsentees, sk),
+                    archivedAt: new Date().toISOString()
+                };
+
+                // 1. Upload to Firebase Storage
+                if (storage && window.currentCollegeId) {
+                    const storageRef = ref(storage, `historical_sessions/${window.currentCollegeId}/${dateStr}_${timeStr.replace(/[: ]/g, '_')}.json`);
+                    await uploadString(storageRef, JSON.stringify(sessionPackage), 'raw', { contentType: 'application/json' });
+                }
+
+                // 2. Remove students from active student list
+                allStudents = allStudents.filter(s => !((s.Date || '').trim() === dateStr && (s.Time || '').trim() === timeStr));
+
+                // 3. Remove heavy Firestore session_students document
+                if (db && window.currentCollegeId) {
+                    const sessionId = `${dateStr.replace(/\./g, '-')}_${timeStr.replace(/[: ]/g, '_')}`;
+                    await deleteDoc(doc(db, 'colleges', window.currentCollegeId, 'session_students', sessionId)).catch(() => {});
+                }
+
+                archivedCount++;
+            }
+
+            // Save updated active students to IDB and in-memory allStudentData
+            await saveExamDataIDB(allStudents, true);
+            allStudentData = allStudents;
+
+            if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+            if (typeof updateDashboard === 'function') updateDashboard();
+            if (typeof window.syncDataToCloud === 'function') {
+                await window.syncDataToCloud('baseData').catch(() => {});
+            }
+
+            await UiModal.alert(
+                "Archival Complete",
+                `📦 Successfully archived ${archivedCount} session(s) to Cold Storage.\n\nThey have been moved out of active live database and can be restored from the "Unlinked Vault & Recovery" tab at any time.`
+            );
+
+            await window.renderActiveSessionsTable();
+            await window.renderOrphanSessionsTable();
+            await window.checkOrphanedSessionsBadge();
+
+        } catch (err) {
+            console.error("Archive error:", err);
+            await UiModal.alert("Archival Failed", "Error while archiving sessions: " + (err.message || err));
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origText;
+            }
+        }
+    };
+
+    // 4. Archive Single Session
+    window.archiveSingleActiveSession = async function(sessionKey) {
+        const confirmed = await UiModal.confirm(
+            "Archive Session to Cold Storage",
+            `Are you sure you want to archive "${sessionKey}" to Firebase Cold Storage?\n\n` +
+            `• All student records and allotments will be packaged into historical cold storage.\n` +
+            `• This session will be moved out of active database to maintain high performance.\n` +
+            `• You can restore it anytime with one click from the "Unlinked Vault & Recovery" tab.\n\n` +
+            `Proceed?`
+        );
+        if (!confirmed) return;
+
+        if (window.firebase && window.currentCollegeId && !navigator.onLine) {
+            return await UiModal.alert("Offline", "Please connect to the internet to upload to Cold Storage.");
+        }
+
+        try {
+            let allStudents = await loadExamDataIDB() || [];
+            const rawRoomAllotment = (typeof window.getFullRoomAllotments === 'function') 
+                ? await window.getFullRoomAllotments() 
+                : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            const rawInvigMapping = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+            const rawScribeAllotment = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
+            const rawQPCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+            const rawAbsentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}');
+
+            const filterBySession = (obj, sk) => {
+                const res = {};
+                if (obj && obj[sk]) res[sk] = obj[sk];
+                return res;
+            };
+
+            const [dateStr, timeStr] = sessionKey.split('|').map(x => x.trim());
+            const sessionStudents = allStudents.filter(s => (s.Date || '').trim() === dateStr && (s.Time || '').trim() === timeStr);
+
+            const sessionPackage = {
+                sessionKey,
+                date: dateStr,
+                time: timeStr,
+                students: sessionStudents,
+                roomAllotment: filterBySession(rawRoomAllotment, sessionKey),
+                invigilatorMapping: filterBySession(rawInvigMapping, sessionKey),
+                scribeAllotment: filterBySession(rawScribeAllotment, sessionKey),
+                qpCodes: filterBySession(rawQPCodes, sessionKey),
+                absentees: filterBySession(rawAbsentees, sessionKey),
+                archivedAt: new Date().toISOString()
+            };
+
+            const { storage, ref, uploadString, db, doc, deleteDoc } = window.firebase || {};
+            if (storage && window.currentCollegeId) {
+                const storageRef = ref(storage, `historical_sessions/${window.currentCollegeId}/${dateStr}_${timeStr.replace(/[: ]/g, '_')}.json`);
+                await uploadString(storageRef, JSON.stringify(sessionPackage), 'raw', { contentType: 'application/json' });
+            }
+
+            allStudents = allStudents.filter(s => !((s.Date || '').trim() === dateStr && (s.Time || '').trim() === timeStr));
+            await saveExamDataIDB(allStudents, true);
+            allStudentData = allStudents;
+
+            if (db && window.currentCollegeId) {
+                const sessionId = `${dateStr.replace(/\./g, '-')}_${timeStr.replace(/[: ]/g, '_')}`;
+                await deleteDoc(doc(db, 'colleges', window.currentCollegeId, 'session_students', sessionId)).catch(() => {});
+            }
+
+            if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+            if (typeof updateDashboard === 'function') updateDashboard();
+            if (typeof window.syncDataToCloud === 'function') {
+                await window.syncDataToCloud('baseData').catch(() => {});
+            }
+
+            await UiModal.alert("Archive Complete", `✅ "${sessionKey}" has been archived to Cold Storage.`);
+
+            await window.renderActiveSessionsTable();
+            await window.renderOrphanSessionsTable();
+            await window.checkOrphanedSessionsBadge();
+        } catch(e) {
+            console.error("Archive error:", e);
+            await UiModal.alert("Error", "Failed to archive session: " + (e.message || e));
+        }
+    };
+
+    // 5. Read-Only Detection: Finds unlinked sessions in vault & cloud cold storage
+    window.detectOrphanedSessions = async function() {
+        try {
+            const fullAllotments = (typeof window.getFullRoomAllotments === 'function')
+                ? await window.getFullRoomAllotments()
+                : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+
+            const currentStudents = await loadExamDataIDB() || [];
+            const studentSessionKeys = new Set(currentStudents.map(s => `${(s.Date || '').trim()} | ${(s.Time || '').trim()}`));
+            const tombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
+
+            const orphaned = [];
+            const seenKeys = new Set();
+
+            if (fullAllotments && typeof fullAllotments === 'object') {
+                for (const [sessionKey, rooms] of Object.entries(fullAllotments)) {
+                    if (studentSessionKeys.has(sessionKey)) continue;
+                    if (tombstones[sessionKey]) continue;
+                    if (!Array.isArray(rooms) || rooms.length === 0) continue;
+
+                    const totalSeated = rooms.reduce((acc, r) => acc + (r.students ? r.students.length : 0), 0);
+                    if (totalSeated === 0) continue;
+
+                    const parts = sessionKey.split('|').map(x => x.trim());
+                    seenKeys.add(sessionKey);
+                    orphaned.push({
+                        sessionKey,
+                        date: parts[0] || '',
+                        time: parts[1] || '',
+                        roomCount: rooms.length,
+                        studentCount: totalSeated,
+                        source: 'Local Allotment Vault',
+                        rooms: rooms
+                    });
+                }
+            }
+
+            // Cloud Cold Storage files
+            if (window.firebase && window.currentCollegeId && navigator.onLine) {
+                try {
+                    const { storage, ref, listAll } = window.firebase;
+                    const folderRef = ref(storage, `historical_sessions/${window.currentCollegeId}/`);
+                    const fileList = await listAll(folderRef);
+                    for (const itemRef of fileList.items) {
+                        const fname = itemRef.name;
+                        if (fname && fname.endsWith('.json')) {
+                            const rawName = fname.replace('.json', '');
+                            let datePart = rawName;
+                            let timePart = 'FN';
+                            if (rawName.includes('_')) {
+                                const [d, t] = rawName.split('_');
+                                datePart = d;
+                                timePart = t.replace(/_/g, ':');
+                            }
+                            const sk = `${datePart} | ${timePart}`;
+                            if (!studentSessionKeys.has(sk) && !tombstones[sk] && !seenKeys.has(sk)) {
+                                seenKeys.add(sk);
+                                orphaned.push({
+                                    sessionKey: sk,
+                                    date: datePart,
+                                    time: timePart,
+                                    roomCount: '-',
+                                    studentCount: 'Cold Storage Archive',
+                                    source: 'Cloud Cold Storage',
+                                    cloudPath: itemRef.fullPath,
+                                    rooms: []
+                                });
+                            }
+                        }
+                    }
+                } catch(e) {
+                    console.warn("Storage list scan warning in detectOrphanedSessions:", e);
+                }
+            }
+
+            return orphaned;
+        } catch(e) {
+            console.warn("detectOrphanedSessions warning:", e);
+            return [];
+        }
+    };
+
+    // 6. Notification Badge Updater
+    window.checkOrphanedSessionsBadge = async function() {
+        try {
+            const orphans = await window.detectOrphanedSessions();
+            const editorPill = document.getElementById('editor-vault-status-pill');
+            const sideBadge = document.getElementById('orphaned-count-badge');
+            const unlinkedBadge = document.getElementById('vault-unlinked-count-badge');
+
+            if (unlinkedBadge) unlinkedBadge.textContent = orphans.length;
+
+            if (orphans.length > 0) {
+                if (editorPill) {
+                    editorPill.className = "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse";
+                    editorPill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> ${orphans.length} Unlinked Sessions in Vault`;
+                }
+                if (sideBadge) {
+                    sideBadge.classList.remove('hidden');
+                    sideBadge.textContent = `${orphans.length} Found`;
+                }
+            } else {
+                if (editorPill) {
+                    editorPill.className = "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200";
+                    editorPill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Vault Clean (0 Unlinked)`;
+                }
+                if (sideBadge) sideBadge.classList.add('hidden');
+            }
+        } catch(e) {
+            console.warn("checkOrphanedSessionsBadge warning:", e);
+        }
+    };
+
+    // 7. Open Modal & Render Both Tables
+    window.openOrphanedSessionsModal = async function() {
+        console.log("Storage Vault: Opening Session Governance Modal...");
+        const modal = document.getElementById('orphaned-sessions-modal');
+        if (!modal) {
+            console.error("Storage Vault: #orphaned-sessions-modal element not found in DOM!");
+            return;
+        }
+        modal.classList.remove('hidden');
+        modal.style.setProperty('display', 'flex', 'important');
+        modal.style.setProperty('z-index', '10000', 'important');
+        modal.style.setProperty('position', 'fixed', 'important');
+        modal.style.setProperty('inset', '0px', 'important');
+
+        if (typeof window.switchVaultTab === 'function') {
+            window.switchVaultTab('active');
+        }
+
+        await Promise.all([
+            window.renderActiveSessionsTable ? window.renderActiveSessionsTable() : Promise.resolve(),
+            window.renderOrphanSessionsTable ? window.renderOrphanSessionsTable() : Promise.resolve()
+        ]);
+        if (typeof window.checkOrphanedSessionsBadge === 'function') {
+            await window.checkOrphanedSessionsBadge();
+        }
+    };
+
+    window.closeOrphanedSessionsModal = function() {
+        const modal = document.getElementById('orphaned-sessions-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.style.setProperty('display', 'none', 'important');
+        }
+    };
+
+    window._cachedOrphanSessions = [];
+
+    // 8. Render Unlinked Sessions Table
+    window.renderOrphanSessionsTable = async function(filterQuery = '') {
+        const tbody = document.getElementById('orphan-sessions-table-body');
+        const emptyNotice = document.getElementById('orphan-empty-notice');
+        const counter = document.getElementById('orphan-selected-counter');
+        const selectAllChk = document.getElementById('orphan-select-all');
+        const unlinkedBadge = document.getElementById('vault-unlinked-count-badge');
+        if (!tbody) return;
+
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="py-8 text-center text-gray-500">
+                    <div class="inline-flex items-center gap-2">
+                        <svg class="animate-spin h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                        </svg>
+                        <span class="text-xs font-semibold">Scanning storage for historical sessions...</span>
+                    </div>
+                </td>
+            </tr>
+        `;
+        if (emptyNotice) emptyNotice.classList.add('hidden');
+        if (selectAllChk) selectAllChk.checked = false;
+
+        let orphans = [];
+        try {
+            orphans = await window.detectOrphanedSessions();
+        } catch(err) {
+            console.error("detectOrphanedSessions failed:", err);
+            tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-red-500 text-xs">Error scanning storage: ${err.message || err}</td></tr>`;
+            return;
+        }
+        window._cachedOrphanSessions = orphans;
+        if (unlinkedBadge) unlinkedBadge.textContent = orphans.length;
+
+        const q = (filterQuery || '').trim().toLowerCase();
+        const filtered = orphans.filter(o => !q || o.sessionKey.toLowerCase().includes(q) || (o.source && o.source.toLowerCase().includes(q)));
+
+        tbody.innerHTML = '';
+        if (selectAllChk) selectAllChk.checked = false;
+
+        if (filtered.length === 0) {
+            if (emptyNotice) emptyNotice.classList.remove('hidden');
+            if (counter) counter.textContent = '(0 of 0 selected)';
+            return;
+        }
+
+        if (emptyNotice) emptyNotice.classList.add('hidden');
+        if (counter) counter.textContent = `(0 of ${filtered.length} selected)`;
+
+        filtered.forEach(o => {
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-amber-50/50 transition-colors";
+            tr.innerHTML = `
+                <td class="w-10 px-3 py-2.5 text-center">
+                    <input type="checkbox" class="orphan-row-chk rounded border-gray-300 text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer" data-session="${o.sessionKey}" onchange="window.updateOrphanSelectionCount()">
+                </td>
+                <td class="px-3 py-2.5 font-bold text-gray-800">
+                    ${o.date} <span class="text-xs font-normal text-gray-500">| ${o.time}</span>
+                    <span class="block text-[10px] text-gray-400 font-normal">${o.source || 'Vault'}</span>
+                </td>
+                <td class="px-3 py-2.5 text-center text-gray-600 font-semibold">${o.roomCount}</td>
+                <td class="px-3 py-2.5 text-center">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                        ${typeof o.studentCount === 'number' ? o.studentCount + ' Candidates' : o.studentCount}
+                    </span>
+                </td>
+                <td class="px-3 py-2.5 text-right">
+                    <button onclick="window.purgeSingleOrphanSession('${o.sessionKey}')" class="text-red-600 hover:text-red-800 font-bold hover:underline text-[11px] px-2 py-1 cursor-pointer">
+                        Purge
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    };
+
+    window.toggleSelectAllOrphans = function(checked) {
+        const checkboxes = document.querySelectorAll('.orphan-row-chk');
+        checkboxes.forEach(c => c.checked = checked);
+        window.updateOrphanSelectionCount();
+    };
+
+    window.updateOrphanSelectionCount = function() {
+        const all = document.querySelectorAll('.orphan-row-chk');
+        const checked = document.querySelectorAll('.orphan-row-chk:checked');
+        const counter = document.getElementById('orphan-selected-counter');
+        const selectAllChk = document.getElementById('orphan-select-all');
+        if (counter) counter.textContent = `(${checked.length} of ${all.length} selected)`;
+        if (selectAllChk && all.length > 0) selectAllChk.checked = (checked.length === all.length);
+    };
+
+    window.filterOrphanList = function(q) {
+        window.renderOrphanSessionsTable(q);
+    };
+
+    // 9. EXPLICIT RESTORE: Restores selected sessions to active records
+    window.restoreSelectedOrphanSessions = async function() {
+        const checkedBoxes = Array.from(document.querySelectorAll('.orphan-row-chk:checked'));
+        if (checkedBoxes.length === 0) {
+            return await UiModal.alert("No Sessions Selected", "Please check at least one session to restore.");
+        }
+
+        const selectedKeys = checkedBoxes.map(c => c.getAttribute('data-session'));
+        const confirmed = await UiModal.confirm(
+            "Restore Selected Sessions",
+            `Are you sure you want to restore ${selectedKeys.length} session(s) to your active student database?`
+        );
+        if (!confirmed) return;
+
+        let currentStudents = await loadExamDataIDB() || [];
+        let knownRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+        const knownSet = new Set(knownRegistry);
+        let restoredStudentsCount = 0;
+
+        for (const sessionKey of selectedKeys) {
+            const orphan = (window._cachedOrphanSessions || []).find(o => o.sessionKey === sessionKey);
+            if (!orphan) continue;
+
+            const datePart = orphan.date;
+            const timePart = orphan.time;
+
+            if (orphan.cloudPath && window.firebase && window.firebase.storage) {
+                try {
+                    const { storage, ref, getDownloadURL } = window.firebase;
+                    const fileRef = ref(storage, orphan.cloudPath);
+                    const url = await getDownloadURL(fileRef);
+                    const res = await fetch(url);
+                    if (res.ok) {
+                        const pkg = await res.json();
+                        const students = Array.isArray(pkg) ? pkg : (pkg.students || []);
+                        for (const s of students) {
+                            const reg = (typeof getRegNo === 'function' ? getRegNo(s) : (s['Register Number'] || s.RegisterNo || '')).trim();
+                            if (reg) {
+                                currentStudents.push({
+                                    'Date': s.Date || datePart,
+                                    'Time': s.Time || timePart,
+                                    'Course': s.Course || '',
+                                    'Register Number': reg,
+                                    'Name': s.Name || '',
+                                    'Stream': s.Stream || 'Regular',
+                                    'Exam Name': s['Exam Name'] || 'University Examination',
+                                    'Source File': 'Explicitly Restored from Cloud Vault'
+                                });
+                                restoredStudentsCount++;
+                            }
+                        }
+                        if (pkg.roomAllotment) {
+                            const fullAllotments = (typeof window.getFullRoomAllotments === 'function') 
+                                ? await window.getFullRoomAllotments() 
+                                : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                            Object.assign(fullAllotments, pkg.roomAllotment);
+                            if (typeof window.setRoomAllotmentIDB === 'function') {
+                                for (const [sk, rms] of Object.entries(pkg.roomAllotment)) {
+                                    await window.setRoomAllotmentIDB(sk, rms);
+                                }
+                            }
+                            localStorage.setItem('examRoomAllotment', JSON.stringify(fullAllotments));
+                        }
+                    }
+                } catch(err) {
+                    console.error("Cloud restore failed for", sessionKey, err);
+                }
+            } else {
+                (orphan.rooms || []).forEach(r => {
                     (r.students || []).forEach(s => {
                         const reg = (typeof getRegNo === 'function' ? getRegNo(s) : (s['Register Number'] || s.RegisterNo || '')).trim();
                         const course = (s.Course || '').trim();
-                        const dedupeKey = `${datePart}|${timePart}|${reg}|${course}`.toUpperCase();
-
-                        if (reg && !existingStudentKeys.has(dedupeKey)) {
-                            existingStudentKeys.add(dedupeKey);
+                        if (reg) {
                             currentStudents.push({
                                 'Date': datePart,
                                 'Time': timePart,
@@ -19920,58 +20644,108 @@ async function autoHealOrphanedAllotmentSessions() {
                                 'Name': s.Name || '',
                                 'Stream': s.Stream || r.stream || 'Regular',
                                 'Exam Name': s['Exam Name'] || s.examName || 'University Examination',
-                                'Source File': 'Auto-Healed from Allotment Vault'
+                                'Source File': 'Explicitly Restored from Vault'
                             });
-                            healedCount++;
-                            sessionAdded = true;
+                            restoredStudentsCount++;
                         }
                     });
                 });
-
-                if (sessionAdded) {
-                    sessionsHealed++;
-                    studentSessionKeys.add(sessionKey);
-                }
             }
 
-            // Always ensure the session is registered in known sessions
             if (!knownSet.has(sessionKey)) {
                 knownSet.add(sessionKey);
                 knownRegistry.push(sessionKey);
             }
         }
 
-        if (healedCount > 0 || knownSessionsAdded > 0) {
-            console.log(`🩹 [Self-Healing Engine]: Automatically recovered ${healedCount} students across ${sessionsHealed} missing sessions from Allotment Vault!`);
-            await saveExamDataIDB(currentStudents, true);
-            localStorage.setItem('examAllKnownSessions', JSON.stringify(knownRegistry));
-            allStudentData = currentStudents;
-            return currentStudents;
+        await saveExamDataIDB(currentStudents, true);
+        localStorage.setItem('examAllKnownSessions', JSON.stringify(knownRegistry));
+        allStudentData = currentStudents;
+
+        if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+        if (typeof updateDashboard === 'function') updateDashboard();
+
+        for (const sk of selectedKeys) {
+            if (typeof window.syncSessionToCloud === 'function') {
+                await window.syncSessionToCloud(sk).catch(() => {});
+            }
+        }
+        if (typeof window.syncDataToCloud === 'function') {
+            await window.syncDataToCloud('baseData').catch(() => {});
+        }
+        if (typeof window.triggerDriveAutoSync === 'function') {
+            try { window.triggerDriveAutoSync(); } catch(_) {}
         }
 
-        return currentStudents;
-    } catch (e) {
-        console.warn("Self-healing check warning:", e);
-        return await loadExamDataIDB() || [];
-    }
-}
-window.autoHealOrphanedAllotmentSessions = autoHealOrphanedAllotmentSessions;
+        await UiModal.alert("Restoration Complete", `✅ Successfully restored ${selectedKeys.length} session(s) (${restoredStudentsCount} candidates) into active records.`);
+        await window.renderActiveSessionsTable();
+        await window.renderOrphanSessionsTable();
+        await window.checkOrphanedSessionsBadge();
+    };
+
+    // 10. EXPLICIT PURGE: Purges checked sessions across Browser, Cloud, and Drive
+    window.purgeSelectedOrphanSessions = async function() {
+        const checkedBoxes = Array.from(document.querySelectorAll('.orphan-row-chk:checked'));
+        if (checkedBoxes.length === 0) {
+            return await UiModal.alert("No Sessions Selected", "Please check at least one session to purge.");
+        }
+
+        const selectedKeys = checkedBoxes.map(c => c.getAttribute('data-session'));
+        const confirmed = await UiModal.confirm(
+            "Permanent Universal Purge",
+            `⚠️ Are you sure you want to PERMANENTLY PURGE ${selectedKeys.length} session(s) from:\n\n• Browser IndexedDB (allotmentVault & scribeVault)\n• Firebase Cloud Database\n• Google Drive Backups\n\nThis will register tombstones and cannot be undone.`
+        );
+        if (!confirmed) return;
+
+        for (const sk of selectedKeys) {
+            await window.cascadeDeleteSession(sk);
+        }
+
+        await UiModal.alert("Purge Complete", `✅ Successfully purged ${selectedKeys.length} session(s) across all systems.`);
+        await window.renderActiveSessionsTable();
+        await window.renderOrphanSessionsTable();
+        await window.checkOrphanedSessionsBadge();
+    };
+
+    // 11. SINGLE PURGE
+    window.purgeSingleOrphanSession = async function(sessionKey) {
+        const confirmed = await UiModal.confirm(
+            "Permanent Purge",
+            `Permanently purge "${sessionKey}" across Browser, Firebase Cloud, and Google Drive?`
+        );
+        if (!confirmed) return;
+
+        await window.cascadeDeleteSession(sessionKey);
+        await window.renderActiveSessionsTable();
+        await window.renderOrphanSessionsTable();
+        await window.checkOrphanedSessionsBadge();
+    };
+
+    // 12. PURGE ALL UNLINKED
+    window.purgeAllOrphanSessions = async function() {
+        const orphans = window._cachedOrphanSessions || await window.detectOrphanedSessions();
+        if (orphans.length === 0) {
+            return await UiModal.alert("Vault Clean", "There are no unlinked historical sessions in storage.");
+        }
+
+        const confirmed = await UiModal.confirm(
+            "Purge All Unlinked Historical Data",
+            `⚠️ CRITICAL WARNING: This will permanently delete ALL ${orphans.length} unlinked historical sessions from:\n\n• Browser IndexedDB Storage\n• Firebase Cloud\n• Google Drive Backups\n\nProceed?`
+        );
+        if (!confirmed) return;
+
+        for (const o of orphans) {
+            await window.cascadeDeleteSession(o.sessionKey);
+        }
+
+        await UiModal.alert("All Purged", `✅ All ${orphans.length} unlinked sessions have been completely purged from all storage systems.`);
+        window.closeOrphanedSessionsModal();
+        await window.checkOrphanedSessionsBadge();
+    };
 
 // --- V65: Initial Data Load on Startup (Clean Version) ---
 async function loadInitialData() { 
-    // 🧹 EVICT STALE THAWED HISTORICAL RECORDS (Older than 7 days)
-    try {
-        const allCached = await loadExamDataIDB();
-        const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-        const active = allCached.filter(r => {
-            if (!r._thawedAt) return true; // Keep un-tagged (live data)
-            return new Date(r._thawedAt).getTime() > sevenDaysAgo;
-        });
-        if (active.length < allCached.length) {
-            await saveExamDataIDB(active, true);
-            console.log(`🧹 Evicted ${allCached.length - active.length} stale historical records from IDB.`);
-        }
-    } catch(e) { console.warn("Eviction check failed:", e); }
+    // 🛡️ GOVERNANCE: Retain all student records in IDB without automatic eviction.
 
 
 
@@ -19988,8 +20762,8 @@ async function loadInitialData() {
             if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
             // ******************************************************************************
             if (typeof initRemunerationModule === 'function') initRemunerationModule();
-            // 2. Check for base student data persistence (with Auto-Healing)
-            const savedData = (typeof autoHealOrphanedAllotmentSessions === 'function') ? await autoHealOrphanedAllotmentSessions() : (await loadExamDataIDB());
+            // 2. Check for base student data persistence
+            const savedData = await loadExamDataIDB();
 
     // 2. Check for base student data persistence in IndexedDB
     if (savedData && savedData.length > 0) {
@@ -21357,8 +22131,16 @@ function updateSessionOpsLockUI() {
                 await deleteKeyInStorage('examScribeAllotment');
                 await deleteKeyInStorage('examAbsenteeList');
                 await deleteKeyInStorage('examInvigilatorMapping');
-                // 🛡️ [FIX]: Do not delete examInvigilationSlots from app.js
                 await deleteKeyInStorage('examQPCodes');
+                await deleteKeyInStorage('examHistoricalMeta');
+                await deleteKeyInStorage('examInvigilationSlots');
+
+                // Register tombstone
+                try {
+                    const tombstones = JSON.parse(localStorage.getItem('examDeletedSessions') || '{}');
+                    tombstones[currentSession] = { deletedAt: Date.now(), reason: 'session_delete' };
+                    localStorage.setItem('examDeletedSessions', JSON.stringify(tombstones));
+                } catch(e) {}
 
                 // Remove from Master Known Sessions Registry
                 let knownSess = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
@@ -24881,7 +25663,7 @@ const allRooms = Object.values(roomDataMap);
 
 
     // 4. Open Modal (Populates List)
-    window.openInvigModal = function (roomName) {
+    window.openInvigModal = async function (roomName) {
         const modal = document.getElementById('invigilator-select-modal');
         const list = document.getElementById('invig-options-list');
         const input = document.getElementById('invig-search-input');
@@ -24895,6 +25677,16 @@ const allRooms = Object.values(roomDataMap);
         input.value = "";
         modal.classList.remove('hidden');
         setTimeout(() => input.focus(), 100);
+
+        // Fetch latest slot & staff on-demand if online to ensure 100% parity with Invigilation Portal
+        if (sessionKey && navigator.onLine && typeof window.fetchSlotForSessionOnDemand === 'function') {
+            try {
+                await Promise.all([
+                    window.fetchSlotForSessionOnDemand(sessionKey),
+                    (typeof window.fetchStaffData === 'function') ? window.fetchStaffData() : Promise.resolve()
+                ]);
+            } catch(e) {}
+        }
 
         // Get Data
         const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
@@ -25211,6 +26003,16 @@ const allRooms = Object.values(roomDataMap);
             window.cleanupGhostInvigilatorMappings(sessionKey);
         }
 
+        // Ensure latest slot and staff data from cloud before assigning
+        if (sessionKey && navigator.onLine) {
+            if (typeof window.fetchSlotForSessionOnDemand === 'function') {
+                await window.fetchSlotForSessionOnDemand(sessionKey);
+            }
+            if (typeof window.fetchStaffData === 'function') {
+                await window.fetchStaffData();
+            }
+        }
+
         // Ensure we have latest local data before starting
         const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
         currentInvigMapping = allMappings[sessionKey] || {};
@@ -25219,36 +26021,12 @@ const allRooms = Object.values(roomDataMap);
         let staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
         let slot = invigSlots[sessionKey];
 
-        // 🛡️ ON-DEMAND FETCH: If slot or assigned staff is missing, fetch latest shard from cloud before giving up
-        if ((!slot || !slot.assigned || slot.assigned.length === 0) && window.currentCollegeId && navigator.onLine) {
-            try {
-                const { getDoc, doc } = window.firebase;
-                const [dRaw] = sessionKey.split(' | ');
-                const dStr = (dRaw || '').replace(/[-/]/g, '.');
-                const parts = dStr.split('.');
-                if (parts.length >= 3) {
-                    const shardId = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-                    const shardRef = doc(window.firebase.db, "colleges", window.currentCollegeId, "slots_daily", shardId);
-                    const shardSnap = await getDoc(shardRef);
-                    if (shardSnap.exists()) {
-                        const shardMap = JSON.parse(shardSnap.data().data || '{}');
-                        if (shardMap[sessionKey]) {
-                            invigSlots[sessionKey] = shardMap[sessionKey];
-                            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigSlots));
-                            slot = invigSlots[sessionKey];
-                        }
-                    }
-                }
-            } catch (err) {
-                console.warn("On-demand slot fetch failed:", err);
-            }
-            // Fallback to fetchSlotsData if single shard wasn't found
-            if ((!slot || !slot.assigned || slot.assigned.length === 0) && typeof window.fetchSlotsData === 'function') {
-                const freshSlots = await window.fetchSlotsData();
-                if (freshSlots && freshSlots[sessionKey]) {
-                    invigSlots = freshSlots;
-                    slot = invigSlots[sessionKey];
-                }
+        // Fallback: If still missing slot, try full fetchSlotsData
+        if ((!slot || !slot.assigned || slot.assigned.length === 0) && typeof window.fetchSlotsData === 'function' && navigator.onLine) {
+            const freshSlots = await window.fetchSlotsData();
+            if (freshSlots && freshSlots[sessionKey]) {
+                invigSlots = freshSlots;
+                slot = invigSlots[sessionKey];
             }
         }
 
@@ -26374,7 +27152,6 @@ if (displayLoc) {
                     // Check for student data key (IndexedDB)
                     if (key === 'examBaseData') {
                         try {
-                            if (typeof autoHealOrphanedAllotmentSessions === 'function') await autoHealOrphanedAllotmentSessions();
                             const idbData = await loadExamDataIDB();
                             if (idbData && idbData.length > 0) {
                                 backup[key] = idbData;
@@ -29067,7 +29844,9 @@ window.executeBulkDelete = async function() {
                 'examScribeAllotment',
                 'examAbsenteeList',
                 'examQPCodes',
-                'examInvigilatorMapping'
+                'examInvigilatorMapping',
+                'examHistoricalMeta',
+                'examInvigilationSlots'
             ];
             
             auxKeys.forEach(key => {

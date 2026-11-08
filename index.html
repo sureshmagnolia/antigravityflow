@@ -3,9 +3,9 @@
 
 <head>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/svg+xml" href="magnolia-logo.svg?v=12.8.62">
+    <link rel="icon" type="image/svg+xml" href="magnolia-logo.svg?v=12.8.75">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ExamFlow v12.8.62</title>
+    <title>ExamFlow v12.8.75</title>
 
     <script src="tailwind.js"></script>
     <script>
@@ -17,7 +17,7 @@
     <script src="jspdf.plugin.autotable.min.js"></script>
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
-    <script src="drive_sync.js?v=12.8.62"></script>
+    <script src="drive_sync.js?v=12.8.75"></script>
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 
@@ -128,14 +128,13 @@
             </g>
         </svg>
 
-        <h2 class="text-2xl font-bold text-gray-800 mb-2">ExamFlow is Loading...</h2>
-        <p id="loader-message" class="text-indigo-600 font-medium italic animate-pulse">Summoning the Exam Spirits... 👻
-        </p>
-            <!-- PROGRESS BAR -->
-        <div class="w-64 h-2 mt-4 bg-gray-200 rounded-full overflow-hidden shadow-inner">
-        <div id="loader-progress-bar" class="h-full bg-blue-600 transition-all duration-500 ease-out" style="width: 0%"></div>
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">ExamFlow</h2>
+        <p id="loader-message" class="text-indigo-600 font-medium text-sm transition-all duration-200">Initializing application...</p>
+        <!-- PROGRESS BAR -->
+        <div class="w-72 h-2.5 mt-4 bg-gray-200 rounded-full overflow-hidden shadow-inner">
+            <div id="loader-progress-bar" class="h-full bg-indigo-600 transition-all duration-300 ease-out" style="width: 0%"></div>
         </div>
-        <div id="loader-percentage" class="mt-2 text-xs font-black text-blue-800">0%</div>
+        <div id="loader-percentage" class="mt-2 text-xs font-bold text-indigo-700 tracking-wider">0%</div>
       
     
     </div>
@@ -218,7 +217,7 @@
                 </svg>
                 <div>
                     <h1 class="text-sm md:text-lg font-bold text-white leading-none">
-                        ExamFlow <span class="text-[10px] font-normal text-gray-400 ml-1">v12.8.62</span>
+                        ExamFlow <span class="text-[10px] font-normal text-gray-400 ml-1">v12.8.75</span>
                         <button onclick="openManualNewTab()" class="ml-1 bg-indigo-800 hover:bg-indigo-700 text-white p-1 rounded shadow-sm transition border border-indigo-600" title="Open User Manual">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 md:w-4 md:h-4">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
@@ -281,6 +280,7 @@
                         d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" />
                 </svg>
             </button>
+
 
 <!-- Drive Sync Status for Basic Users -->
             <div id="drive-sync-status-ribbon" onclick="if(window.checkForNewerDataOnDrive) window.checkForNewerDataOnDrive(true)"
@@ -678,6 +678,7 @@
                             </div>
                         </div>
                     </div>
+
                 </div>
 
             </div>
@@ -686,6 +687,7 @@
                 <div class="bg-white p-8 rounded-lg shadow-xl w-full">
                     <h1 class="text-3xl font-bold text-gray-800 mb-2">Data Loading</h1>
                     <p class="text-gray-600 mb-6">Upload new data via CSV or PDF extraction.</p>
+
                     <div
                         class="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-8 flex flex-col sm:flex-row justify-between items-center gap-4">
                         <div class="flex items-center gap-3">
@@ -1836,6 +1838,51 @@
                     </div>
 
                 </div>
+
+                <!-- === STORAGE VAULT & HISTORICAL SESSIONS (DATA EDITOR BOTTOM) === -->
+                <div class="mt-8 p-6 rounded-2xl bg-white border border-gray-200 shadow-md hover:shadow-lg transition-shadow">
+                    <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
+                        <div class="flex items-start gap-4">
+                            <div class="p-3.5 rounded-2xl bg-gradient-to-br from-amber-500 to-yellow-600 text-white shadow-md shadow-amber-500/20 shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <h3 class="text-xl font-bold text-gray-800">Storage Vault &amp; Historical Sessions</h3>
+                                    <span id="editor-vault-status-pill" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-700 border border-gray-200">
+                                        Checking Vault...
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-600 mt-1.5 max-w-2xl leading-relaxed">
+                                    Inspect and manage historical or unlinked room allotments stored in IndexedDB, Firebase Cloud, and Google Drive. Protects against rogue data resurrection, allows selective restoration to active records, and executes universal multi-tier purges.
+                                </p>
+                                <div class="flex items-center gap-3 sm:gap-4 mt-3 text-xs text-gray-500 flex-wrap">
+                                    <span class="flex items-center gap-1.5 text-amber-800 font-medium bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
+                                        <span>🛡️ Controlled Governance (No Auto-Healing)</span>
+                                    </span>
+                                    <span class="text-gray-300 hidden sm:inline">•</span>
+                                    <span class="text-gray-500 font-medium">
+                                        Permanent Multi-Tier Purge: Browser + Firebase + Google Drive
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="w-full lg:w-auto shrink-0 flex flex-col sm:flex-row lg:flex-col gap-2">
+                            <button onclick="window.openOrphanedSessionsModal()" 
+                                    type="button"
+                                    class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 active:scale-[0.98] text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer">
+                                <span>📦</span>
+                                <span>Review &amp; Control Storage Sessions</span>
+                            </button>
+                            <p class="text-[11px] text-gray-500 text-center lg:text-right font-medium">
+                                Inspect unlinked historical data
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
 
@@ -2473,7 +2520,10 @@
     </svg>
 </button>
 
-</div> </div> <div id="view-absentees" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
+            </div>
+        </div>
+
+        <div id="view-absentees" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
 
 
 
@@ -3048,9 +3098,13 @@
                             <div id="invigilator-list-container" class="space-y-2"></div>
                         </div>
 
-
-
                     </div>
+
+                    <div id="room-allotment-loader" class="text-center text-gray-600">
+                        <p>Please run a data extraction or load a corrected CSV to enable this feature.</p>
+                    </div>
+
+                </div>
 
 
 
@@ -3227,14 +3281,6 @@
     </div>
 </div>
 
-                    </div>
-
-                    <div id="room-allotment-loader" class="text-center text-gray-600">
-                        <p>Please run a data extraction or load a corrected CSV to enable this feature.</p>
-                    </div>
-
-                </div>
-            </div>
 
 
             <div id="student-search-result-modal"
@@ -4652,8 +4698,10 @@
 
         </main>
 
+    </div>
 
-        <div id="admin-modal"
+
+    <div id="admin-modal"
             class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center">
             <div class="relative bg-white rounded-lg shadow-xl p-6 w-96">
                 <h3 class="text-lg font-bold text-gray-800 mb-4">Manage Team Access</h3>
@@ -5559,6 +5607,22 @@
                     </div>
 
 
+                <!-- === UNLINKED STORAGE VAULT MANAGER === -->
+                    <div id="orphaned-vault-wrapper" class="mb-3">
+                        <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+                            <div class="flex items-center justify-between">
+                                <h4 class="text-xs font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1">
+                                    📦 Storage Vault Sessions
+                                </h4>
+                                <span id="orphaned-count-badge" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">0 Found</span>
+                            </div>
+                            <p class="text-[10px] text-amber-700 leading-tight">Inspect historical room allotments stored in IndexedDB or cloud shards. Selectively restore them or purge them permanently.</p>
+                            <button onclick="window.openOrphanedSessionsModal()" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm transition flex items-center justify-center gap-1.5">
+                                🔍 Review & Control Storage Sessions
+                            </button>
+                        </div>
+                    </div>
+
                 <!-- === CLOUD HISTORY MIGRATION (Cloud Users Only) === -->
                     <div id="cloud-migration-wrapper" class="hidden">
                         <div class="mt-1 p-3 bg-purple-50 border border-purple-200 rounded-xl space-y-2">
@@ -5593,22 +5657,7 @@
                         </div>
                     </div>
 
-                    <!-- === CLOUD DELETE MODAL === -->
-                    <div id="cloud-delete-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-[99999] flex items-center justify-center p-4">
-                        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
-                            <div class="bg-red-600 p-4 flex justify-between items-center">
-                                <h3 class="text-white font-bold text-sm">🗑️ Delete from Cloud Archive</h3>
-                                <button onclick="document.getElementById('cloud-delete-modal').classList.add('hidden')" class="text-white/70 hover:text-white font-bold text-xl">&times;</button>
-                            </div>
-                            <div id="cloud-delete-list" class="p-4 overflow-y-auto grow space-y-2 text-sm text-gray-500 italic">
-                                Loading...
-                            </div>
-                            <div class="p-3 border-t bg-gray-50 text-right">
-                                <button onclick="document.getElementById('cloud-delete-modal').classList.add('hidden')" class="px-4 py-2 rounded-lg text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200">Close</button>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- ================================================= -->
+                    
 
 
                 </div>
@@ -5650,22 +5699,22 @@
                 </div>
             </div>
 
-        </div>
-
-
-        
-</div>
+        </div> <!-- Close p-6 -->
+    </div> <!-- Close bg-white -->
+</div> <!-- Close danger-zone-modal -->
 
 
 
 
     
 
+        
+
         <py-config class="hidden">
             packages = ["pandas", "pdfplumber==0.9.0"]
         </py-config>
         <py-script src="main.py"></py-script>
-        <script src="ui-modal.js?=2"></script>
+        <script src="ui-modal.js?v=12.8.75"></script>
     <!-- === MEMORY QUOTA QUARANTINE MODAL === -->
 
     
@@ -5695,7 +5744,7 @@
 </div>
 
 <!-- BATCH ARCHIVE MODAL — placed at body root for correct fixed positioning -->
-<div id="batch-archive-modal" class="hidden" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999999 !important; background-color: rgba(17, 24, 39, 0.95); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; padding: 1rem;">
+<div id="batch-archive-modal" class="hidden" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10000 !important; background-color: rgba(17, 24, 39, 0.95); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; padding: 1rem;">
     <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]" style="position: relative; z-index: 99999999 !important; margin: auto;">
         <div class="bg-indigo-900 px-6 py-4 flex justify-between items-center shrink-0">
             <h2 class="text-lg font-black text-white flex items-center gap-2">
@@ -5735,8 +5784,172 @@
     </div>
 </div>
 
-<script src="session_export.js?v=12.8.62"></script>
-<script src="app.js?v=12.8.62"></script>
+<!-- === ORPHANED / STORAGE VAULT SESSIONS MODAL === -->
+                    <div id="orphaned-sessions-modal" onclick="if(event.target === this) window.closeOrphanedSessionsModal()" class="hidden fixed inset-0 flex items-center justify-center p-3 sm:p-5" style="display: none; position: fixed; inset: 0; z-index: 10000 !important; background-color: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);">
+                        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[88vh] animate-slide-up border border-gray-200">
+                            <!-- Header -->
+                            <div class="bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-600 p-4 shrink-0 flex justify-between items-center text-white">
+                                <div class="flex items-center gap-2.5">
+                                    <span class="bg-white/20 p-2 rounded-xl text-lg">📦</span>
+                                    <div>
+                                        <h3 class="text-base font-bold leading-tight">Storage Vault &amp; Historical Sessions Manager</h3>
+                                        <p class="text-amber-100 text-xs">Explicit session archiving, cold storage governance, and historical data recovery</p>
+                                    </div>
+                                </div>
+                                <button onclick="window.closeOrphanedSessionsModal()" class="text-white/80 hover:text-white hover:bg-white/20 p-1.5 rounded-full transition cursor-pointer">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <!-- Banner Info -->
+                            <div class="bg-amber-50 border-b border-amber-200 px-5 py-2.5 text-xs text-amber-900 leading-relaxed shrink-0">
+                                <strong>Explicit Governance:</strong> The system will <strong>never</strong> automatically move, archive, or delete your exam sessions. Moving data to Cold Storage or restoring it to active records is strictly an explicit action controlled here by you.
+                            </div>
+
+                            <!-- Navigation Tabs -->
+                            <div class="flex items-center border-b border-gray-200 bg-gray-100 px-5 pt-2 gap-2 shrink-0">
+                                <button id="tab-vault-active-btn" onclick="window.switchVaultTab('active')" class="px-4 py-2.5 text-xs font-bold rounded-t-lg transition border-b-2 border-amber-600 text-amber-900 bg-white shadow-sm flex items-center gap-1.5 cursor-pointer">
+                                    <span>⚡ Active Live Sessions</span>
+                                    <span id="vault-active-count-badge" class="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 text-amber-800 font-semibold">0</span>
+                                </button>
+                                <button id="tab-vault-unlinked-btn" onclick="window.switchVaultTab('unlinked')" class="px-4 py-2.5 text-xs font-medium rounded-t-lg transition border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 cursor-pointer">
+                                    <span>📦 Unlinked Vault &amp; Recovery</span>
+                                    <span id="vault-unlinked-count-badge" class="px-1.5 py-0.5 rounded-full text-[10px] bg-gray-200 text-gray-700 font-semibold">0</span>
+                                </button>
+                            </div>
+
+                            <!-- TAB 1: ACTIVE LIVE SESSIONS (Explicit Archival) -->
+                            <div id="vault-tab-active-panel" class="flex flex-col flex-1 min-h-0">
+                                <!-- Controls Toolbar -->
+                                <div class="px-5 py-2.5 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                                    <div class="flex items-center gap-3">
+                                        <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer">
+                                            <input type="checkbox" id="vault-active-select-all" class="rounded border-gray-300 text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer" onchange="window.toggleSelectAllActiveSessions(this.checked)">
+                                            <span>Select All</span>
+                                        </label>
+                                        <span id="vault-active-selected-counter" class="text-xs text-gray-500 font-medium">(0 of 0 selected)</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <input type="text" id="vault-active-search-input" placeholder="Filter active sessions..." oninput="window.filterActiveSessionsList(this.value)" class="text-xs px-2.5 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500">
+                                    </div>
+                                </div>
+
+                                <!-- Table Container -->
+                                <div class="overflow-y-auto custom-scroll flex-1 p-5">
+                                    <table class="min-w-full divide-y divide-gray-200 text-xs">
+                                        <thead class="bg-gray-50 text-gray-600 font-bold uppercase tracking-wider">
+                                            <tr>
+                                                <th class="w-10 px-3 py-2 text-center"></th>
+                                                <th class="px-3 py-2 text-left">Session (Date | Time)</th>
+                                                <th class="px-3 py-2 text-center">Timing Status</th>
+                                                <th class="px-3 py-2 text-center">Candidates</th>
+                                                <th class="px-3 py-2 text-right">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="vault-active-table-body" class="divide-y divide-gray-100 bg-white">
+                                            <!-- Populated dynamically -->
+                                        </tbody>
+                                    </table>
+                                    <div id="vault-active-empty-notice" class="hidden text-center py-10 text-gray-400 italic text-xs">
+                                        No active sessions found in database.
+                                    </div>
+                                </div>
+
+                                <!-- Footer Actions for Active Tab -->
+                                <div class="bg-gray-50 border-t border-gray-200 px-5 py-3.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                                    <div class="text-[11px] text-gray-500 flex items-center gap-1.5">
+                                        <span>💡 Select past completed sessions and archive them to cold storage when ready.</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 ml-auto">
+                                        <button onclick="window.closeOrphanedSessionsModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer">
+                                            Close
+                                        </button>
+                                        <button onclick="window.archiveSelectedActiveSessions()" id="btn-archive-selected-active" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition shadow-sm flex items-center gap-1.5 cursor-pointer">
+                                            <span>☁️</span> Archive Selected to Cold Storage
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- TAB 2: UNLINKED VAULT & RECOVERY -->
+                            <div id="vault-tab-unlinked-panel" class="hidden flex flex-col flex-1 min-h-0">
+                                <!-- Controls Toolbar -->
+                                <div class="px-5 py-2.5 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                                    <div class="flex items-center gap-3">
+                                        <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer">
+                                            <input type="checkbox" id="orphan-select-all" class="rounded border-gray-300 text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer" onchange="window.toggleSelectAllOrphans(this.checked)">
+                                            <span>Select All</span>
+                                        </label>
+                                        <span id="orphan-selected-counter" class="text-xs text-gray-500 font-medium">(0 of 0 selected)</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <input type="text" id="orphan-search-input" placeholder="Filter by date..." oninput="window.filterOrphanList(this.value)" class="text-xs px-2.5 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500">
+                                    </div>
+                                </div>
+
+                                <!-- Table Container -->
+                                <div class="overflow-y-auto custom-scroll flex-1 p-5">
+                                    <table class="min-w-full divide-y divide-gray-200 text-xs">
+                                        <thead class="bg-gray-50 text-gray-600 font-bold uppercase tracking-wider">
+                                            <tr>
+                                                <th class="w-10 px-3 py-2 text-center"></th>
+                                                <th class="px-3 py-2 text-left">Session (Date | Time)</th>
+                                                <th class="px-3 py-2 text-center">Rooms</th>
+                                                <th class="px-3 py-2 text-center">Seated Candidates</th>
+                                                <th class="px-3 py-2 text-right">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="orphan-sessions-table-body" class="divide-y divide-gray-100 bg-white">
+                                            <!-- Populated dynamically -->
+                                        </tbody>
+                                    </table>
+                                    <div id="orphan-empty-notice" class="hidden text-center py-10 text-gray-400 italic text-xs">
+                                        No unlinked or orphaned storage sessions found. All storage is clean!
+                                    </div>
+                                </div>
+
+                                <!-- Footer Actions -->
+                                <div class="bg-gray-50 border-t border-gray-200 px-5 py-3.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                                    <button onclick="window.purgeAllOrphanSessions()" id="btn-purge-all-orphans" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer">
+                                        <span>🗑️</span> Purge All Unlinked Historical Data
+                                    </button>
+                                    <div class="flex items-center gap-2 ml-auto">
+                                        <button onclick="window.closeOrphanedSessionsModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer">
+                                            Close
+                                        </button>
+                                        <button onclick="window.purgeSelectedOrphanSessions()" id="btn-purge-selected-orphans" class="bg-red-600 hover:bg-red-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer">
+                                            Purge Selected
+                                        </button>
+                                        <button onclick="window.restoreSelectedOrphanSessions()" id="btn-restore-selected-orphans" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer">
+                                            Restore Selected to Live Data
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- === CLOUD DELETE MODAL === -->
+                    <div id="cloud-delete-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-[99999] flex items-center justify-center p-4">
+                        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
+                            <div class="bg-red-600 p-4 flex justify-between items-center">
+                                <h3 class="text-white font-bold text-sm">🗑️ Delete from Cloud Archive</h3>
+                                <button onclick="document.getElementById('cloud-delete-modal').classList.add('hidden')" class="text-white/70 hover:text-white font-bold text-xl">&times;</button>
+                            </div>
+                            <div id="cloud-delete-list" class="p-4 overflow-y-auto grow space-y-2 text-sm text-gray-500 italic">
+                                Loading...
+                            </div>
+                            <div class="p-3 border-t bg-gray-50 text-right">
+                                <button onclick="document.getElementById('cloud-delete-modal').classList.add('hidden')" class="px-4 py-2 rounded-lg text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- ================================================= -->
+
+<script src="session_export.js?v=12.8.75"></script>
+<script src="app.js?v=12.8.75"></script>
 <script src="excel_extraction.js"></script>    
 <!-- Global Datalist for Searchable Parent Rooms -->
 <datalist id="parent-rooms-list"></datalist>
