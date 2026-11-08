@@ -662,6 +662,10 @@ function applyCollegeConfig(data, mode, triggerRender) {
     const savedRoles = JSON.parse(collegeData.invigRoles || '{}');
     rolesConfig = { ...DEFAULT_ROLES, ...savedRoles };
     googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
+    window.googleScriptUrl = googleScriptUrl;
+    if (googleScriptUrl) {
+        try { localStorage.setItem('invigGoogleScriptUrl', googleScriptUrl); } catch (e) {}
+    }
     departmentsConfig = JSON.parse(collegeData.invigDepartments || JSON.stringify(DEFAULT_DEPARTMENTS));
     
     const vacConfig = JSON.parse(collegeData.invigVacationConfig || '{}');
@@ -4734,6 +4738,194 @@ async function volunteer(key, email) {
     }
 }
 
+// ==========================================
+// 📧 GRAPHICAL EXCHANGE EMAIL TEMPLATES
+// ==========================================
+
+function generateExchangeSellerEmail(seller, buyer, key) {
+    const college = (typeof currentCollegeName !== 'undefined' && currentCollegeName ? currentCollegeName : localStorage.getItem('examCollegeName')) || "GOVT. VICTORIA COLLEGE, PALAKKAD";
+    const [dateStr, rawTimeStr] = key.split(' | ');
+    const timeStr = rawTimeStr ? rawTimeStr.trim() : "";
+    let session = "FN";
+    const tUpper = timeStr.toUpperCase();
+    if (tUpper.includes("PM") || tUpper.startsWith("12:") || tUpper.startsWith("12.")) {
+        session = "AN";
+    }
+    let dayStr = "";
+    if (dateStr) {
+        const parts = dateStr.split('.');
+        if (parts.length === 3) {
+            const dObj = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+            dayStr = dObj.toLocaleDateString('en-US', { weekday: 'short' });
+        }
+    }
+    const buyerDeptStr = buyer && buyer.dept ? ` (${buyer.dept})` : "";
+
+    return `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#1f2937;max-width:600px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin:0 auto;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+        <div style="background:#4f46e5;color:white;padding:24px 20px;text-align:center;">
+            <img src="https://examflow-india.web.app/CollegeLogo.png" alt="Logo" style="height:50px;width:auto;margin-bottom:6px;display:inline-block;">
+            <h2 style="margin:0;font-size:18px;text-transform:uppercase;letter-spacing:0.5px;color:#ffffff;">${college}</h2>
+            <p style="margin:5px 0 0;font-size:13px;color:#e0e7ff;opacity:0.95;">Invigilation Duty Exchange • Relieved Confirmation</p>
+        </div>
+        <div style="padding:24px;background:#ffffff;">
+            <p style="font-size:15px;margin:0 0 16px;color:#111827;">Dear <b>${seller.name}</b>,</p>
+            <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-left:4px solid #10b981;border-radius:8px;padding:14px 16px;margin-bottom:20px;">
+                <p style="margin:0;font-size:14px;font-weight:bold;color:#065f46;">✅ Duty Exchange Accepted</p>
+                <p style="margin:6px 0 0;font-size:13px;color:#047857;line-height:1.5;">
+                    Good news! Your request to exchange the invigilation duty has been accepted by <b>${buyer.name}</b>${buyerDeptStr}.
+                    You have been <b>officially relieved</b> of this duty assignment.
+                </p>
+            </div>
+            <table style="width:100%;border-collapse:collapse;margin:18px 0;background:#f9fafb;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+                <thead>
+                    <tr style="background:#eef2ff;text-align:left;">
+                        <th style="padding:10px 14px;border:1px solid #e5e7eb;font-size:11px;color:#4338ca;text-transform:uppercase;">EXCHANGED DATE</th>
+                        <th style="padding:10px 14px;border:1px solid #e5e7eb;font-size:11px;color:#4338ca;text-transform:uppercase;">SESSION &amp; TIME</th>
+                        <th style="padding:10px 14px;border:1px solid #e5e7eb;font-size:11px;color:#4338ca;text-transform:uppercase;">ACCEPTED BY</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="padding:12px 14px;border:1px solid #e5e7eb;font-size:14px;font-weight:bold;color:#1f2937;">
+                            ${dateStr}<br><span style="font-size:12px;font-weight:normal;color:#6b7280;">${dayStr}</span>
+                        </td>
+                        <td style="padding:12px 14px;border:1px solid #e5e7eb;font-size:14px;color:#1f2937;">
+                            <b>${session}</b><br><span style="font-size:12px;color:#6b7280;">${timeStr}</span>
+                        </td>
+                        <td style="padding:12px 14px;border:1px solid #e5e7eb;font-size:14px;color:#111827;">
+                            <span style="font-weight:bold;color:#4338ca;">${buyer.name}</span><br><span style="font-size:11px;color:#6b7280;">${buyer.dept || 'Faculty'}</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-top:16px;font-size:12.5px;color:#475569;line-height:1.5;">
+                <strong style="color:#0f172a;">ℹ️ Record Updated:</strong>
+                <p style="margin:4px 0 0;">This slot has been removed from your active schedule in the Invigilation Portal and your pending duty quota has been adjusted automatically.</p>
+            </div>
+            <p style="font-size:12px;color:#94a3b8;margin:22px 0 0;border-top:1px solid #f1f5f9;padding-top:14px;text-align:center;">
+                <em>Automated Exam Cell Notification • ExamFlow Invigilation System</em>
+            </p>
+        </div>
+    </div>`;
+}
+
+function generateExchangeBuyerEmail(seller, buyer, key) {
+    const college = (typeof currentCollegeName !== 'undefined' && currentCollegeName ? currentCollegeName : localStorage.getItem('examCollegeName')) || "GOVT. VICTORIA COLLEGE, PALAKKAD";
+    const [dateStr, rawTimeStr] = key.split(' | ');
+    const timeStr = rawTimeStr ? rawTimeStr.trim() : "";
+    let session = "FN";
+    let reportTime = "09:30 AM";
+    const tUpper = timeStr.toUpperCase();
+    if (tUpper.includes("PM") || tUpper.startsWith("12:") || tUpper.startsWith("12.")) {
+        session = "AN";
+        reportTime = "01:30 PM";
+    }
+    if (typeof window.calculateReportTime === "function" && timeStr) {
+        reportTime = window.calculateReportTime(timeStr);
+    }
+    let dayStr = "";
+    if (dateStr) {
+        const parts = dateStr.split('.');
+        if (parts.length === 3) {
+            const dObj = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+            dayStr = dObj.toLocaleDateString('en-US', { weekday: 'short' });
+        }
+    }
+    const sellerDeptStr = seller && seller.dept ? ` (${seller.dept})` : "";
+
+    return `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#1f2937;max-width:600px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin:0 auto;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+        <div style="background:#4f46e5;color:white;padding:24px 20px;text-align:center;">
+            <img src="https://examflow-india.web.app/CollegeLogo.png" alt="Logo" style="height:50px;width:auto;margin-bottom:6px;display:inline-block;">
+            <h2 style="margin:0;font-size:18px;text-transform:uppercase;letter-spacing:0.5px;color:#ffffff;">${college}</h2>
+            <p style="margin:5px 0 0;font-size:13px;color:#e0e7ff;opacity:0.95;">Invigilation Duty • Assignment Confirmation</p>
+        </div>
+        <div style="padding:24px;background:#ffffff;">
+            <p style="font-size:15px;margin:0 0 16px;color:#111827;">Dear <b>${buyer.name}</b>,</p>
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #3b82f6;border-radius:8px;padding:14px 16px;margin-bottom:20px;">
+                <p style="margin:0;font-size:14px;font-weight:bold;color:#1e40af;">📋 Invigilation Duty Assigned</p>
+                <p style="margin:6px 0 0;font-size:13px;color:#1d4ed8;line-height:1.5;">
+                    Thank you! You have accepted the invigilation duty previously assigned to <b>${seller.name}</b>${sellerDeptStr}.
+                    This duty has been added to your official schedule.
+                </p>
+            </div>
+            <table style="width:100%;border-collapse:collapse;margin:18px 0;background:#f9fafb;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+                <thead>
+                    <tr style="background:#eef2ff;text-align:left;">
+                        <th style="padding:10px 14px;border:1px solid #e5e7eb;font-size:11px;color:#4338ca;text-transform:uppercase;">DUTY DATE</th>
+                        <th style="padding:10px 14px;border:1px solid #e5e7eb;font-size:11px;color:#4338ca;text-transform:uppercase;">SESSION &amp; TIME</th>
+                        <th style="padding:10px 14px;border:1px solid #e5e7eb;font-size:11px;color:#4338ca;text-transform:uppercase;">REPORT BY</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="padding:12px 14px;border:1px solid #e5e7eb;font-size:14px;font-weight:bold;color:#1f2937;">
+                            ${dateStr}<br><span style="font-size:12px;font-weight:normal;color:#6b7280;">${dayStr}</span>
+                        </td>
+                        <td style="padding:12px 14px;border:1px solid #e5e7eb;font-size:14px;color:#1f2937;">
+                            <b>${session}</b><br><span style="font-size:12px;color:#6b7280;">${timeStr}</span>
+                        </td>
+                        <td style="padding:12px 14px;border:1px solid #e5e7eb;font-size:14px;color:#047857;">
+                            <span style="font-weight:bold;color:#047857;">${reportTime}</span><br><span style="font-size:11px;color:#6b7280;">(30 mins before)</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <div style="background:#fff1f2;border-left:4px solid #f43f5e;border-radius:8px;padding:14px 16px;margin-top:18px;font-size:13px;color:#881337;">
+                <strong>⚠️ Important Instructions:</strong>
+                <ul style="margin:6px 0 0 20px;padding:0;line-height:1.5;">
+                    <li>Please report to the Exam Cell at least <strong>30 minutes</strong> before the session start time.</li>
+                    <li>Mobile phones must strictly be maintained in silent mode inside the exam halls.</li>
+                </ul>
+            </div>
+            <p style="font-size:12px;color:#94a3b8;margin:22px 0 0;border-top:1px solid #f1f5f9;padding-top:14px;text-align:center;">
+                <em>Automated Exam Cell Notification • ExamFlow Invigilation System</em>
+            </p>
+        </div>
+    </div>`;
+}
+
+// Export to window for console/external testing
+window.generateExchangeSellerEmail = generateExchangeSellerEmail;
+window.generateExchangeBuyerEmail = generateExchangeBuyerEmail;
+
+window.triggerTestExchangeEmails = async function (testEmail = "sureshmagnolia@gmail.com", key = "09.11.2026 | 02:00 PM") {
+    const scriptUrl = googleScriptUrl || localStorage.getItem('invigGoogleScriptUrl') || document.getElementById('google-script-url')?.value;
+    if (!scriptUrl) {
+        alert("⚠️ Google Apps Script URL not configured.");
+        return console.error("No script URL found.");
+    }
+    const seller = { name: "Dr. Suresh (Exchanger)", email: testEmail, dept: "Botany" };
+    const buyer = { name: "Dr. Suresh (Acceptor)", email: testEmail, dept: "Exam Cell" };
+
+    console.log("📨 [1/2] Sending Exchanger (Relieved) email to " + testEmail + " via system template...");
+    await fetch(scriptUrl, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            to: testEmail,
+            subject: `Duty Exchange Accepted: ${key}`,
+            body: generateExchangeSellerEmail(seller, buyer, key)
+        })
+    }).catch(e => console.error("Seller test email failed", e));
+
+    console.log("📨 [2/2] Sending Acceptor (Assigned) email to " + testEmail + " via system template...");
+    await fetch(scriptUrl, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            to: testEmail,
+            subject: `Duty Assignment Confirmation: ${key} (Exchanged)`,
+            body: generateExchangeBuyerEmail(seller, buyer, key)
+        })
+    }).catch(e => console.error("Buyer test email failed", e));
+
+    console.log("%c🎉 Done! Both exchange emails sent to " + testEmail, "color:#10b981;font-weight:bold;font-size:13px;");
+};
+
 async function acceptExchange(key, buyerEmail, sellerEmail) {
     // 🛡️ DOUBLE-CLICK PROTECTION
     if (window._isAcceptingExchange) return;
@@ -4795,24 +4987,32 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
         // 4. LOGGING
         await logActivity("Exchange Accepted", `${getNameFromEmail(buyerEmail)} took duty ${key} from ${getNameFromEmail(sellerEmail)}.`);
 
-   // --- NOTIFICATION EMAIL TO SELLER ---
-            if (seller && seller.email && googleScriptUrl) {
-                const subject = `Duty Exchange Accepted: ${key}`;
-                const body = `
-                    <p>Dear ${seller.name},</p>
-                    <p>Good news! Your request to exchange the invigilation duty for <b>${key}</b> has been accepted by <b>${buyer.name}</b>.</p>        
-                    <p>You have been removed from this duty assignment.</p>
-                    <hr>
-                    <p style="font-size:12px; color:#666;">Exam Cell Notification</p>
-                `;
-
+        // --- GRAPHICAL NOTIFICATION EMAILS (TO BOTH SELLER & BUYER) ---
+        if (googleScriptUrl) {
+            // 1. Notify Exchanger (Seller): Officially Relieved Confirmation
+            if (seller && seller.email) {
+                const sellerSubject = `Duty Exchange Accepted: ${key}`;
+                const sellerBody = generateExchangeSellerEmail(seller, buyer, key);
                 fetch(googleScriptUrl, {
                     method: "POST",
                     mode: "no-cors",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ to: seller.email, subject: subject, body: body })
-                }).catch(e => console.error("Email failed", e));
+                    body: JSON.stringify({ to: seller.email, subject: sellerSubject, body: sellerBody })
+                }).catch(e => console.error("Seller exchange email failed", e));
             }
+
+            // 2. Notify Acceptor (Buyer): Duty Assignment Confirmation
+            if (buyer && buyer.email) {
+                const buyerSubject = `Duty Assignment Confirmation: ${key} (Exchanged)`;
+                const buyerBody = generateExchangeBuyerEmail(seller, buyer, key);
+                fetch(googleScriptUrl, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ to: buyer.email, subject: buyerSubject, body: buyerBody })
+                }).catch(e => console.error("Buyer exchange email failed", e));
+            }
+        }
 
             // 5. Sync
             await syncSlotsToCloud(key);
