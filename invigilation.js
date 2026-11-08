@@ -1979,21 +1979,49 @@ function renderStaffCalendar(myEmail) {
 
                 let badgeClass = "bg-gradient-to-br from-green-50 to-green-100 text-green-800 border-green-200";
                 let icon = "🟢";
-                let statusText = `<span class="md:hidden text-[8px] font-bold">${available}</span><span class="hidden md:inline">${available} Left</span>`;
+                let desktopText = `${available} Left`;
+                let mobileText = `${available}`;
                 let glowClass = "";
 
                 if (isCompleted) {
                     badgeClass = "bg-green-800 text-white border-green-900 md:bg-gradient-to-br md:from-green-700 md:to-green-800 md:border-green-600";
-                    icon = "✅"; statusText = ""; glowClass = "md:shadow-lg md:shadow-green-900";
+                    icon = "✅"; desktopText = ""; mobileText = ""; glowClass = "md:shadow-lg md:shadow-green-900";
                 } else if (isPostedByMe) {
-                    if (isAdminLocked) { badgeClass = "bg-gradient-to-br from-amber-100 to-orange-100 text-amber-700 border-amber-300"; icon = "🛡️"; statusText = "Frozen"; }
-                    else { badgeClass = "bg-gradient-to-br from-orange-400 to-orange-500 text-white border-orange-300"; icon = "⏳"; statusText = "Posted"; }
+                    if (isAdminLocked) { 
+                        badgeClass = "bg-gradient-to-br from-amber-100 to-orange-100 text-amber-700 border-amber-300"; 
+                        icon = "🛡️"; 
+                        desktopText = "Frozen"; 
+                        mobileText = "Froz"; 
+                    } else { 
+                        badgeClass = "bg-gradient-to-br from-orange-400 to-orange-500 text-white border-orange-300"; 
+                        icon = "⏳"; 
+                        desktopText = "Posted"; 
+                        mobileText = "Post"; 
+                    }
                 } else if (isAssigned) {
-                     if (isAdminLocked) { badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold ring-1 ring-amber-300"; icon = "🛡️"; statusText = "Duty"; }
-                     else if (slot.isLocked) { badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold"; icon = "🔒"; statusText = "Duty"; glowClass = "shadow-sm shadow-blue-100"; }
-                     else { badgeClass = "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-400 font-bold"; icon = "👮"; statusText = "Duty"; glowClass = "shadow-lg shadow-blue-200 ring-1 ring-blue-300"; }
+                     if (isAdminLocked) { 
+                         badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold ring-1 ring-amber-300"; 
+                         icon = "🛡️"; 
+                         desktopText = "Duty"; 
+                         mobileText = "Duty"; 
+                     } else if (slot.isLocked) { 
+                         badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold"; 
+                         icon = "🔒"; 
+                         desktopText = "Duty"; 
+                         mobileText = "Duty"; 
+                         glowClass = "shadow-sm shadow-blue-100"; 
+                     } else { 
+                         badgeClass = "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-400 font-bold"; 
+                         icon = "👮"; 
+                         desktopText = "Duty"; 
+                         mobileText = "Duty"; 
+                         glowClass = "shadow-lg shadow-blue-200 ring-1 ring-blue-300"; 
+                     }
                 } else if (isMarketAvailable) {
-                    badgeClass = "bg-gradient-to-br from-purple-500 to-purple-600 text-white border-purple-400 animate-pulse"; icon = "♻️"; statusText = "Exchange";
+                    badgeClass = "bg-gradient-to-br from-purple-500 to-purple-600 text-white border-purple-400 animate-pulse"; 
+                    icon = "♻️"; 
+                    desktopText = "Exchange"; 
+                    mobileText = "Exch";
                 } else if (isUnavailable) {
                     // ✅ CHECK IF MARKED BY ADMIN
                     const uEntry = slot.unavailable ? slot.unavailable.find(u => (typeof u === 'string' ? u : u.email) === myEmail) : null;
@@ -2001,36 +2029,49 @@ function renderStaffCalendar(myEmail) {
                     
                     badgeClass = "bg-gradient-to-br from-red-50 to-red-100 text-red-600 border-red-200 opacity-60 grayscale-[50%]";
                     icon = isAdminMarked ? "🛡️" : "⛔";
-                    statusText = isAdminMarked ? "Admin" : "Unavail";
-                    } else if (isAdminLocked) {
+                    desktopText = isAdminMarked ? "Admin" : "Unavail";
+                    mobileText = isAdminMarked ? "Admin" : "Leave";
+                } else if (isAdminLocked) {
                     if (isPast) {
                         // 🟢 FIX: Show Past Admin Locks as Standard Grey/Locked
                         badgeClass = "bg-gray-100 text-gray-400 border-gray-200"; 
                         icon = "🔒"; 
-                        statusText = "Locked";
+                        desktopText = "Locked";
+                        mobileText = "Lock";
                     } else {
                         badgeClass = "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-400 border-amber-200"; 
                         icon = "🛡️"; 
-                        statusText = "Paused"; 
+                        desktopText = "Paused"; 
+                        mobileText = "Pause"; 
                     }
                 } else if (slot.isLocked) {
-                    badgeClass = "bg-gray-100 text-gray-400 border-gray-200"; icon = "🔒"; statusText = "Locked";
+                    badgeClass = "bg-gray-100 text-gray-400 border-gray-200"; 
+                    icon = "🔒"; 
+                    desktopText = "Locked";
+                    mobileText = "Lock";
                 } else if (isPast) {
-                    badgeClass = "bg-gray-50 text-gray-400 border-gray-100 opacity-75"; icon = "⏹️"; statusText = "Done";
+                    badgeClass = "bg-gray-50 text-gray-400 border-gray-100 opacity-75"; 
+                    icon = "⏹️"; 
+                    desktopText = "Done";
+                    mobileText = "Done";
                 } else if (filled >= needed) {
-                    badgeClass = "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400 border-gray-200"; icon = "✔️"; statusText = "Full";
+                    badgeClass = "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400 border-gray-200"; 
+                    icon = "✔️"; 
+                    desktopText = "Full";
+                    mobileText = "Full";
                 }
 
-                const paddingClass = isCompleted ? "p-[2px] md:p-1.5" : "p-0.5 md:p-1.5";
+                const paddingClass = isCompleted ? "px-1 py-[2px] md:p-1.5" : "px-1 py-0.5 md:p-1.5";
 
                 contentHtml += `
-                    <div class="relative overflow-hidden rounded md:rounded-lg border ${badgeClass} ${paddingClass} shadow-sm transition-transform active:scale-95 md:hover:scale-105 ${glowClass} flex items-center justify-center md:justify-between gap-0.5 md:gap-1 group/badge cursor-pointer min-h-[18px] md:min-h-0" onclick="openDayDetail('${dateStr}', '${myEmail}')">
+                    <div class="relative overflow-hidden rounded md:rounded-lg border ${badgeClass} ${paddingClass} shadow-sm transition-transform active:scale-95 md:hover:scale-105 ${glowClass} flex items-center justify-between gap-0.5 md:gap-1 group/badge cursor-pointer min-h-[18px] md:min-h-0" onclick="openDayDetail('${dateStr}', '${myEmail}')">
                         <div class="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent pointer-events-none hidden md:block"></div>
-                        <div class="flex items-center gap-0.5 z-10">
-                            <span class="text-[8px] md:text-[10px] uppercase font-black tracking-wider opacity-90">${slot.sessionType}</span>
+                        <div class="flex items-center gap-0.5 z-10 shrink-0">
+                            <span class="text-[7.5px] sm:text-[8px] md:text-[10px] uppercase font-black tracking-tight opacity-90">${slot.sessionType}</span>
                         </div>
-                        <div class="flex items-center gap-0.5 md:gap-1 z-10">
-                            <span class="text-[9px] font-bold opacity-90 whitespace-nowrap leading-tight">${statusText}</span>
+                        <div class="flex items-center gap-0.5 md:gap-1 z-10 shrink-0">
+                            ${desktopText ? `<span class="hidden md:inline text-[9px] font-bold opacity-90 whitespace-nowrap leading-tight">${desktopText}</span>` : ''}
+                            ${mobileText ? `<span class="md:hidden text-[7px] font-bold opacity-90 whitespace-nowrap leading-none tracking-tighter">${mobileText}</span>` : ''}
                             <span class="text-[8px] md:text-[10px] filter drop-shadow-sm flex-shrink-0">${icon}</span>
                         </div>
                     </div>`;
@@ -2051,7 +2092,8 @@ function renderStaffCalendar(myEmail) {
                     hasUnavail = true;
                     const isAdm = fnEntry.markedBy === 'Admin';
                     const icon = isAdm ? "🛡️" : "⛔";
-                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">FN ${icon}</span><span class="hidden md:inline">FN ${icon} Unavail</span></div>`;
+                    const mTxt = isAdm ? "Admin" : "Leave";
+                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg px-1 py-0.5 md:p-1 text-[8px] md:text-[9px] font-bold flex items-center justify-between shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="text-[7.5px] sm:text-[8px] md:text-[10px] uppercase font-black tracking-tight opacity-90">FN</span><div class="flex items-center gap-0.5"><span class="md:hidden text-[7px] font-bold tracking-tighter">${mTxt}</span><span class="hidden md:inline">${isAdm ? 'Admin' : 'Unavail'}</span><span>${icon}</span></div></div>`;
                 }
                 
                 const anEntry = findEntry(adv.AN);
@@ -2059,7 +2101,8 @@ function renderStaffCalendar(myEmail) {
                     hasUnavail = true;
                     const isAdm = anEntry.markedBy === 'Admin';
                     const icon = isAdm ? "🛡️" : "⛔";
-                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">AN ${icon}</span><span class="hidden md:inline">AN ${icon} Unavail</span></div>`;
+                    const mTxt = isAdm ? "Admin" : "Leave";
+                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg px-1 py-0.5 md:p-1 text-[8px] md:text-[9px] font-bold flex items-center justify-between shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="text-[7.5px] sm:text-[8px] md:text-[10px] uppercase font-black tracking-tight opacity-90">AN</span><div class="flex items-center gap-0.5"><span class="md:hidden text-[7px] font-bold tracking-tighter">${mTxt}</span><span class="hidden md:inline">${isAdm ? 'Admin' : 'Unavail'}</span><span>${icon}</span></div></div>`;
                 }
                 
                 unavailHtml += `</div>`;
