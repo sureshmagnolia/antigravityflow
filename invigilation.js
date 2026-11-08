@@ -1806,6 +1806,7 @@ function renderStaffRankList(myEmail, targetDate = new Date()) {
         })
         .sort((a, b) => {
             if (b.pending !== a.pending) return b.pending - a.pending;
+            if (a.done !== b.done) return a.done - b.done; // Least duties done on top
             return a.name.localeCompare(b.name);
         });
 
@@ -3494,8 +3495,14 @@ window.runAutoAllocation = async function () {
             return { staff: s, score, warnings };
         }).filter(c => c !== null);
 
-        // Sort: Highest Pending First
-        candidates.sort((a, b) => b.score - a.score);
+        // Sort: Highest Score First, then Least Duties Done First, then Alphabetical
+        candidates.sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            const doneA = getDutiesDoneCount(a.staff.email);
+            const doneB = getDutiesDoneCount(b.staff.email);
+            if (doneA !== doneB) return doneA - doneB; // Least duties done on top
+            return a.staff.name.localeCompare(b.staff.name);
+        });
 
         // Take Top candidates
         const toAssign = candidates.slice(0, needed);
@@ -4696,7 +4703,23 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
         return await UiModal.alert("🛡️ Market Suspended.\n\nThe Admin has locked this slot for manual assignment. Exchanges cannot be processed right now.");
     }
 
-    if (!await UiModal.confirm(`Are you sure you want to take over ${sellerName}'s duty on ${key}?`)) return;
+    // 🛡️ GATE 1: Initial Session Details Review
+    const firstConfirm = await UiModal.confirm(
+        `📋 Accept Invigilation Duty?\n\n` +
+        `• Session: ${key}\n` +
+        `• Releasing Faculty: ${sellerName}\n\n` +
+        `Do you want to proceed with accepting this duty?`
+    );
+    if (!firstConfirm) return;
+
+    // 🛡️ GATE 2: Explicit Second Confirmation (Accidental Tap Protection)
+    const secondConfirm = await UiModal.confirm(
+        `⚠️ FINAL CONFIRMATION REQUIRED\n\n` +
+        `You are officially taking over this examination duty on ${key}.\n\n` +
+        `Once accepted, this duty will be bound to your account and recorded in your official attendance record.\n\n` +
+        `Are you absolutely sure you want to confirm?`
+    );
+    if (!secondConfirm) return;
 
       // 1. Validation (🛡️ Anti-Ghosting Shield)
       if (!slot.assigned.includes(sellerEmail)) {
@@ -13562,6 +13585,9 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
 
         return {
             ...s,
+            regularDone: doneReg,
+            vacationDone: doneVac,
+            totalDone: doneReg + doneVac,
             regularPending: targetReg - doneReg,
             vacationPending: (vacationDutyTarget || 0) - doneVac,
             weeklyLoad: {}
@@ -13615,6 +13641,9 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
 
         const runStaff = eligibleStaff.map(s => ({
             ...s,
+            regularDone: s.regularDone,
+            vacationDone: s.vacationDone,
+            totalDone: s.totalDone,
             regularPending: s.regularPending,
             vacationPending: s.vacationPending,
             weeklyLoad: { ...s.weeklyLoad }
@@ -13700,13 +13729,27 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
                     return { staff: s, score, warnings, reasoning };
                 }).filter(c => c !== null);
 
-                candidates.sort((a, b) => b.score - a.score);
+                candidates.sort((a, b) => {
+                    if (b.score !== a.score) return b.score - a.score;
+                    // Tie-breaker 1: Least duties done on top (lowest done first)
+                    const doneA = isVacDate ? (a.staff.vacationDone ?? 0) : (a.staff.regularDone ?? 0);
+                    const doneB = isVacDate ? (b.staff.vacationDone ?? 0) : (b.staff.regularDone ?? 0);
+                    if (doneA !== doneB) return doneA - doneB;
+                    // Tie-breaker 2: Alphabetical by Name
+                    return a.staff.name.localeCompare(b.staff.name);
+                });
 
                 if (candidates.length > 0) {
                     const choice = candidates[0];
                     slot.assigned.push(choice.staff.email);
-                    if (isVacDate) choice.staff.vacationPending--;
-                    else choice.staff.regularPending--;
+                    if (isVacDate) {
+                        choice.staff.vacationPending--;
+                        choice.staff.vacationDone = (choice.staff.vacationDone || 0) + 1;
+                    } else {
+                        choice.staff.regularPending--;
+                        choice.staff.regularDone = (choice.staff.regularDone || 0) + 1;
+                    }
+                    choice.staff.totalDone = (choice.staff.totalDone || 0) + 1;
 
                     if (!choice.staff.weeklyLoad[currentWeekKey]) choice.staff.weeklyLoad[currentWeekKey] = 0;
                     choice.staff.weeklyLoad[currentWeekKey]++;
@@ -13967,7 +14010,18 @@ window.directAddStaff = function(key) {
 
             return true;
         })
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .map(s => {
+            const dateObj = parseDate(key);
+            const target = calculateStaffTarget(s, dateObj);
+            const done = getDutiesDoneCount(s.email, dateObj);
+            const pending = target - done;
+            return { ...s, done, pending };
+        })
+        .sort((a, b) => {
+            if (b.pending !== a.pending) return b.pending - a.pending;
+            if (a.done !== b.done) return a.done - b.done; // Least duties done on top
+            return a.name.localeCompare(b.name);
+        });
 
     // Reset Submit Button
     const btn = document.getElementById('direct-add-confirm-btn');
@@ -14003,8 +14057,11 @@ window.filterDirectAddStaff = function() {
        matches.forEach(s => {
            dropdown.innerHTML += `
                <div onclick="selectDirectAddStaff('${s.email}', '${s.name.replace(/'/g, "\\'")}')" class="p-2.5 hover:bg-indigo-50 border-b border-gray-100 cursor-pointer transition flex items-center justify-between group">
-                   <span class="font-bold text-gray-800 text-xs group-hover:text-indigo-700">${s.name}</span>
-                   <span class="text-[9px] uppercase font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">${s.dept}</span>
+                   <div class="flex flex-col min-w-0">
+                       <span class="font-bold text-gray-800 text-xs group-hover:text-indigo-700 truncate">${s.name}</span>
+                       <span class="text-[9px] text-gray-400">Pending: <b class="text-indigo-600">${s.pending ?? 0}</b> • Done: <b class="text-green-600">${s.done ?? 0}</b></span>
+                   </div>
+                   <span class="text-[9px] uppercase font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">${s.dept}</span>
                </div>`;
        });
     }
