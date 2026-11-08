@@ -2030,7 +2030,7 @@ function renderStaffCalendar(myEmail) {
                     badgeClass = "bg-gradient-to-br from-red-50 to-red-100 text-red-600 border-red-200 opacity-60 grayscale-[50%]";
                     icon = isAdminMarked ? "🛡️" : "⛔";
                     desktopText = isAdminMarked ? "Admin" : "Unavail";
-                    mobileText = isAdminMarked ? "Admin" : "Leave";
+                    mobileText = isAdminMarked ? "Admin" : "Unav";
                 } else if (isAdminLocked) {
                     if (isPast) {
                         // 🟢 FIX: Show Past Admin Locks as Standard Grey/Locked
@@ -2042,7 +2042,7 @@ function renderStaffCalendar(myEmail) {
                         badgeClass = "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-400 border-amber-200"; 
                         icon = "🛡️"; 
                         desktopText = "Paused"; 
-                        mobileText = "Pause"; 
+                        mobileText = "Paus"; 
                     }
                 } else if (slot.isLocked) {
                     badgeClass = "bg-gray-100 text-gray-400 border-gray-200"; 
@@ -2061,7 +2061,7 @@ function renderStaffCalendar(myEmail) {
                     mobileText = "Full";
                 }
 
-                const paddingClass = isCompleted ? "px-1 py-[2px] md:p-1.5" : "px-1 py-0.5 md:p-1.5";
+                const paddingClass = isCompleted ? "px-0.5 py-[2px] md:p-1.5" : "px-0.5 py-0.5 md:p-1.5";
 
                 contentHtml += `
                     <div class="relative overflow-hidden rounded md:rounded-lg border ${badgeClass} ${paddingClass} shadow-sm transition-transform active:scale-95 md:hover:scale-105 ${glowClass} flex items-center justify-between gap-0.5 md:gap-1 group/badge cursor-pointer min-h-[18px] md:min-h-0" onclick="openDayDetail('${dateStr}', '${myEmail}')">
@@ -2092,8 +2092,8 @@ function renderStaffCalendar(myEmail) {
                     hasUnavail = true;
                     const isAdm = fnEntry.markedBy === 'Admin';
                     const icon = isAdm ? "🛡️" : "⛔";
-                    const mTxt = isAdm ? "Admin" : "Leave";
-                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg px-1 py-0.5 md:p-1 text-[8px] md:text-[9px] font-bold flex items-center justify-between shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="text-[7.5px] sm:text-[8px] md:text-[10px] uppercase font-black tracking-tight opacity-90">FN</span><div class="flex items-center gap-0.5"><span class="md:hidden text-[7px] font-bold tracking-tighter">${mTxt}</span><span class="hidden md:inline">${isAdm ? 'Admin' : 'Unavail'}</span><span>${icon}</span></div></div>`;
+                    const mTxt = isAdm ? "Admin" : "Unav";
+                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg px-0.5 py-0.5 md:p-1 text-[8px] md:text-[9px] font-bold flex items-center justify-between shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="text-[7.5px] sm:text-[8px] md:text-[10px] uppercase font-black tracking-tight opacity-90">FN</span><div class="flex items-center gap-0.5"><span class="md:hidden text-[7px] font-bold tracking-tighter">${mTxt}</span><span class="hidden md:inline">${isAdm ? 'Admin' : 'Unavail'}</span><span>${icon}</span></div></div>`;
                 }
                 
                 const anEntry = findEntry(adv.AN);
@@ -2101,8 +2101,8 @@ function renderStaffCalendar(myEmail) {
                     hasUnavail = true;
                     const isAdm = anEntry.markedBy === 'Admin';
                     const icon = isAdm ? "🛡️" : "⛔";
-                    const mTxt = isAdm ? "Admin" : "Leave";
-                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg px-1 py-0.5 md:p-1 text-[8px] md:text-[9px] font-bold flex items-center justify-between shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="text-[7.5px] sm:text-[8px] md:text-[10px] uppercase font-black tracking-tight opacity-90">AN</span><div class="flex items-center gap-0.5"><span class="md:hidden text-[7px] font-bold tracking-tighter">${mTxt}</span><span class="hidden md:inline">${isAdm ? 'Admin' : 'Unavail'}</span><span>${icon}</span></div></div>`;
+                    const mTxt = isAdm ? "Admin" : "Unav";
+                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg px-0.5 py-0.5 md:p-1 text-[8px] md:text-[9px] font-bold flex items-center justify-between shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="text-[7.5px] sm:text-[8px] md:text-[10px] uppercase font-black tracking-tight opacity-90">AN</span><div class="flex items-center gap-0.5"><span class="md:hidden text-[7px] font-bold tracking-tighter">${mTxt}</span><span class="hidden md:inline">${isAdm ? 'Admin' : 'Unavail'}</span><span>${icon}</span></div></div>`;
                 }
                 
                 unavailHtml += `</div>`;
