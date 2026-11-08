@@ -662,6 +662,10 @@ function applyCollegeConfig(data, mode, triggerRender) {
     const savedRoles = JSON.parse(collegeData.invigRoles || '{}');
     rolesConfig = { ...DEFAULT_ROLES, ...savedRoles };
     googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
+    window.googleScriptUrl = googleScriptUrl;
+    if (googleScriptUrl) {
+        try { localStorage.setItem('invigGoogleScriptUrl', googleScriptUrl); } catch (e) {}
+    }
     departmentsConfig = JSON.parse(collegeData.invigDepartments || JSON.stringify(DEFAULT_DEPARTMENTS));
     
     const vacConfig = JSON.parse(collegeData.invigVacationConfig || '{}');
@@ -4881,6 +4885,10 @@ function generateExchangeBuyerEmail(seller, buyer, key) {
         </div>
     </div>`;
 }
+
+// Export to window for console/external testing
+window.generateExchangeSellerEmail = generateExchangeSellerEmail;
+window.generateExchangeBuyerEmail = generateExchangeBuyerEmail;
 
 async function acceptExchange(key, buyerEmail, sellerEmail) {
     // 🛡️ DOUBLE-CLICK PROTECTION
