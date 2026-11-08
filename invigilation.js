@@ -1806,6 +1806,7 @@ function renderStaffRankList(myEmail, targetDate = new Date()) {
         })
         .sort((a, b) => {
             if (b.pending !== a.pending) return b.pending - a.pending;
+            if (a.done !== b.done) return a.done - b.done; // Least duties done on top
             return a.name.localeCompare(b.name);
         });
 
@@ -1978,21 +1979,49 @@ function renderStaffCalendar(myEmail) {
 
                 let badgeClass = "bg-gradient-to-br from-green-50 to-green-100 text-green-800 border-green-200";
                 let icon = "🟢";
-                let statusText = `<span class="md:hidden text-[8px] font-bold">${available}</span><span class="hidden md:inline">${available} Left</span>`;
+                let desktopText = `${available} Left`;
+                let mobileText = `${available}`;
                 let glowClass = "";
 
                 if (isCompleted) {
                     badgeClass = "bg-green-800 text-white border-green-900 md:bg-gradient-to-br md:from-green-700 md:to-green-800 md:border-green-600";
-                    icon = "✅"; statusText = ""; glowClass = "md:shadow-lg md:shadow-green-900";
+                    icon = "✅"; desktopText = ""; mobileText = ""; glowClass = "md:shadow-lg md:shadow-green-900";
                 } else if (isPostedByMe) {
-                    if (isAdminLocked) { badgeClass = "bg-gradient-to-br from-amber-100 to-orange-100 text-amber-700 border-amber-300"; icon = "🛡️"; statusText = "Frozen"; }
-                    else { badgeClass = "bg-gradient-to-br from-orange-400 to-orange-500 text-white border-orange-300"; icon = "⏳"; statusText = "Posted"; }
+                    if (isAdminLocked) { 
+                        badgeClass = "bg-gradient-to-br from-amber-100 to-orange-100 text-amber-700 border-amber-300"; 
+                        icon = "🛡️"; 
+                        desktopText = "Frozen"; 
+                        mobileText = "Froz"; 
+                    } else { 
+                        badgeClass = "bg-gradient-to-br from-orange-400 to-orange-500 text-white border-orange-300"; 
+                        icon = "⏳"; 
+                        desktopText = "Posted"; 
+                        mobileText = "Post"; 
+                    }
                 } else if (isAssigned) {
-                     if (isAdminLocked) { badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold ring-1 ring-amber-300"; icon = "🛡️"; statusText = "Duty"; }
-                     else if (slot.isLocked) { badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold"; icon = "🔒"; statusText = "Duty"; glowClass = "shadow-sm shadow-blue-100"; }
-                     else { badgeClass = "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-400 font-bold"; icon = "👮"; statusText = "Duty"; glowClass = "shadow-lg shadow-blue-200 ring-1 ring-blue-300"; }
+                     if (isAdminLocked) { 
+                         badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold ring-1 ring-amber-300"; 
+                         icon = "🛡️"; 
+                         desktopText = "Duty"; 
+                         mobileText = "Duty"; 
+                     } else if (slot.isLocked) { 
+                         badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold"; 
+                         icon = "🔒"; 
+                         desktopText = "Duty"; 
+                         mobileText = "Duty"; 
+                         glowClass = "shadow-sm shadow-blue-100"; 
+                     } else { 
+                         badgeClass = "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-400 font-bold"; 
+                         icon = "👮"; 
+                         desktopText = "Duty"; 
+                         mobileText = "Duty"; 
+                         glowClass = "shadow-lg shadow-blue-200 ring-1 ring-blue-300"; 
+                     }
                 } else if (isMarketAvailable) {
-                    badgeClass = "bg-gradient-to-br from-purple-500 to-purple-600 text-white border-purple-400 animate-pulse"; icon = "♻️"; statusText = "Exchange";
+                    badgeClass = "bg-gradient-to-br from-purple-500 to-purple-600 text-white border-purple-400 animate-pulse"; 
+                    icon = "♻️"; 
+                    desktopText = "Exchange"; 
+                    mobileText = "Exch";
                 } else if (isUnavailable) {
                     // ✅ CHECK IF MARKED BY ADMIN
                     const uEntry = slot.unavailable ? slot.unavailable.find(u => (typeof u === 'string' ? u : u.email) === myEmail) : null;
@@ -2000,36 +2029,49 @@ function renderStaffCalendar(myEmail) {
                     
                     badgeClass = "bg-gradient-to-br from-red-50 to-red-100 text-red-600 border-red-200 opacity-60 grayscale-[50%]";
                     icon = isAdminMarked ? "🛡️" : "⛔";
-                    statusText = isAdminMarked ? "Admin" : "Unavail";
-                    } else if (isAdminLocked) {
+                    desktopText = isAdminMarked ? "Admin" : "Unavail";
+                    mobileText = isAdminMarked ? "Admin" : "Unav";
+                } else if (isAdminLocked) {
                     if (isPast) {
                         // 🟢 FIX: Show Past Admin Locks as Standard Grey/Locked
                         badgeClass = "bg-gray-100 text-gray-400 border-gray-200"; 
                         icon = "🔒"; 
-                        statusText = "Locked";
+                        desktopText = "Locked";
+                        mobileText = "Lock";
                     } else {
                         badgeClass = "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-400 border-amber-200"; 
                         icon = "🛡️"; 
-                        statusText = "Paused"; 
+                        desktopText = "Paused"; 
+                        mobileText = "Paus"; 
                     }
                 } else if (slot.isLocked) {
-                    badgeClass = "bg-gray-100 text-gray-400 border-gray-200"; icon = "🔒"; statusText = "Locked";
+                    badgeClass = "bg-gray-100 text-gray-400 border-gray-200"; 
+                    icon = "🔒"; 
+                    desktopText = "Locked";
+                    mobileText = "Lock";
                 } else if (isPast) {
-                    badgeClass = "bg-gray-50 text-gray-400 border-gray-100 opacity-75"; icon = "⏹️"; statusText = "Done";
+                    badgeClass = "bg-gray-50 text-gray-400 border-gray-100 opacity-75"; 
+                    icon = "⏹️"; 
+                    desktopText = "Done";
+                    mobileText = "Done";
                 } else if (filled >= needed) {
-                    badgeClass = "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400 border-gray-200"; icon = "✔️"; statusText = "Full";
+                    badgeClass = "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400 border-gray-200"; 
+                    icon = "✔️"; 
+                    desktopText = "Full";
+                    mobileText = "Full";
                 }
 
-                const paddingClass = isCompleted ? "p-[2px] md:p-1.5" : "p-0.5 md:p-1.5";
+                const paddingClass = isCompleted ? "px-0.5 py-[2px] md:p-1.5" : "px-0.5 py-0.5 md:p-1.5";
 
                 contentHtml += `
-                    <div class="relative overflow-hidden rounded md:rounded-lg border ${badgeClass} ${paddingClass} shadow-sm transition-transform active:scale-95 md:hover:scale-105 ${glowClass} flex items-center justify-center md:justify-between gap-0.5 md:gap-1 group/badge cursor-pointer min-h-[18px] md:min-h-0" onclick="openDayDetail('${dateStr}', '${myEmail}')">
+                    <div class="relative overflow-hidden rounded md:rounded-lg border ${badgeClass} ${paddingClass} shadow-sm transition-transform active:scale-95 md:hover:scale-105 ${glowClass} flex items-center justify-between gap-0.5 md:gap-1 group/badge cursor-pointer min-h-[18px] md:min-h-0" onclick="openDayDetail('${dateStr}', '${myEmail}')">
                         <div class="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent pointer-events-none hidden md:block"></div>
-                        <div class="flex items-center gap-0.5 z-10">
-                            <span class="text-[8px] md:text-[10px] uppercase font-black tracking-wider opacity-90">${slot.sessionType}</span>
+                        <div class="flex items-center gap-0.5 z-10 shrink-0">
+                            <span class="text-[7.5px] sm:text-[8px] md:text-[10px] uppercase font-black tracking-tight opacity-90">${slot.sessionType}</span>
                         </div>
-                        <div class="flex items-center gap-0.5 md:gap-1 z-10">
-                            <span class="text-[9px] font-bold opacity-90 whitespace-nowrap leading-tight">${statusText}</span>
+                        <div class="flex items-center gap-0.5 md:gap-1 z-10 shrink-0">
+                            ${desktopText ? `<span class="hidden md:inline text-[9px] font-bold opacity-90 whitespace-nowrap leading-tight">${desktopText}</span>` : ''}
+                            ${mobileText ? `<span class="md:hidden text-[7px] font-bold opacity-90 whitespace-nowrap leading-none tracking-tighter">${mobileText}</span>` : ''}
                             <span class="text-[8px] md:text-[10px] filter drop-shadow-sm flex-shrink-0">${icon}</span>
                         </div>
                     </div>`;
@@ -2050,7 +2092,8 @@ function renderStaffCalendar(myEmail) {
                     hasUnavail = true;
                     const isAdm = fnEntry.markedBy === 'Admin';
                     const icon = isAdm ? "🛡️" : "⛔";
-                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">FN ${icon}</span><span class="hidden md:inline">FN ${icon} Unavail</span></div>`;
+                    const mTxt = isAdm ? "Admin" : "Unav";
+                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg px-0.5 py-0.5 md:p-1 text-[8px] md:text-[9px] font-bold flex items-center justify-between shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="text-[7.5px] sm:text-[8px] md:text-[10px] uppercase font-black tracking-tight opacity-90">FN</span><div class="flex items-center gap-0.5"><span class="md:hidden text-[7px] font-bold tracking-tighter">${mTxt}</span><span class="hidden md:inline">${isAdm ? 'Admin' : 'Unavail'}</span><span>${icon}</span></div></div>`;
                 }
                 
                 const anEntry = findEntry(adv.AN);
@@ -2058,7 +2101,8 @@ function renderStaffCalendar(myEmail) {
                     hasUnavail = true;
                     const isAdm = anEntry.markedBy === 'Admin';
                     const icon = isAdm ? "🛡️" : "⛔";
-                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">AN ${icon}</span><span class="hidden md:inline">AN ${icon} Unavail</span></div>`;
+                    const mTxt = isAdm ? "Admin" : "Unav";
+                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg px-0.5 py-0.5 md:p-1 text-[8px] md:text-[9px] font-bold flex items-center justify-between shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="text-[7.5px] sm:text-[8px] md:text-[10px] uppercase font-black tracking-tight opacity-90">AN</span><div class="flex items-center gap-0.5"><span class="md:hidden text-[7px] font-bold tracking-tighter">${mTxt}</span><span class="hidden md:inline">${isAdm ? 'Admin' : 'Unavail'}</span><span>${icon}</span></div></div>`;
                 }
                 
                 unavailHtml += `</div>`;
@@ -3494,8 +3538,14 @@ window.runAutoAllocation = async function () {
             return { staff: s, score, warnings };
         }).filter(c => c !== null);
 
-        // Sort: Highest Pending First
-        candidates.sort((a, b) => b.score - a.score);
+        // Sort: Highest Score First, then Least Duties Done First, then Alphabetical
+        candidates.sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            const doneA = getDutiesDoneCount(a.staff.email);
+            const doneB = getDutiesDoneCount(b.staff.email);
+            if (doneA !== doneB) return doneA - doneB; // Least duties done on top
+            return a.staff.name.localeCompare(b.staff.name);
+        });
 
         // Take Top candidates
         const toAssign = candidates.slice(0, needed);
@@ -4696,7 +4746,23 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
         return await UiModal.alert("🛡️ Market Suspended.\n\nThe Admin has locked this slot for manual assignment. Exchanges cannot be processed right now.");
     }
 
-    if (!await UiModal.confirm(`Are you sure you want to take over ${sellerName}'s duty on ${key}?`)) return;
+    // 🛡️ GATE 1: Initial Session Details Review
+    const firstConfirm = await UiModal.confirm(
+        `📋 Accept Invigilation Duty?\n\n` +
+        `• Session: ${key}\n` +
+        `• Releasing Faculty: ${sellerName}\n\n` +
+        `Do you want to proceed with accepting this duty?`
+    );
+    if (!firstConfirm) return;
+
+    // 🛡️ GATE 2: Explicit Second Confirmation (Accidental Tap Protection)
+    const secondConfirm = await UiModal.confirm(
+        `⚠️ FINAL CONFIRMATION REQUIRED\n\n` +
+        `You are officially taking over this examination duty on ${key}.\n\n` +
+        `Once accepted, this duty will be bound to your account and recorded in your official attendance record.\n\n` +
+        `Are you absolutely sure you want to confirm?`
+    );
+    if (!secondConfirm) return;
 
       // 1. Validation (🛡️ Anti-Ghosting Shield)
       if (!slot.assigned.includes(sellerEmail)) {
@@ -13562,6 +13628,9 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
 
         return {
             ...s,
+            regularDone: doneReg,
+            vacationDone: doneVac,
+            totalDone: doneReg + doneVac,
             regularPending: targetReg - doneReg,
             vacationPending: (vacationDutyTarget || 0) - doneVac,
             weeklyLoad: {}
@@ -13615,6 +13684,9 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
 
         const runStaff = eligibleStaff.map(s => ({
             ...s,
+            regularDone: s.regularDone,
+            vacationDone: s.vacationDone,
+            totalDone: s.totalDone,
             regularPending: s.regularPending,
             vacationPending: s.vacationPending,
             weeklyLoad: { ...s.weeklyLoad }
@@ -13700,13 +13772,27 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
                     return { staff: s, score, warnings, reasoning };
                 }).filter(c => c !== null);
 
-                candidates.sort((a, b) => b.score - a.score);
+                candidates.sort((a, b) => {
+                    if (b.score !== a.score) return b.score - a.score;
+                    // Tie-breaker 1: Least duties done on top (lowest done first)
+                    const doneA = isVacDate ? (a.staff.vacationDone ?? 0) : (a.staff.regularDone ?? 0);
+                    const doneB = isVacDate ? (b.staff.vacationDone ?? 0) : (b.staff.regularDone ?? 0);
+                    if (doneA !== doneB) return doneA - doneB;
+                    // Tie-breaker 2: Alphabetical by Name
+                    return a.staff.name.localeCompare(b.staff.name);
+                });
 
                 if (candidates.length > 0) {
                     const choice = candidates[0];
                     slot.assigned.push(choice.staff.email);
-                    if (isVacDate) choice.staff.vacationPending--;
-                    else choice.staff.regularPending--;
+                    if (isVacDate) {
+                        choice.staff.vacationPending--;
+                        choice.staff.vacationDone = (choice.staff.vacationDone || 0) + 1;
+                    } else {
+                        choice.staff.regularPending--;
+                        choice.staff.regularDone = (choice.staff.regularDone || 0) + 1;
+                    }
+                    choice.staff.totalDone = (choice.staff.totalDone || 0) + 1;
 
                     if (!choice.staff.weeklyLoad[currentWeekKey]) choice.staff.weeklyLoad[currentWeekKey] = 0;
                     choice.staff.weeklyLoad[currentWeekKey]++;
@@ -13967,7 +14053,18 @@ window.directAddStaff = function(key) {
 
             return true;
         })
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .map(s => {
+            const dateObj = parseDate(key);
+            const target = calculateStaffTarget(s, dateObj);
+            const done = getDutiesDoneCount(s.email, dateObj);
+            const pending = target - done;
+            return { ...s, done, pending };
+        })
+        .sort((a, b) => {
+            if (b.pending !== a.pending) return b.pending - a.pending;
+            if (a.done !== b.done) return a.done - b.done; // Least duties done on top
+            return a.name.localeCompare(b.name);
+        });
 
     // Reset Submit Button
     const btn = document.getElementById('direct-add-confirm-btn');
@@ -14003,8 +14100,11 @@ window.filterDirectAddStaff = function() {
        matches.forEach(s => {
            dropdown.innerHTML += `
                <div onclick="selectDirectAddStaff('${s.email}', '${s.name.replace(/'/g, "\\'")}')" class="p-2.5 hover:bg-indigo-50 border-b border-gray-100 cursor-pointer transition flex items-center justify-between group">
-                   <span class="font-bold text-gray-800 text-xs group-hover:text-indigo-700">${s.name}</span>
-                   <span class="text-[9px] uppercase font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">${s.dept}</span>
+                   <div class="flex flex-col min-w-0">
+                       <span class="font-bold text-gray-800 text-xs group-hover:text-indigo-700 truncate">${s.name}</span>
+                       <span class="text-[9px] text-gray-400">Pending: <b class="text-indigo-600">${s.pending ?? 0}</b> • Done: <b class="text-green-600">${s.done ?? 0}</b></span>
+                   </div>
+                   <span class="text-[9px] uppercase font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">${s.dept}</span>
                </div>`;
        });
     }
