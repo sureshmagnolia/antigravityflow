@@ -4834,7 +4834,17 @@ function generateExchangeBuyerEmail(seller, buyer, key) {
     }
     const sellerDeptStr = seller && seller.dept ? ` (${seller.dept})` : "";
 
-    return `
+            const dForCal = {
+                date: dateStr,
+                day: dayStr,
+                session: session,
+                time: timeStr
+            };
+            const gcalUrl = (typeof window.createGoogleCalendarDutyLink === 'function')
+                ? window.createGoogleCalendarDutyLink(dForCal, college)
+                : 'https://calendar.google.com/calendar/render';
+
+            return `
     <div style="font-family:Arial,Helvetica,sans-serif;color:#1f2937;max-width:600px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin:0 auto;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
         <div style="background:#4f46e5;color:white;padding:24px 20px;text-align:center;">
             <img src="https://examflow-india.web.app/CollegeLogo.png" alt="Logo" style="height:50px;width:auto;margin-bottom:6px;display:inline-block;">
@@ -4856,6 +4866,7 @@ function generateExchangeBuyerEmail(seller, buyer, key) {
                         <th style="padding:10px 14px;border:1px solid #e5e7eb;font-size:11px;color:#4338ca;text-transform:uppercase;">DUTY DATE</th>
                         <th style="padding:10px 14px;border:1px solid #e5e7eb;font-size:11px;color:#4338ca;text-transform:uppercase;">SESSION &amp; TIME</th>
                         <th style="padding:10px 14px;border:1px solid #e5e7eb;font-size:11px;color:#4338ca;text-transform:uppercase;">REPORT BY</th>
+                        <th style="padding:10px 14px;border:1px solid #e5e7eb;font-size:11px;color:#4338ca;text-transform:uppercase;text-align:center;">CALENDAR</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -4868,6 +4879,11 @@ function generateExchangeBuyerEmail(seller, buyer, key) {
                         </td>
                         <td style="padding:12px 14px;border:1px solid #e5e7eb;font-size:14px;color:#047857;">
                             <span style="font-weight:bold;color:#047857;">${reportTime}</span><br><span style="font-size:11px;color:#6b7280;">(30 mins before)</span>
+                        </td>
+                        <td style="padding:12px 14px;border:1px solid #e5e7eb;text-align:center;">
+                            <a href="${gcalUrl}" target="_blank" style="display:inline-block;background-color:#4f46e5;color:#ffffff !important;padding:7px 12px;border-radius:5px;font-size:11px;font-weight:bold;text-decoration:none;white-space:nowrap;">
+                                📅 + Google Cal
+                            </a>
                         </td>
                     </tr>
                 </tbody>
@@ -4924,6 +4940,55 @@ window.triggerTestExchangeEmails = async function (testEmail = "sureshmagnolia@g
     }).catch(e => console.error("Buyer test email failed", e));
 
     console.log("%c🎉 Done! Both exchange emails sent to " + testEmail, "color:#10b981;font-weight:bold;font-size:13px;");
+};
+
+window.triggerTestDutyReminderEmail = async function (testEmail = "sureshmagnolia@gmail.com", dateStr = "10.11.2026") {
+    const scriptUrl = googleScriptUrl || localStorage.getItem('invigGoogleScriptUrl') || document.getElementById('google-script-url')?.value;
+    if (!scriptUrl) {
+        alert("⚠️ Google Apps Script URL not configured.");
+        return console.error("No script URL found.");
+    }
+    const duties = [
+        { date: dateStr, day: "Tuesday", session: "FN", time: "09:30 AM" }
+    ];
+    const htmlBody = window.generateProfessionalEmail("Dr. Suresh (Faculty Preview)", duties, "Exam Duty Tomorrow (Reminder)");
+    console.log("📨 Sending Previous-Day Alert Test Email to " + testEmail + "...");
+    await fetch(scriptUrl, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            to: testEmail,
+            subject: `[TEST] Reminder: Exam Duty Tomorrow (${dateStr})`,
+            body: htmlBody
+        })
+    });
+    console.log("%c🎉 Test Previous-Day Alert Email sent to " + testEmail, "color:#10b981;font-weight:bold;font-size:13px;");
+};
+
+window.triggerTestWeeklyScheduleEmail = async function (testEmail = "sureshmagnolia@gmail.com") {
+    const scriptUrl = googleScriptUrl || localStorage.getItem('invigGoogleScriptUrl') || document.getElementById('google-script-url')?.value;
+    if (!scriptUrl) {
+        alert("⚠️ Google Apps Script URL not configured.");
+        return console.error("No script URL found.");
+    }
+    const duties = [
+        { date: "15.11.2026", day: "Monday", session: "FN", time: "09:30 AM" },
+        { date: "18.11.2026", day: "Thursday", session: "AN", time: "01:30 PM" }
+    ];
+    const htmlBody = window.generateHtmlEmailBody("Dr. Suresh (Faculty Preview)", duties);
+    console.log("📨 Sending Weekly Duty Schedule Test Email to " + testEmail + "...");
+    await fetch(scriptUrl, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            to: testEmail,
+            subject: `[TEST] Exam Duty Assignment - Week Schedule`,
+            body: htmlBody
+        })
+    });
+    console.log("%c🎉 Test Weekly Schedule Email sent to " + testEmail, "color:#10b981;font-weight:bold;font-size:13px;");
 };
 
 async function acceptExchange(key, buyerEmail, sellerEmail) {
@@ -6547,7 +6612,7 @@ window.openSlotReminderModal = function (key) {
         if (phone.length === 10) phone = "91" + phone;
 
         const emailSubject = `Reminder: Exam Duty Tomorrow (${targetDateStr})`;
-        const emailBody = generateProfessionalEmail(fullName, duties, "Invigilation Duty");
+        const emailBody = generateProfessionalEmail(fullName, duties, "Exam Duty Tomorrow (Reminder)");
         const btnId = `email-btn-${index}`;
 
         const dutyKeys = duties.map(d => `${d.date} | ${d.time}`);
@@ -6743,35 +6808,127 @@ window.generateDailySMS = function(firstName, dateStr, duties) {
     return `${firstName}: Duty Tmrw ${dateStr} (${sessions}). Report ${firstTime}. Link: https://examflow-india.web.app/invigilation.html -CS`;
 };
 
-// --- 6. PROFESSIONAL EMAIL GENERATOR (Unified) ---
+// --- 6. GOOGLE CALENDAR LINK GENERATOR (For Email Action Buttons) ---
+window.createGoogleCalendarDutyLink = function(d, collegeName) {
+    try {
+        const college = collegeName || (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "Government Victoria College";
+        const [dayStr, monthStr, yearStr] = (d.date || "").split('.');
+        if (!dayStr || !monthStr || !yearStr) return "https://calendar.google.com/calendar/render";
+
+        const day = String(dayStr).padStart(2, '0');
+        const month = String(monthStr).padStart(2, '0');
+        const year = String(yearStr);
+
+        const isAN = d.session === 'AN' || (d.time && (d.time.includes('PM') || d.time.startsWith('12:') || d.time.startsWith('13:') || d.time.startsWith('14:')));
+
+        let h = isAN ? 13 : 9;
+        let m = 30;
+
+        if (d.time && d.time.includes(':')) {
+            const parts = d.time.trim().split(' ');
+            const [hStr, mStr] = parts[0].split(':');
+            let parsedH = parseInt(hStr, 10);
+            let parsedM = parseInt(mStr, 10) || 0;
+            const mod = parts[1] ? parts[1].toUpperCase() : (isAN ? 'PM' : 'AM');
+            if (mod === 'PM' && parsedH !== 12) parsedH += 12;
+            if (mod === 'AM' && parsedH === 12) parsedH = 0;
+            if (!isNaN(parsedH)) {
+                h = parsedH;
+                m = parsedM;
+            }
+        }
+
+        const examStartDate = new Date(year, parseInt(month, 10) - 1, parseInt(day, 10), h, m);
+        const reportDate = new Date(examStartDate.getTime() - 30 * 60 * 1000);
+        const endDate = new Date(examStartDate.getTime() + 3 * 60 * 60 * 1000);
+
+        const pad = (n) => String(n).padStart(2, '0');
+        const startIso = `${year}${month}${day}T${pad(reportDate.getHours())}${pad(reportDate.getMinutes())}00`;
+        const endIso = `${year}${month}${day}T${pad(endDate.getHours())}${pad(endDate.getMinutes())}00`;
+
+        const reportTimeStr = (typeof window.calculateReportTime === 'function' && d.time)
+            ? window.calculateReportTime(d.time)
+            : `${pad(reportDate.getHours() % 12 || 12)}:${pad(reportDate.getMinutes())} ${reportDate.getHours() >= 12 ? 'PM' : 'AM'}`;
+
+        const eventTitle = encodeURIComponent(`Exam Duty (${d.session || 'FN'}) [Report ${reportTimeStr}] - ${college}`);
+        const details = encodeURIComponent(
+            `📝 INVIGILATION DUTY INTIMATION\n` +
+            `----------------------------------------\n` +
+            `• Date: ${d.date} (${d.day || ''})\n` +
+            `• Session: ${d.session} (${d.time})\n` +
+            `• ⏰ Mandatory Reporting Time: ${reportTimeStr} (Report to Chief Superintendent's office 30 mins prior)\n` +
+            `• Exam Portal: https://examflow-india.web.app/invigilation.html\n\n` +
+            `🔔 REMINDER INSTRUCTIONS:\n` +
+            `Make sure your Google Calendar notifications are active so you receive pre-departure alarms.`
+        );
+        const location = encodeURIComponent(`${college}, Examination Wing`);
+
+        return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${eventTitle}&dates=${startIso}/${endIso}&details=${details}&location=${location}`;
+    } catch (e) {
+        return "https://calendar.google.com/calendar/render";
+    }
+};
+
+// --- 7. PROFESSIONAL EMAIL GENERATOR (Unified with Google Calendar Integration) ---
 window.generateProfessionalEmail = function(name, dutiesArray, title) {
     const collegeName = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "Government Victoria College";
+    const safeTitle = title || "Invigilation Duty Schedule";
+    const isTomorrowReminder = Boolean(safeTitle && (safeTitle.includes("Tomorrow") || safeTitle.includes("Reminder")));
 
-    let rows = dutiesArray.map(d => {
-        const reportTime = window.calculateReportTime(d.time);
+    const primaryGCalUrl = (dutiesArray && dutiesArray.length > 0)
+        ? window.createGoogleCalendarDutyLink(dutiesArray[0], collegeName)
+        : "https://calendar.google.com/calendar/render";
+
+    let rows = (dutiesArray || []).map(d => {
+        const reportTime = (typeof window.calculateReportTime === 'function' && d.time)
+            ? window.calculateReportTime(d.time)
+            : "30 mins prior";
+        const gcalUrl = (typeof window.createGoogleCalendarDutyLink === 'function')
+            ? window.createGoogleCalendarDutyLink(d, collegeName)
+            : "https://calendar.google.com/calendar/render";
+
         return `
         <tr style="border-bottom: 1px solid #eee;">
             <td style="padding: 12px; border: 1px solid #e5e7eb; color: #374151;">
                 <strong>${d.date}</strong> <br> 
-                <span style="font-size: 11px; color: #6b7280; text-transform: uppercase;">${d.day}</span>
+                <span style="font-size: 11px; color: #6b7280; text-transform: uppercase;">${d.day || ''}</span>
             </td>
             <td style="padding: 12px; border: 1px solid #e5e7eb; color: #374151;">
-                <span style="background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">${d.session}</span> 
-                ${d.time}
+                <span style="background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">${d.session || 'FN'}</span> 
+                ${d.time || ''}
             </td>
             <td style="padding: 12px; border: 1px solid #e5e7eb; color: #c0392b; font-weight: bold;">
                 ${reportTime}
             </td>
+            <td style="padding: 12px; border: 1px solid #e5e7eb; text-align: center;">
+                <a href="${gcalUrl}" target="_blank" style="display: inline-block; background-color: #4f46e5; color: #ffffff !important; padding: 7px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; text-decoration: none; white-space: nowrap;">
+                    📅 + Google Cal
+                </a>
+            </td>
         </tr>`;
     }).join('');
 
+    // Special Alert Banner for Previous-Day / Urgent Tomorrow Reminders (Placed at bottom of email body)
+    const tomorrowBanner = isTomorrowReminder ? `
+        <div style="background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 1px solid #fdba74; border-radius: 8px; padding: 18px 16px; margin: 22px 0 0 0; text-align: center;">
+            <p style="margin: 0 0 10px 0; color: #9a3412; font-weight: bold; font-size: 14px;">
+                ⏰ Tomorrow Morning's Duty Alert: Don't miss your session!
+            </p>
+            <a href="${primaryGCalUrl}" target="_blank" style="display: inline-block; background-color: #ea580c; color: #ffffff !important; padding: 11px 22px; border-radius: 6px; font-weight: bold; font-size: 13px; text-decoration: none; box-shadow: 0 2px 4px rgba(234, 88, 12, 0.25);">
+                🔔 Add Tomorrow's Duty to Google Calendar with Alert
+            </a>
+            <p style="margin: 8px 0 0 0; color: #7c2d12; font-size: 11px;">
+                Starts at mandatory reporting time so your phone alerts you before departure.
+            </p>
+        </div>` : '';
+
     return `
-    <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center;">
-            <!-- ✅ NEW: College Logo -->
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background-color: #ffffff; margin: 0 auto;">
+        <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center;">
+            <!-- ✅ College Logo -->
             <img src="https://examflow-india.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
-            
             <h2 style="margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px;">${collegeName}</h2>
-            <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">${title}</p>
+            <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">${safeTitle}</p>
         </div>
 
         <div style="padding: 25px;">
@@ -6786,10 +6943,15 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
                         <th style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; color: #4b5563;">Date</th>
                         <th style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; color: #4b5563;">Session</th>
                         <th style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; color: #4b5563;">Reporting Time</th>
+                        <th style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; color: #4b5563; text-align: center;">Calendar</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
             </table>
+
+            <div style="margin-top: 15px; padding: 12px; background-color: #eef2ff; border-left: 4px solid #6366f1; border-radius: 4px; font-size: 12px; color: #3730a3;">
+                <strong>📅 Google Calendar Reminder:</strong> Tap <strong>"+ Google Cal"</strong> next to any session above to sync it directly to your personal Google Calendar. Your phone will trigger an alert before your reporting time.
+            </div>
 
             <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; border-radius: 4px; margin-top: 20px;">
                 <strong style="color: #92400e; font-size: 13px;">🛑 Instructions:</strong>
@@ -6808,6 +6970,8 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
                     Important: If your Exchange Request is not picked up, you must arrange a replacement personally.
                 </p>
             </div>
+
+            ${tomorrowBanner}
         </div>
 
         <div style="background-color: #f9fafb; padding: 15px; text-align: center; border-top: 1px solid #e5e7eb;">
@@ -6820,7 +6984,7 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
     `;
 };
 
-// --- 7. ALIAS FOR BACKWARD COMPATIBILITY ---
+// --- 8. ALIAS FOR BACKWARD COMPATIBILITY ---
 // This ensures that any code calling 'generateHtmlEmailBody' still works but uses the new beautiful template.
 window.generateHtmlEmailBody = window.generateProfessionalEmail;
 
@@ -7350,82 +7514,7 @@ window.editStaff = function (index) {
 }
 
 
-// --- HELPER: Generate Professional HTML Email ---
-window.generateProfessionalEmail = function(name, dutiesArray, title) {
-    const collegeName = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "Government Victoria College";
-
-    let rows = dutiesArray.map(d => {
-        const reportTime = calculateReportTime(d.time);
-        return `
-        <tr style="border-bottom: 1px solid #eee;">
-            <td style="padding: 12px; border: 1px solid #e5e7eb; color: #374151;">
-                <strong>${d.date}</strong> <br> 
-                <span style="font-size: 11px; color: #6b7280; text-transform: uppercase;">${d.day}</span>
-            </td>
-            <td style="padding: 12px; border: 1px solid #e5e7eb; color: #374151;">
-                <span style="background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">${d.session}</span> 
-                ${d.time}
-            </td>
-            <td style="padding: 12px; border: 1px solid #e5e7eb; color: #c0392b; font-weight: bold;">
-                ${reportTime}
-            </td>
-        </tr>`;
-    }).join('');
-
-    return `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
-        <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center;">
-            <!-- ✅ NEW: College Logo -->
-            <img src="https://examflow-india.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
-            <h2 style="margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px;">${collegeName}</h2>
-            <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">${title}</p>
-        </div>
-
-        <div style="padding: 25px;">
-            <p style="font-size: 15px; color: #111827; margin-top: 0;">Dear <b>${name}</b>,</p>
-            <p style="color: #4b5563; line-height: 1.6; font-size: 14px;">
-                This is an official intimation regarding your invigilation duties. Please find your schedule below:
-            </p>
-            
-            <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px;">
-                <thead>
-                    <tr style="background-color: #f9fafb; text-align: left;">
-                        <th style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; color: #4b5563;">Date</th>
-                        <th style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; color: #4b5563;">Session</th>
-                        <th style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; color: #4b5563;">Reporting Time</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
-
-            <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; border-radius: 4px; margin-top: 20px;">
-                <strong style="color: #92400e; font-size: 13px;">🛑 Instructions:</strong>
-                <ul style="margin: 8px 0 0 20px; padding: 0; color: #78350f; font-size: 13px; line-height: 1.6;">
-                    <li>Please report to the <strong>Chief Superintendent's office 30 minutes prior</strong> to the commencement of the examination.</li>
-                    <li>Mobile phones should be in <strong>silent mode</strong> inside the hall.</li>
-                    <li><a href="https://examflow-india.web.app/instructions.html" style="color: #d97706; text-decoration: underline;">View General Instructions</a></li>
-                </ul>
-            </div>
-
-            <div style="margin-top: 15px; padding: 10px; background-color: #f3f4f6; border-radius: 4px; font-size: 13px; color: #374151;">
-                <p style="margin: 0 0 8px 0;">
-                    ♻️ For adjustments, please post in the <a href="https://examflow-india.web.app/invigilation.html" style="color: #4f46e5; font-weight: bold;">Exam Portal</a>.
-                </p>
-                <p style="margin: 0; color: #dc2626; font-weight: bold;">
-                    Important: If your Exchange Request is not picked up, you must arrange a replacement personally.
-                </p>
-            </div>
-        </div>
-
-        <div style="background-color: #f9fafb; padding: 15px; text-align: center; border-top: 1px solid #e5e7eb;">
-            <p style="margin: 0; font-size: 12px; color: #6b7280; line-height: 1.4;">
-                <strong>Exam Cell, ${collegeName}, Palakkad</strong><br>
-                This is an automated system alert. Please do not reply directly to this email.
-            </p>
-        </div>
-    </div>
-    `;
-};
+// --- HELPER: Professional HTML Email Generator is canonically defined above with unified Google Calendar Integration ---
 
 
 // --- HELPER: Convert WhatsApp Text to HTML for Email ---
@@ -13150,53 +13239,9 @@ window.cancelBulkSending = function() {
 // 📧 EMAIL HTML GENERATORS
 // ==========================================
 
-// 1. Generate HTML for Staff Email (Individual)
+// 1. Generate HTML for Staff Email (Individual) - Delegates to Unified Professional Template with Google Calendar Integration
 window.generateHtmlEmailBody = function(name, duties) {
-    const college = localStorage.getItem('examCollegeName') || "EXAMINATION CELL";
-    
-    let rows = duties.map(d => 
-        `<tr>
-            <td style="padding:8px;border:1px solid #ddd;font-size:14px;">${d.date}<br><span style="font-size:11px;color:#666;">${d.day}</span></td>
-            <td style="padding:8px;border:1px solid #ddd;font-size:14px;"><b>${d.session}</b><br><span style="font-size:11px;color:#666;">${d.time}</span></td>
-        </tr>`
-    ).join('');
-
-    return `
-    <div style="font-family:Arial,sans-serif;color:#333;max-width:600px;border:1px solid #eee;border-radius:8px;overflow:hidden;">
-        <div style="background:#4f46e5;color:white;padding:20px;text-align:center;">
-        <!-- ✅ NEW: College Logo -->
-            <img src="https://examflow-india.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
-            <h2 style="margin:0;font-size:18px;text-transform:uppercase;">${college}</h2>
-            <p style="margin:5px 0 0;font-size:13px;opacity:0.9;">Invigilation Duty Intimation</p>
-        </div>
-        <div style="padding:20px;">
-            <p style="font-size:15px;">Dear <b>${name}</b>,</p>
-            <p style="line-height:1.5;">You have been assigned the following exam invigilation duties:</p>
-
-            
-            <table style="width:100%;border-collapse:collapse;margin:15px 0;background:#f9fafb;">
-                <thead>
-                    <tr style="background:#eef2ff;text-align:left;">
-                        <th style="padding:10px;border:1px solid #ddd;font-size:12px;color:#4f46e5;">DATE</th>
-                        <th style="padding:10px;border:1px solid #ddd;font-size:12px;color:#4f46e5;">SESSION</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
-
-            <div style="background:#fff1f2;border-left:4px solid #f43f5e;padding:15px;margin-top:20px;font-size:13px;color:#881337;">
-                <strong>⚠️ Important Instructions:</strong>
-                <ul style="margin:5px 0 0 20px;padding:0;">
-                    <li>Please report to the Exam Cell <strong>30 minutes</strong> before the start time.</li>
-                    <li>Mobile phones should be strictly maintained in silent mode inside the exam hall.</li>
-                </ul>
-            </div>
-            
-            <p style="font-size:13px;color:#666;margin-top:20px;border-top:1px solid #eee;padding-top:10px;">
-                <em>This is an automated system alert. Please do not reply directly to this email.</em>
-            </p>
-        </div>
-    </div>`;
+    return window.generateProfessionalEmail(name, duties, "Invigilation Duty Schedule");
 };
 
 // --- HELPER: Track Assignment Source (God Mode) ---
