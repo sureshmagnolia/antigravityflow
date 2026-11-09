@@ -4942,6 +4942,55 @@ window.triggerTestExchangeEmails = async function (testEmail = "sureshmagnolia@g
     console.log("%c🎉 Done! Both exchange emails sent to " + testEmail, "color:#10b981;font-weight:bold;font-size:13px;");
 };
 
+window.triggerTestDutyReminderEmail = async function (testEmail = "sureshmagnolia@gmail.com", dateStr = "10.11.2026") {
+    const scriptUrl = googleScriptUrl || localStorage.getItem('invigGoogleScriptUrl') || document.getElementById('google-script-url')?.value;
+    if (!scriptUrl) {
+        alert("⚠️ Google Apps Script URL not configured.");
+        return console.error("No script URL found.");
+    }
+    const duties = [
+        { date: dateStr, day: "Tuesday", session: "FN", time: "09:30 AM" }
+    ];
+    const htmlBody = window.generateProfessionalEmail("Dr. Suresh (Faculty Preview)", duties, "Exam Duty Tomorrow (Reminder)");
+    console.log("📨 Sending Previous-Day Alert Test Email to " + testEmail + "...");
+    await fetch(scriptUrl, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            to: testEmail,
+            subject: `[TEST] Reminder: Exam Duty Tomorrow (${dateStr})`,
+            body: htmlBody
+        })
+    });
+    console.log("%c🎉 Test Previous-Day Alert Email sent to " + testEmail, "color:#10b981;font-weight:bold;font-size:13px;");
+};
+
+window.triggerTestWeeklyScheduleEmail = async function (testEmail = "sureshmagnolia@gmail.com") {
+    const scriptUrl = googleScriptUrl || localStorage.getItem('invigGoogleScriptUrl') || document.getElementById('google-script-url')?.value;
+    if (!scriptUrl) {
+        alert("⚠️ Google Apps Script URL not configured.");
+        return console.error("No script URL found.");
+    }
+    const duties = [
+        { date: "15.11.2026", day: "Monday", session: "FN", time: "09:30 AM" },
+        { date: "18.11.2026", day: "Thursday", session: "AN", time: "01:30 PM" }
+    ];
+    const htmlBody = window.generateHtmlEmailBody("Dr. Suresh (Faculty Preview)", duties);
+    console.log("📨 Sending Weekly Duty Schedule Test Email to " + testEmail + "...");
+    await fetch(scriptUrl, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            to: testEmail,
+            subject: `[TEST] Exam Duty Assignment - Week Schedule`,
+            body: htmlBody
+        })
+    });
+    console.log("%c🎉 Test Weekly Schedule Email sent to " + testEmail, "color:#10b981;font-weight:bold;font-size:13px;");
+};
+
 async function acceptExchange(key, buyerEmail, sellerEmail) {
     // 🛡️ DOUBLE-CLICK PROTECTION
     if (window._isAcceptingExchange) return;
