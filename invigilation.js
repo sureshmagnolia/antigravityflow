@@ -6908,9 +6908,9 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
         </tr>`;
     }).join('');
 
-    // Special Alert Banner for Previous-Day / Urgent Tomorrow Reminders
+    // Special Alert Banner for Previous-Day / Urgent Tomorrow Reminders (Placed at bottom of email body)
     const tomorrowBanner = isTomorrowReminder ? `
-        <div style="background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 1px solid #fdba74; border-radius: 8px; padding: 16px; margin: 0 0 20px 0; text-align: center;">
+        <div style="background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 1px solid #fdba74; border-radius: 8px; padding: 18px 16px; margin: 22px 0 0 0; text-align: center;">
             <p style="margin: 0 0 10px 0; color: #9a3412; font-weight: bold; font-size: 14px;">
                 ⏰ Tomorrow Morning's Duty Alert: Don't miss your session!
             </p>
@@ -6932,8 +6932,6 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
         </div>
 
         <div style="padding: 25px;">
-            ${tomorrowBanner}
-
             <p style="font-size: 15px; color: #111827; margin-top: 0;">Dear <b>${name}</b>,</p>
             <p style="color: #4b5563; line-height: 1.6; font-size: 14px;">
                 This is an official intimation regarding your invigilation duties. Please find your schedule below:
@@ -6972,6 +6970,8 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
                     Important: If your Exchange Request is not picked up, you must arrange a replacement personally.
                 </p>
             </div>
+
+            ${tomorrowBanner}
         </div>
 
         <div style="background-color: #f9fafb; padding: 15px; text-align: center; border-top: 1px solid #e5e7eb;">
