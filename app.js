@@ -3529,6 +3529,13 @@ window.deleteSessionFromCloud = deleteSessionFromCloud;
     const localSyncPriority = {}; // Track timestamps for "Local-First" data protection
     // --- (V58) Global var for QP Code data ---
     let qpCodeMap = {};
+    // --- QP Code Live Sorting & Auto-Fetch Guard State ---
+    let isAutoPopulatingQP = false;
+    let hasUnsavedQPEdits = false;
+    let qpSortDebounceTimer = null;
+    let qpSortScheduledSession = '';
+    const QP_SORT_DELAY_MS = 5000;
+    const NATIVE_INPUT_VALUE_DESC = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
     // --- NEW GLOBAL VARIABLE ---
     let qpSessionUnsubscribe = null;
 
@@ -10711,7 +10718,7 @@ async function syncToPrintManager() {
     });
     navQPCodes.addEventListener('click', () => { 
         showView(viewQPCodes, navQPCodes);
-        const qpSelect = document.getElementById('qp-session-select');
+        const qpSelect = document.getElementById('session-select-qp');
         if (qpSelect && qpSelect.value && typeof window.fetchQPDataForSession === 'function') {
             window.fetchQPDataForSession(qpSelect.value);
         }
@@ -11824,21 +11831,29 @@ window.real_populate_session_dropdown = function () {
 
         console.log(`☁️ Fetching QP Updates for ${sessionId}...`);
 
+        // Refresh UI (Only if user is still looking at this session and has no pending local edits)
         try {
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
+                if (isAutoPopulatingQP || hasUnsavedQPEdits) {
+                    console.log("⏸️ Skipped overwriting QP Code UI from cloud while local edits or auto-import are active.");
+                    return;
+                }
+
                 const data = docSnap.data();
                 const cloudQPs = data.qpCodes || {};
 
                 // Update Local Storage with Cloud Data
                 if (typeof qpCodeMap === 'undefined') window.qpCodeMap = {};
-                
+                const prevJson = JSON.stringify(qpCodeMap[sessionKey] || {});
+                const nextJson = JSON.stringify(cloudQPs);
+
                 qpCodeMap[sessionKey] = cloudQPs;
                 localStorage.setItem('examQPCodes', JSON.stringify(qpCodeMap));
                 
-                // Refresh UI (Only if user is still looking at this session)
-                const qpSelect = document.getElementById('qp-session-select');
-                if (qpSelect && qpSelect.value === sessionKey) {
+                // Refresh UI (Only if user is still looking at this session and data actually changed)
+                const qpSelect = document.getElementById('session-select-qp');
+                if (qpSelect && qpSelect.value === sessionKey && prevJson !== nextJson) {
                      render_qp_code_list(sessionKey);
                 }
             }
@@ -11952,6 +11967,8 @@ window.real_populate_qp_code_session_dropdown = function () {
             // -----------------------
 
         } else {
+            clearQPSortTimer();
+            hasUnsavedQPEdits = false;
             qpEntrySection.classList.add('hidden');
             qpCodeContainer.innerHTML = '';
             qpCodeStatus.textContent = '';
@@ -11959,12 +11976,184 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
     });
 
-    // V93: Renders the QP Code list (Regular First, then Alphabetical)
+    function escapeQPAttr(str) {
+        return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    function escapeQPHtml(str) {
+        return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    function compareQPEntries(a, b) {
+        const rawA = (a.qpCode || '').trim().toUpperCase();
+        const rawB = (b.qpCode || '').trim().toUpperCase();
+        const hasA = rawA.length > 0;
+        const hasB = rawB.length > 0;
+
+        // Blank / missing QP codes stay at the top inside each stream
+        if (!hasA && hasB) return -1;
+        if (hasA && !hasB) return 1;
+
+        // When both have QP codes, sort ascending (natural numeric order)
+        if (hasA && hasB) {
+            const normA = rawA.replace(/\s+/g, '');
+            const normB = rawB.replace(/\s+/g, '');
+            let cmp = normA.localeCompare(normB, undefined, { numeric: true, sensitivity: 'base' });
+            if (cmp !== 0) return cmp;
+            cmp = rawA.localeCompare(rawB, undefined, { numeric: true, sensitivity: 'base' });
+            if (cmp !== 0) return cmp;
+        }
+
+        // Default / tie-breaker: sort alphabetically by Course Name
+        return (a.course || '').localeCompare(b.course || '');
+    }
+
+    function clearQPSortTimer() {
+        if (qpSortDebounceTimer) {
+            clearTimeout(qpSortDebounceTimer);
+            qpSortDebounceTimer = null;
+        }
+        qpSortScheduledSession = '';
+    }
+
+    function rearrangeQPRowsInPlace(expectedSessionKey = null) {
+        if (!qpCodeContainer) return;
+        const activeSession = sessionSelectQP ? sessionSelectQP.value : '';
+        if (expectedSessionKey && activeSession !== expectedSessionKey) return;
+        if (isAutoPopulatingQP) return;
+
+        const streamGroups = qpCodeContainer.querySelectorAll('.qp-stream-group');
+        if (streamGroups.length === 0) return;
+
+        // Preserve focus, caret position, and scroll offset across DOM reordering
+        const activeEl = document.activeElement;
+        const isInputFocused = activeEl &&
+            activeEl.classList &&
+            activeEl.classList.contains('qp-code-input') &&
+            qpCodeContainer.contains(activeEl);
+        let selStart = null;
+        let selEnd = null;
+        if (isInputFocused) {
+            try {
+                selStart = activeEl.selectionStart;
+                selEnd = activeEl.selectionEnd;
+            } catch (e) {}
+        }
+        const prevScrollTop = qpCodeContainer.scrollTop;
+
+        let anyChanged = false;
+
+        streamGroups.forEach(group => {
+            const rowsContainer = group.querySelector('.qp-stream-rows');
+            if (!rowsContainer) return;
+
+            const rows = Array.from(rowsContainer.querySelectorAll(':scope > .qp-code-row'));
+            if (rows.length <= 1) return;
+
+            const sortedRows = [...rows].sort((rowA, rowB) => {
+                const inpA = rowA.querySelector('.qp-code-input');
+                const inpB = rowB.querySelector('.qp-code-input');
+                return compareQPEntries(
+                    { course: rowA.dataset.course || inpA?.dataset.course || '', qpCode: inpA ? inpA.value : '' },
+                    { course: rowB.dataset.course || inpB?.dataset.course || '', qpCode: inpB ? inpB.value : '' }
+                );
+            });
+
+            const orderChanged = sortedRows.some((row, idx) => row !== rows[idx]);
+            if (!orderChanged) return;
+
+            anyChanged = true;
+            const frag = document.createDocumentFragment();
+            sortedRows.forEach(row => frag.appendChild(row));
+            rowsContainer.appendChild(frag);
+        });
+
+        if (anyChanged) {
+            qpCodeContainer.scrollTop = prevScrollTop;
+            if (isInputFocused && document.body.contains(activeEl)) {
+                try {
+                    activeEl.focus({ preventScroll: true });
+                    if (selStart !== null && selEnd !== null) {
+                        activeEl.setSelectionRange(selStart, selEnd);
+                    }
+                } catch (e) {}
+            }
+        }
+    }
+
+    function scheduleQPRearrange(delayMs = QP_SORT_DELAY_MS) {
+        clearQPSortTimer();
+        const targetSession = sessionSelectQP ? sessionSelectQP.value : '';
+        if (!targetSession || isAutoPopulatingQP) return;
+
+        qpSortScheduledSession = targetSession;
+        qpSortDebounceTimer = setTimeout(() => {
+            const scheduledFor = qpSortScheduledSession;
+            qpSortDebounceTimer = null;
+            qpSortScheduledSession = '';
+            rearrangeQPRowsInPlace(scheduledFor);
+        }, delayMs);
+    }
+
+    function handleQPInputChange(inputEl) {
+        if (!inputEl || !inputEl.classList || !inputEl.classList.contains('qp-code-input')) return;
+        if (isAutoPopulatingQP) return;
+
+        hasUnsavedQPEdits = true;
+        const hasDupes = validateQPDuplicates();
+
+        if (!hasDupes) {
+            qpCodeStatus.classList.remove('text-green-600');
+            qpCodeStatus.classList.add('text-red-600');
+            qpCodeStatus.textContent = 'Unsaved changes... Click SAVE QP CODES to commit.';
+        }
+
+        // Wait at least 5 seconds after the last entry before rearranging
+        scheduleQPRearrange(QP_SORT_DELAY_MS);
+    }
+
+    function attachQPInputValueHook(input) {
+        if (!input || input._qpValueHooked || !NATIVE_INPUT_VALUE_DESC || !NATIVE_INPUT_VALUE_DESC.set) return;
+        try {
+            Object.defineProperty(input, 'value', {
+                configurable: true,
+                get() {
+                    return NATIVE_INPUT_VALUE_DESC.get.call(this);
+                },
+                set(nextVal) {
+                    const prevVal = NATIVE_INPUT_VALUE_DESC.get.call(this);
+                    NATIVE_INPUT_VALUE_DESC.set.call(this, nextVal);
+                    const newVal = NATIVE_INPUT_VALUE_DESC.get.call(this);
+                    if (!isAutoPopulatingQP && prevVal !== newVal) {
+                        handleQPInputChange(this);
+                    }
+                }
+            });
+            input._qpValueHooked = true;
+        } catch (e) {
+            // Fallback cleanly to standard input/change listeners if defineProperty is disallowed
+        }
+    }
+
+    // V93: Renders the QP Code list (Regular First, blank QP codes on top inside each stream, entered QP codes ascending)
     function render_qp_code_list(sessionKey) {
+        clearQPSortTimer();
+        hasUnsavedQPEdits = false;
+
         const [date, time] = sessionKey.split(' | ');
         const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
 
-        // 1. Get Unique Pairs of (Course + Stream)
+        loadQPCodes();
+        const sessionCodes = qpCodeMap[sessionKey] || {};
+
+        // 1. Get Unique Pairs of (Course + Stream) with saved QP Code
         const uniquePairs = [];
         const seen = new Set();
 
@@ -11973,11 +12162,13 @@ window.real_populate_qp_code_session_dropdown = function () {
             const key = `${s.Course}|${strm}`;
             if (!seen.has(key)) {
                 seen.add(key);
-                uniquePairs.push({ course: s.Course, stream: strm });
+                const base64Key = getQpKey(s.Course, strm);
+                const savedCode = sessionCodes[base64Key] || "";
+                uniquePairs.push({ course: s.Course, stream: strm, base64Key, savedCode });
             }
         });
 
-        // 2. Sort: Regular Stream First, then Other Streams Alphabetically, then Course Name
+        // 2. Sort: Regular Stream First, Other Streams Alphabetically, then Blank-First / QP Code Ascending / Course Name
         uniquePairs.sort((a, b) => {
             // Force "Regular" to the top
             if (a.stream === "Regular" && b.stream !== "Regular") return -1;
@@ -11986,12 +12177,13 @@ window.real_populate_qp_code_session_dropdown = function () {
             // If streams are different (and neither is Regular), sort streams alphabetically
             if (a.stream !== b.stream) return a.stream.localeCompare(b.stream);
 
-            // If streams are the same, sort by Course Name
-            return a.course.localeCompare(b.course);
+            // Within the same stream: blank QP codes on top (course-wise), entered QP codes ascending
+            return compareQPEntries(
+                { course: a.course, qpCode: a.savedCode },
+                { course: b.course, qpCode: b.savedCode }
+            );
         });
 
-        loadQPCodes();
-        const sessionCodes = qpCodeMap[sessionKey] || {};
         const htmlChunks = [];
 
         if (uniquePairs.length === 0) {
@@ -12003,43 +12195,56 @@ window.real_populate_qp_code_session_dropdown = function () {
         let currentStream = null;
 
         uniquePairs.forEach(item => {
-            // Add Stream Header if it changes
+            // Open Stream Group Wrapper when stream changes
             if (item.stream !== currentStream) {
+                if (currentStream !== null) {
+                    htmlChunks.push('</div></div>');
+                }
                 const marginTop = currentStream ? "mt-6" : "mt-0";
                 htmlChunks.push(`
-                <div class="${marginTop} mb-2 bg-indigo-50 p-2 font-bold text-indigo-800 border-b border-indigo-200 rounded-t-md">
-                    ${item.stream} Stream
-                </div>
-            `);
+                <div class="qp-stream-group" data-stream="${escapeQPAttr(item.stream)}">
+                    <div class="${marginTop} mb-2 bg-indigo-50 p-2 font-bold text-indigo-800 border-b border-indigo-200 rounded-t-md">
+                        ${escapeQPHtml(item.stream)} Stream
+                    </div>
+                    <div class="qp-stream-rows space-y-2">
+                `);
                 currentStream = item.stream;
             }
-
-            // Generate Key
-            const base64Key = getQpKey(item.course, item.stream);
-            const savedCode = sessionCodes[base64Key] || "";
 
             // *** NEW LOCK LOGIC ***
             const disabledAttr = isQPLocked ? "disabled" : "";
             const bgClass = isQPLocked ? "bg-gray-50 text-gray-500" : "bg-white";
+            const safeCourseAttr = escapeQPAttr(item.course);
+            const safeStreamAttr = escapeQPAttr(item.stream);
 
             htmlChunks.push(`
-        <div class="flex items-center gap-3 p-2 border-b border-gray-200 hover:bg-gray-50">
+        <div class="qp-code-row flex items-center gap-3 p-2 border-b border-gray-200 hover:bg-gray-50"
+             data-course="${safeCourseAttr}"
+             data-stream="${safeStreamAttr}"
+             data-course-key="${item.base64Key}">
             <label class="font-medium text-gray-700 w-2/3 text-sm">
-                ${item.course}
+                ${escapeQPHtml(item.course)}
             </label>
             <input type="text" 
                    class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500 ${bgClass}" 
-                   value="${savedCode}" 
-                   data-course-key="${base64Key}"
-                   data-course="${item.course.replace(/"/g, '&quot;')}"
-                   data-stream="${item.stream.replace(/"/g, '&quot;')}"
+                   value="${escapeQPAttr(item.savedCode)}" 
+                   data-course-key="${item.base64Key}"
+                   data-course="${safeCourseAttr}"
+                   data-stream="${safeStreamAttr}"
                    placeholder="QP Code"
                    ${disabledAttr}>
         </div>
        `);
         });
 
+        if (currentStream !== null) {
+            htmlChunks.push('</div></div>');
+        }
+
         qpCodeContainer.innerHTML = htmlChunks.join('');
+
+        // Hook programmatic .value assignments so external auto-fetch scripts work safely without crashing
+        qpCodeContainer.querySelectorAll('.qp-code-input').forEach(attachQPInputValueHook);
 
         // 🛡️ [V95]: Trigger duplicate validation
         validateQPDuplicates();
@@ -12082,16 +12287,23 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         const statusEl = document.getElementById('qp-code-status');
         if (hasDuplicates) {
+            statusEl.classList.remove('text-green-600', 'text-red-600');
             statusEl.innerHTML = `<span class="text-amber-600 font-bold">⚠️ WARNING: Duplicate QP codes detected (Highlighted in Yellow). Please verify papers.</span>`;
         } else if (statusEl.textContent.includes("WARNING")) {
             statusEl.textContent = ""; // Clear warning if resolved
         }
+        return hasDuplicates;
     }
 
-    // ⚡ [V95]: Live validation on manual typing
+    // ⚡ [V95]: Live validation + unsaved feedback + 5s debounced in-place sort
     qpCodeContainer.addEventListener('input', (e) => {
         if (e.target.classList.contains('qp-code-input')) {
-            validateQPDuplicates();
+            handleQPInputChange(e.target);
+        }
+    });
+    qpCodeContainer.addEventListener('change', (e) => {
+        if (e.target.classList.contains('qp-code-input')) {
+            handleQPInputChange(e.target);
         }
     });
 
@@ -12108,6 +12320,8 @@ window.real_populate_qp_code_session_dropdown = function () {
             UiModal.alert("No session selected.");
             return;
         }
+
+        clearQPSortTimer();
 
         // V90 FIX: Ensure qpCodeMap is initialized before loading from storage
         if (typeof qpCodeMap === 'undefined') {
@@ -12142,25 +12356,22 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         // 5. Save the *entire* master map back to localStorage
         localStorage.setItem(QP_CODE_LIST_KEY, JSON.stringify(qpCodeMap));
+        hasUnsavedQPEdits = false;
 
-        // 6. Show success message
+        // 6. Reorder existing DOM rows immediately upon save (non-destructive)
+        rearrangeQPRowsInPlace(sessionKey);
+
+        // 7. Show success message
         qpCodeStatus.classList.remove('text-red-600');
         qpCodeStatus.classList.add('text-green-600');
         qpCodeStatus.textContent = `QP Codes saved successfully!`;
-        setTimeout(() => { qpCodeStatus.textContent = ""; }, 2000);
+        setTimeout(() => {
+            if (qpCodeStatus.textContent === 'QP Codes saved successfully!') {
+                qpCodeStatus.textContent = "";
+                validateQPDuplicates();
+            }
+        }, 2000);
            syncSessionToCloud(sessionKey); // <--- ADD THIS
-    });
-
-    // V89: NEW INPUT STRATEGY
-    // The input listener is now *only* for user feedback.
-    // It does NOT update any data.
-    qpCodeContainer.addEventListener('input', (e) => {
-        if (e.target.classList.contains('qp-code-input')) {
-            // Show pending status
-            qpCodeStatus.classList.remove('text-green-600');
-            qpCodeStatus.classList.add('text-red-600');
-            qpCodeStatus.textContent = 'Unsaved changes... Click SAVE QP CODES to commit.';
-        }
     });
 
 
@@ -15437,9 +15648,21 @@ if (saveScribeBtn) {
                 toggleQPLockBtn.className = "text-xs flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded hover:bg-red-100 transition shadow-sm shrink-0 ml-2";
             }
 
-            // Re-render list to apply disabled state to inputs
+            // Apply locked state in-place if unsaved edits exist so typing/auto-fetch values are preserved
             if (sessionSelectQP.value) {
-                render_qp_code_list(sessionSelectQP.value);
+                if (hasUnsavedQPEdits) {
+                    qpCodeContainer.querySelectorAll('.qp-code-input').forEach(inp => {
+                        inp.disabled = isQPLocked;
+                        inp.classList.toggle('bg-gray-50', isQPLocked);
+                        inp.classList.toggle('text-gray-500', isQPLocked);
+                        inp.classList.toggle('bg-white', !isQPLocked);
+                    });
+                    saveQpCodesButton.disabled = isQPLocked;
+                    saveQpCodesButton.classList.toggle('opacity-50', isQPLocked);
+                    saveQpCodesButton.classList.toggle('cursor-not-allowed', isQPLocked);
+                } else {
+                    render_qp_code_list(sessionSelectQP.value);
+                }
             }
         });
     }
@@ -30620,8 +30843,11 @@ window.downloadInvigilationListPDF = async function () {
                 return;
             }
 
-            let matched = 0;
-            const inputs = Array.from(document.querySelectorAll('#qp-code-container input[data-course]'));
+            clearQPSortTimer();
+            isAutoPopulatingQP = true;
+            try {
+                let matched = 0;
+                const inputs = Array.from(document.querySelectorAll('#qp-code-container input[data-course]'));
 
             // Track used pairs and matched inputs
             const usedPairs = new Set();
@@ -30957,14 +31183,19 @@ window.downloadInvigilationListPDF = async function () {
             }
 
             if (matched > 0) {
+                hasUnsavedQPEdits = true;
                 // 🛡️ [V95]: Trigger live highlight validation after bulk import
                 validateQPDuplicates();
                 
                 document.getElementById('qp-code-status').textContent = `✅ ${matched} mapping pairs imported successfully. Click Save QP Codes below to confirm.`;
+                isAutoPopulatingQP = false; // Release batch lock before triggering Save & sort
                 document.getElementById('save-qp-codes-button')?.click(); // Auto-clicks save if valid
             } else {
                 alertContainer.innerHTML = `<span class='text-red-600 font-semibold'>Found ${parsedPairs.length} codes on Clipboard, but zero matched your registered Course Names.</span>`;
                 alertContainer.classList.remove('hidden');
+            }
+            } finally {
+                isAutoPopulatingQP = false;
             }
 
         } catch (e) {
@@ -31067,7 +31298,7 @@ document.addEventListener("visibilitychange", () => {
         
         // 2. Auto-Refresh the exact data for the tab you are currently looking at
         if (typeof viewQPCodes !== 'undefined' && !viewQPCodes.classList.contains('hidden')) {
-            const qpSelect = document.getElementById('qp-session-select');
+            const qpSelect = document.getElementById('session-select-qp');
             if (qpSelect && qpSelect.value && typeof window.fetchQPDataForSession === 'function') window.fetchQPDataForSession(qpSelect.value);
         }
         else if (typeof viewAbsentees !== 'undefined' && !viewAbsentees.classList.contains('hidden')) {
@@ -31211,4 +31442,3 @@ document.addEventListener('DOMContentLoaded', () => {
     }
    
 });
-
