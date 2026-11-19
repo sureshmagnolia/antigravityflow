@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <link rel="icon" type="image/svg+xml" href="magnolia-logo.svg?v=12.8.84">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ExamFlow v12.8.84</title>
+    <title>ExamFlow v12.8.85</title>
 
     <script src="tailwind.js"></script>
     <script>
@@ -24,8 +24,8 @@
     <link rel="stylesheet" href="style.css?v=20251206_1315">
 
     <script src="remuneration.js?v=20251206_1315"></script>
-    <script src="university_proforma.js?v=12.8.39"></script>
-    <script src="sde_proforma.js?v=12.8.39"></script>
+    <script src="university_proforma.js?v=12.8.85"></script>
+    <script src="sde_proforma.js?v=12.8.85"></script>
 
    <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -217,7 +217,7 @@
                 </svg>
                 <div class="flex flex-col justify-center min-w-0 pr-1">
                     <h1 class="text-sm md:text-lg font-bold text-white leading-none">
-                        ExamFlow <span class="text-[10px] font-normal text-gray-400 ml-1">v12.8.84</span>
+                        ExamFlow <span class="text-[10px] font-normal text-gray-400 ml-1">v12.8.85</span>
                         <button onclick="openManualNewTab()" class="ml-1 bg-indigo-800 hover:bg-indigo-700 text-white p-1 rounded shadow-sm transition border border-indigo-600" title="Open User Manual">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 md:w-4 md:h-4">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
@@ -2200,6 +2200,23 @@
                     <button onclick="document.getElementById('qp-import-inline-ui').classList.add('hidden')" class="bg-gray-200 text-gray-700 px-3 py-1 rounded shadow-sm hover:bg-gray-300 transition text-xs">Cancel</button>
                 </div>
                 <div id="qp-import-alert-container" class="hidden text-xs mt-2 whitespace-pre-wrap font-mono"></div>
+            </div>
+
+            <!-- ⚠️ Self-Containing Top Warning Card for Duplicate QP Codes -->
+            <div id="qp-duplicate-warning-card" class="hidden mb-4 p-3.5 bg-amber-50 border border-amber-300 border-l-4 border-l-amber-500 rounded-r-lg shadow-sm">
+                <div class="flex items-start gap-2.5">
+                    <span class="text-lg leading-none shrink-0 mt-0.5" aria-hidden="true">⚠️</span>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold uppercase tracking-wider text-amber-800">Attention Required</span>
+                            <span id="qp-duplicate-count-badge" class="text-[11px] font-semibold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full"></span>
+                        </div>
+                        <p id="qp-duplicate-warning-msg" class="text-xs text-amber-900 font-medium mt-1 leading-relaxed">
+                            WARNING: Duplicate QP codes detected (Highlighted in Yellow). Please verify papers.
+                        </p>
+                        <div id="qp-duplicate-codes-list" class="mt-2 flex flex-wrap gap-1.5"></div>
+                    </div>
+                </div>
             </div>
 
                             <div class="space-y-4">
