@@ -587,9 +587,85 @@
             });
             const totalUniqueScribeCount = uniqueScribeRegs.size;
 
-            // Track invigilators and duties
-            const staffDutyCounts = {};
-            const staffInfoMap = {};
+            // Build Canonical Staff Registry & Alias Resolver
+            // Normalizes teachers across room mapping (names) and portal slots (emails),
+            // handling title prefixes, casing, and whitespace so every individual
+            // invigilator appears exactly ONCE in Annexure I with all duties summed.
+            const staffRegistry = new Map(); // canonicalKey -> { title, name, email, duties }
+            const staffAliasMap = new Map(); // normalizedAlias -> canonicalKey
+
+            function cleanStr(s) {
+                return (s || '').toString().trim();
+            }
+
+            function normalizeAlias(s) {
+                if (!s) return '';
+                return s.toString().trim().toLowerCase().replace(/\s+/g, ' ');
+            }
+
+            // 1. Index official staff from examStaffData
+            staffData.forEach((st) => {
+                const rawName = cleanStr(st.name);
+                const rawEmail = cleanStr(st.email);
+                if (!rawName && !rawEmail) return;
+
+                const parsed = splitTitleAndName(rawName);
+                const canonicalName = parsed.name || rawName;
+                const canonicalTitle = parsed.title || '';
+                const canonicalKey = rawEmail ? rawEmail.toLowerCase() : `name_${normalizeAlias(canonicalName)}`;
+
+                if (!staffRegistry.has(canonicalKey)) {
+                    staffRegistry.set(canonicalKey, {
+                        canonicalKey: canonicalKey,
+                        title: canonicalTitle,
+                        name: canonicalName,
+                        email: rawEmail.toLowerCase(),
+                        duties: 0
+                    });
+                }
+
+                if (rawEmail) staffAliasMap.set(normalizeAlias(rawEmail), canonicalKey);
+                if (rawName) staffAliasMap.set(normalizeAlias(rawName), canonicalKey);
+                if (canonicalName && canonicalName !== rawName) {
+                    staffAliasMap.set(normalizeAlias(canonicalName), canonicalKey);
+                }
+            });
+
+            // Resolver function for any teacher identifier (email, full name, name without title)
+            function getOrCreateCanonicalStaff(rawKey) {
+                const clean = cleanStr(rawKey);
+                if (!clean || clean === '-' || clean.toLowerCase() === 'not assigned' || clean.toLowerCase() === 'unassigned') {
+                    return null;
+                }
+
+                const alias = normalizeAlias(clean);
+                const parsed = splitTitleAndName(clean);
+                const nameOnlyAlias = normalizeAlias(parsed.name);
+
+                let canonicalKey = staffAliasMap.get(alias) || (nameOnlyAlias ? staffAliasMap.get(nameOnlyAlias) : null);
+
+                if (!canonicalKey) {
+                    const isEmail = clean.includes('@');
+                    const canonicalName = isEmail ? clean : (parsed.name || clean);
+                    const canonicalTitle = isEmail ? '' : (parsed.title || '');
+                    canonicalKey = isEmail ? clean.toLowerCase() : `name_${nameOnlyAlias || alias}`;
+
+                    staffRegistry.set(canonicalKey, {
+                        canonicalKey: canonicalKey,
+                        title: canonicalTitle,
+                        name: canonicalName,
+                        email: isEmail ? clean.toLowerCase() : '',
+                        duties: 0
+                    });
+
+                    staffAliasMap.set(alias, canonicalKey);
+                    if (nameOnlyAlias && nameOnlyAlias !== alias) {
+                        staffAliasMap.set(nameOnlyAlias, canonicalKey);
+                    }
+                }
+
+                return staffRegistry.get(canonicalKey);
+            }
 
             // Calculate Part A rows
             const partARows = [];
@@ -605,11 +681,11 @@
                 const total = fn + an + scribe;
 
                 let dateInvigCount = 0;
-                const dateStaffInvolved = new Set();
 
                 dItem.sessions.forEach(sessKey => {
                     const rooms = roomAllotments[sessKey] || [];
                     const mapping = invigMapping[sessKey] || {};
+                    const sessionStaffInvolved = new Set();
 
                     if (rooms.length > 0) {
                         rooms.forEach(r => {
@@ -620,12 +696,22 @@
                             if (hasRelevantStudents) {
                                 dateInvigCount++;
                                 const teacherKey = mapping[r.roomName];
-                                if (teacherKey) dateStaffInvolved.add(teacherKey);
+                                const staffRec = getOrCreateCanonicalStaff(teacherKey);
+                                if (staffRec && !sessionStaffInvolved.has(staffRec)) {
+                                    sessionStaffInvolved.add(staffRec);
+                                    staffRec.duties += 1;
+                                }
                             }
                         });
                     } else if (invigSlots[sessKey] && Array.isArray(invigSlots[sessKey].assigned)) {
                         dateInvigCount += invigSlots[sessKey].assigned.length;
-                        invigSlots[sessKey].assigned.forEach(st => dateStaffInvolved.add(st));
+                        invigSlots[sessKey].assigned.forEach(st => {
+                            const staffRec = getOrCreateCanonicalStaff(st);
+                            if (staffRec && !sessionStaffInvolved.has(staffRec)) {
+                                sessionStaffInvolved.add(staffRec);
+                                staffRec.duties += 1;
+                            }
+                        });
                     }
                 });
 
@@ -635,11 +721,6 @@
                     const anHalls = an > 0 ? Math.ceil(an / 25) : 0;
                     dateInvigCount = fnHalls + anHalls + scribe;
                 }
-
-                // Add to staff duty counts
-                dateStaffInvolved.forEach(stKey => {
-                    staffDutyCounts[stKey] = (staffDutyCounts[stKey] || 0) + 1;
-                });
 
                 // Math according to Calicut University rules using configured Rate Card
                 const invigAmt = dateInvigCount * rates.invigilator;
@@ -747,30 +828,25 @@
             const advanceReceived = officials.advanceReceived || 0;
             const balanceClaim = consolidatedTotal - advanceReceived;
 
-            // Build Annexure I Invigilator rows
+            // Build Annexure I Invigilator rows (Consolidated across sessions & room mappings)
             const invigilatorRows = [];
             let invigDutyTally = 0;
 
-            staffData.forEach(st => {
-                if (st.name) staffInfoMap[st.name.toLowerCase()] = st;
-                if (st.email) staffInfoMap[st.email.toLowerCase()] = st;
-            });
+            const activeStaffList = Array.from(staffRegistry.values())
+                .filter(st => st.duties > 0)
+                .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 
-            const staffKeys = Object.keys(staffDutyCounts).sort();
-            const hasInvigilationAttendance = staffKeys.length > 0;
+            const hasInvigilationAttendance = activeStaffList.length > 0;
 
             if (hasInvigilationAttendance) {
-                staffKeys.forEach((key) => {
-                    const dCount = staffDutyCounts[key];
-                    const info = staffInfoMap[key.toLowerCase()] || { name: key };
-                    const parsed = splitTitleAndName(info.name);
-                    const amount = dCount * rates.invigilator;
-                    invigDutyTally += dCount;
+                activeStaffList.forEach((st) => {
+                    const amount = st.duties * rates.invigilator;
+                    invigDutyTally += st.duties;
                     invigilatorRows.push({
-                        title: parsed.title,
-                        name: parsed.name,
+                        title: st.title || '',
+                        name: st.name,
                         designation: 'Invigilator',
-                        duties: dCount,
+                        duties: st.duties,
                         rate: rates.invigilator,
                         amount: amount
                     });
@@ -778,8 +854,9 @@
             }
 
             // Annexure I total is only non-zero if invigilation attendance data exists
+            const totalInvigRemunAmt = hasInvigilationAttendance ? (invigDutyTally * rates.invigilator) : sumInvigAmt;
             const annexureITotal = hasInvigilationAttendance
-                ? (partBTotalAmt + partCAmt + partEAmt + sumClerkAmt + sumPeonAmt + sumSweeperAmt + sumInvigAmt)
+                ? (partBTotalAmt + partCAmt + partEAmt + sumClerkAmt + sumPeonAmt + sumSweeperAmt + totalInvigRemunAmt)
                 : 0;
 
             return {
