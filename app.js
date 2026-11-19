@@ -11972,6 +11972,8 @@ window.real_populate_qp_code_session_dropdown = function () {
             qpEntrySection.classList.add('hidden');
             qpCodeContainer.innerHTML = '';
             qpCodeStatus.textContent = '';
+            const warnCard = document.getElementById('qp-duplicate-warning-card');
+            if (warnCard) warnCard.classList.add('hidden');
             saveQpCodesButton.disabled = true;
         }
     });
@@ -12107,13 +12109,11 @@ window.real_populate_qp_code_session_dropdown = function () {
         if (isAutoPopulatingQP) return;
 
         hasUnsavedQPEdits = true;
-        const hasDupes = validateQPDuplicates();
+        validateQPDuplicates();
 
-        if (!hasDupes) {
-            qpCodeStatus.classList.remove('text-green-600');
-            qpCodeStatus.classList.add('text-red-600');
-            qpCodeStatus.textContent = 'Unsaved changes... Click SAVE QP CODES to commit.';
-        }
+        qpCodeStatus.classList.remove('text-green-600');
+        qpCodeStatus.classList.add('text-red-600');
+        qpCodeStatus.textContent = 'Unsaved changes... Click SAVE QP CODES to commit.';
 
         // Wait at least 5 seconds after the last entry before rearranging
         scheduleQPRearrange(QP_SORT_DELAY_MS);
@@ -12258,7 +12258,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
     }
 
-    // 🛡️ [V95]: VALIDATE DUPLICATE QP CODES (Bright Yellow Highlight)
+    // 🛡️ [V95]: VALIDATE DUPLICATE QP CODES (Bright Yellow Highlight + Top Warning Card)
     function validateQPDuplicates() {
         const inputs = Array.from(document.querySelectorAll('#qp-code-container .qp-code-input'));
         const codeMap = new Map(); 
@@ -12275,22 +12275,44 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
         });
         
-        let hasDuplicates = false;
-        codeMap.forEach((matchedInputs) => {
+        const duplicateEntries = [];
+        codeMap.forEach((matchedInputs, code) => {
             if (matchedInputs.length > 1) {
-                hasDuplicates = true;
+                duplicateEntries.push({ code, count: matchedInputs.length });
                 matchedInputs.forEach(input => {
                     input.classList.add('bg-yellow-300', 'ring-2', 'ring-yellow-500');
                 });
             }
         });
 
+        const hasDuplicates = duplicateEntries.length > 0;
+        const warnCard = document.getElementById('qp-duplicate-warning-card');
+        const countBadge = document.getElementById('qp-duplicate-count-badge');
+        const codesListEl = document.getElementById('qp-duplicate-codes-list');
+
+        if (warnCard) {
+            if (hasDuplicates) {
+                warnCard.classList.remove('hidden');
+                if (countBadge) {
+                    countBadge.textContent = `${duplicateEntries.length} ${duplicateEntries.length === 1 ? 'duplicate code' : 'duplicate codes'}`;
+                }
+                if (codesListEl) {
+                    codesListEl.innerHTML = duplicateEntries.map(d => 
+                        `<span class="inline-flex items-center gap-1 font-mono font-bold bg-amber-200 text-amber-900 border border-amber-300 px-2 py-0.5 rounded text-[11px]">
+                            <span>${escapeQPAttr(d.code)}</span>
+                            <span class="text-[10px] font-normal text-amber-800">(${d.count}×)</span>
+                        </span>`
+                    ).join('');
+                }
+            } else {
+                warnCard.classList.add('hidden');
+                if (codesListEl) codesListEl.innerHTML = '';
+            }
+        }
+
         const statusEl = document.getElementById('qp-code-status');
-        if (hasDuplicates) {
-            statusEl.classList.remove('text-green-600', 'text-red-600');
-            statusEl.innerHTML = `<span class="text-amber-600 font-bold">⚠️ WARNING: Duplicate QP codes detected (Highlighted in Yellow). Please verify papers.</span>`;
-        } else if (statusEl.textContent.includes("WARNING")) {
-            statusEl.textContent = ""; // Clear warning if resolved
+        if (statusEl && statusEl.textContent.includes("WARNING")) {
+            statusEl.textContent = ""; // Clear legacy warning from bottom status
         }
         return hasDuplicates;
     }

@@ -2202,6 +2202,23 @@
                 <div id="qp-import-alert-container" class="hidden text-xs mt-2 whitespace-pre-wrap font-mono"></div>
             </div>
 
+            <!-- ⚠️ Self-Containing Top Warning Card for Duplicate QP Codes -->
+            <div id="qp-duplicate-warning-card" class="hidden mb-4 p-3.5 bg-amber-50 border border-amber-300 border-l-4 border-l-amber-500 rounded-r-lg shadow-sm">
+                <div class="flex items-start gap-2.5">
+                    <span class="text-lg leading-none shrink-0 mt-0.5" aria-hidden="true">⚠️</span>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold uppercase tracking-wider text-amber-800">Attention Required</span>
+                            <span id="qp-duplicate-count-badge" class="text-[11px] font-semibold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full"></span>
+                        </div>
+                        <p id="qp-duplicate-warning-msg" class="text-xs text-amber-900 font-medium mt-1 leading-relaxed">
+                            WARNING: Duplicate QP codes detected (Highlighted in Yellow). Please verify papers.
+                        </p>
+                        <div id="qp-duplicate-codes-list" class="mt-2 flex flex-wrap gap-1.5"></div>
+                    </div>
+                </div>
+            </div>
+
                             <div class="space-y-4">
                                 <div class="flex items-center gap-3 px-2">
                                     <label class="font-semibold text-gray-700 w-2/3">Course Name</label>
